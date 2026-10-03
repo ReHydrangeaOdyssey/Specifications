@@ -1,0 +1,315 @@
+# 戦闘
+
+## 概要
+
+## 制約
+
+* 1ターン1キャラクターしか行動できない.
+* キャラクターは速度に応じて行動順が決められ, 特殊なキューに追加されていく
+* 「フォーメーション」に応じたキャラクター配置が行われる.
+* 最低1キャラクター編成が必要.
+* 最大5キャラクターまで.
+* 発動する「スキル」は編成したキャラクターに設定された「メインスキル」のみ.
+* HPが0になったキャラクターは「戦闘不能」として存在しないものとして扱う.
+* 計算で使用される値はすべて32bit浮動小数点数として扱う.
+  - IEEE-754規格に従う.
+  - 「HP」は小数点以下を全て切り捨てた整数として扱う.
+    - ダメージ計算結果をHPへ加算する場合のみ.
+* ダメージ乱数の範囲は`1.0~1.03`の0.0001刻みとする
+  - `next_bounded(301)`
+
+## 勝敗条件
+
+共通処理のため勝敗条件は呼び出し元に委ねる
+
+## 行動順序決め
+
+* 攻撃待機キューと待機キュー2つが存在する.
+  - どちらのキューもFIFO
+  - どちらもキャラクターのみキューに追加できる.
+* 攻撃待機キューは最大5枠
+* 待機キューの上限はない.
+* キャラクターは攻撃待機キュー, 待機キューのいずれにも属さない状態を取り得る
+* 戦闘開始時の全キャラクターの待機カウントは0.
+* 速度は後述の「速度計算式」から求めた値を使用する
+
+### 初回
+
+1. 敵味方全員を速度の高い順にソート
+1. 先頭5キャラクターを順に「攻撃待機キュー」へ追加
+    * 複数存在した場合「フォーメーション」の内部番号が小さいキャラクターが優先される
+      - 敵味方を含む同一内部番号の場合は「[疑似乱数](pseudorandom.md)」の「抽選」によって決める
+1. 「攻撃待機キュー」に入りきらなかった残りのキャラクターは「速度レベル」だけ「待機カウント」を増やす.
+
+### 2回目以降
+
+以下は「攻撃待機キュー」に空きがある場合のみ行われる.
+
+1. 条件に応じて「攻撃待機キュー」にキャラクターを追加
+    * 「待機キュー」にキャラクターがいた場合は「攻撃待機キュー」の空きが埋まるまで「待機キュー」からPOPし, POPしたキャラクターを「攻撃待機キュー」に追加
+    * 「待機キュー」が空の場合は「待機カウント」が0のキャラクターを「攻撃待機キュー」へ追加する.
+      - 複数存在した場合は「フォーメーション」の内部番号が小さいキャラクターを優先に「攻撃待機キュー」に追加する.
+        - 敵味方を含む同一内部番号の場合は速度の高いキャラクターを優先する.
+        - 敵味方を含む同一内部番号かつ同一速度の場合は「[疑似乱数](pseudorandom.md)」の「抽選」によって決める.
+      - 「攻撃待機キュー」に空き枠がない場合は「待機キュー」に追加する.
+2. 「攻撃待機キュー」及び「待機キュー」に「行動不能」状態のキャラクターのみをPOP
+
+### 待機カウント
+
+行動後に以下処理が行われる.
+
+* 「待機キュー」が空の場合, 「待機カウント」を`敵味方全員のHP1以上のキャラクター速度レベルの平均 + 速度レベル`だけ増やす.
+  - 速度の平均値は小数点以下切り捨て.
+* 「待機キュー」が空ではない場合「待機カウント」を`速度レベル`だけ増やす.
+
+ターン終了時に以下処理が行われる.
+
+* 「攻撃待機キュー」及び「待機キュー」内に存在するHP0のキャラクターを取り除く.
+  - キュー内の順序は保たれる
+* 「攻撃待機キュー」が空かつ「待機キュー」が空の場合, 「待機カウント」が最も小さいキャラクターの「待機カウント」を減算値として, 「待機カウント」が1以上かつHPが1以上のキャラクター全員の「待機カウント」を減算値だけ減らす.
+  - 条件を満たさない場合は「待機カウント」が1以上かつHPが1以上のキャラクター全員の「待機カウント」を1減らす.
+
+
+「行動不能」状態解除時は「待機カウント」を`速度レベル`だけ増やす.
+
+
+## 速度計算式
+
+### 騎士団戦
+
+```
+速度 = 速度レベル + フォーメーション補正 + タクティクス補正
+速度 = clamp(速度, SS9の速度レベル, F-の速度レベル)
+```
+
+### アリーナ
+
+```
+速度 = 速度レベル + フォーメーション補正
+速度 = clamp(速度, SS9の速度レベル, F-の速度レベル)
+```
+
+
+## ダメージ計算式
+
+### 騎士団戦攻撃者攻撃力
+
+```
+バフ攻撃力補正 = 付与されている攻撃バフ
+デバフ攻撃力補正 = 付与されている攻撃デバフ
+バフデバフ攻撃力補正 = バフ攻撃力補正 - デバフ攻撃力補正
+アビリティ攻撃力補正 = <各アビリティに委ねられる>
+タクティクス攻撃力補正 = <各タクティクスに委ねられる>
+フォーメーション攻撃力補正 = <各フォーメーションに委ねられる>
+騎士団戦攻撃者攻撃力 = 攻撃者の攻撃力 * (1.0 + フォーメーション攻撃力補正) * (1.0 + アビリティ攻撃力補正) * (1.0 + バフデバフ攻撃力補正) * (1.0 + タクティクス攻撃力補正)
+騎士団戦攻撃者攻撃力 = max(騎士団戦攻撃者攻撃力, 0)
+```
+
+### 騎士団戦攻撃対象防御力
+
+```
+バフ防御力補正 = 付与されている防御バフ
+デバフ防御力補正 = 付与されている防御デバフ
+バフデバフ防御力補正 = バフ防御力補正 - デバフ防御力補正
+アビリティ防御力補正 = <各アビリティに委ねられる>
+タクティクス防御力補正 = <各タクティクスに委ねられる>
+フォーメーション防御力補正 = <各フォーメーションに委ねられる>
+騎士団戦攻撃対象防御力 = 攻撃相手の防御力 * (1.0 + フォーメーション防御力補正) * (1.0 + バフデバフ防御力補正) * (1.0 + アビリティ防御力補正) * (1.0 + タクティクス防御力補正)
+騎士団戦攻撃対象防御力 = max(騎士団戦攻撃対象防御力, 0)
+```
+
+
+### 騎士団戦ダメージ計算式
+
+```
+最小ダメージ = 250
+最大ダメージ = 99999
+ダメージ = 騎士団戦攻撃者攻撃力 - 騎士団戦攻撃対象防御力 / 3
+ダメージ = max(ダメージ, 最小ダメージ)
+ダメージ = ダメージ * 乱数
+ダメージ = min(ダメージ, 最大ダメージ)
+```
+
+### アリーナ攻撃者攻撃力
+
+```
+バフ攻撃力補正 = 付与されている攻撃バフ
+デバフ攻撃力補正 = 付与されている攻撃デバフ
+バフデバフ攻撃力補正 = バフ攻撃力補正 - デバフ攻撃力補正
+アビリティ攻撃力補正 = <各アビリティに委ねられる>
+フォーメーション攻撃力補正 = <各フォーメーションに委ねられる>
+アリーナ攻撃者攻撃力 = 攻撃者の攻撃力 * (1.0 + フォーメーション攻撃力補正) * (1.0 + バフデバフ攻撃力補正) * (1.0 + アビリティ攻撃力補正)
+アリーナ攻撃者攻撃力 = max(アリーナ攻撃者攻撃力, 0)
+```
+
+### アリーナ攻撃対象防御力
+
+```
+バフ防御力補正 = 付与されている防御バフ
+デバフ防御力補正 = 付与されている防御デバフ
+バフデバフ防御力補正 = バフ防御力補正 - デバフ防御力補正
+アビリティ防御力補正 = <各アビリティに委ねられる>
+フォーメーション防御力補正 = <各フォーメーションに委ねられる>
+アリーナ攻撃対象防御力 = 攻撃相手の防御力 * (1.0 + フォーメーション防御力補正) * (1.0 + バフデバフ防御力補正) * (1.0 + アビリティ防御力補正)
+アリーナ攻撃対象防御力 = max(アリーナ攻撃対象防御力, 0)
+```
+
+### アリーナダメージ計算式
+
+```
+最小ダメージ = 250
+最大ダメージ = 99999
+ダメージ = アリーナ攻撃者攻撃力 - アリーナ攻撃対象防御力 / 3
+ダメージ = max(ダメージ, 最小ダメージ)
+ダメージ = ダメージ * 乱数
+ダメージ = min(ダメージ, 最大ダメージ)
+```
+
+## 攻撃範囲
+
+詳細は「キャラクター」の属性を参照.
+属性に応じた攻撃リストを取得する
+このリストの取得順序は左から右に, 手前から奥の順序で攻撃対象を取得する.
+
+## プレイヤー操作
+
+### 騎士団戦
+
+操作不可.
+
+### アリーナ
+
+操作不可.
+
+## フロー
+### 戦闘
+
+```mermaid
+flowchart TD;
+    Start[戦闘開始];
+    End[戦闘終了];
+    TrunStart[ターン開始];
+    TrunEnd[ターン終了];
+    Judgment[勝敗判定]
+    CheckTurnLimit{指定ターン経過?};
+    CheckAnnihilation{どちらか全滅している?};
+    DetermineOrder[攻撃順の確定];
+    PopQueue[行動待機キューからPOP];
+    CharacterAttack[[キャラクター行動]];
+    Ability[アビリティ発動];
+    AddWaitCount[攻撃したキャラクターの待機時間を増加];
+    NextTurn[1ターン進める];
+    UpdateWaitCount[キャラクター速度に応じた待機カウントの更新];
+    UpdateStatusAbnormality[[状態異常更新]];
+    UpdateTurnEndEffect[[ターン終了時処理]];
+
+    Start --> Ability --> UpdateWaitCount --> DetermineOrder --> PopQueue --> NextTurn 
+    NextTurn--> TrunStart --> CharacterAttack --> UpdateStatusAbnormality --> UpdateTurnEndEffect --> AddWaitCount --> TrunEnd
+    TrunEnd --> CheckAnnihilation
+    CheckAnnihilation -- Yes --> Judgment;
+    CheckAnnihilation -- No --> CheckTurnLimit;
+    CheckTurnLimit -- Yes --> Judgment;
+    CheckTurnLimit -- No --> UpdateWaitCount;
+    Judgment --> End
+```
+
+### キャラクター行動
+
+```mermaid
+flowchart TD;
+    Start[行動開始];
+    End[行動終了];
+    Start --> CheckSkillCount
+
+    CheckEmptyList{攻撃対象リストが空?};
+    GetAttackRange[攻撃対象リストの取得];
+    PopAttackRange[攻撃対象リストからPOP];
+
+    CalculateEnemyHP[[相手HP処理]];
+    CalculateFriendHP[[味方HP処理]];
+    CalculateEnemyHP2[[相手HP処理]];
+
+    Attack[攻撃];
+
+    CheckSkillCount{スキル発動可能回数 > 0?};
+    CheckSilent{沈黙状態?};
+    CheckSkill{スキル発動率 > 乱数?};
+    ActivateSkill[[スキル発動]];
+
+    CheckSkillCount -- Yes --> CheckSilent;
+    CheckSkillCount -- No --> GetAttackRange;
+    CheckSilent -- Yes --> GetAttackRange;
+    CheckSilent -- No --> CheckSkill;
+    CheckSkill -- Yes --> ActivateSkill;
+    CheckSkill -- No --> GetAttackRange;
+    
+    ActivateSkill --> End
+
+    GetAttackRange --> CheckEmptyList
+    CheckEmptyList -- Yes --> CheckAttackerHP;
+    CheckEmptyList -- No --> PopAttackRange;
+
+    CheckActivatedAvoidance{回避は発動済み?};
+    CheckAvoidance{回避率 > 乱数?};
+    AvoidanceAbility[回避アビリティ発動];
+
+    PopAttackRange --> CheckActivatedAvoidance
+    CheckActivatedAvoidance -- Yes --> CheckBlindness;
+    CheckActivatedAvoidance -- No --> CheckAvoidance;
+    CheckAvoidance -- Yes --> AvoidanceAbility;
+    CheckAvoidance -- No --> CheckBlindness;
+    AvoidanceAbility --> CheckActivatedCounter
+
+    CheckBlindness{暗闇状態?};
+    CheckBlindnessAttack{攻撃成功?};
+
+    CheckBlindness -- Yes --> CheckBlindnessAttack;
+    CheckBlindness -- No --> CheckActivatedStatusAbnormality;
+    CheckBlindnessAttack -- Yes --> CheckActivatedStatusAbnormality;
+    CheckBlindnessAttack -- No --> CheckPursuit;
+
+    CheckActivatedStatusAbnormality{状態異常付与アビリティは発動済み?};
+    CheckStatusAbnormality{状態異常付与率 > 乱数?};
+    AddStatusAbnormality[状態異常付与]; 
+
+    CheckActivatedStatusAbnormality -- Yes --> Attack;
+    CheckActivatedStatusAbnormality -- No --> CheckStatusAbnormality;
+    CheckStatusAbnormality -- Yes --> AddStatusAbnormality;
+    CheckStatusAbnormality -- No --> Attack;
+
+    AddStatusAbnormality --> Attack;
+    Attack --> CalculateEnemyHP --> CheckActivatedPursuit;
+
+    CheckActivatedPursuit{追撃は発動済み?};
+    CheckPursuit{追撃率 > 乱数?};
+    Pursuit[追撃アビリティ発動]; 
+    CheckActivatedPursuit -- Yes --> CheckActivatedCounter;
+    CheckActivatedPursuit -- No --> CheckPursuit;
+    CheckPursuit -- Yes --> Pursuit;
+    CheckPursuit -- No --> CheckActivatedCounter;
+    Pursuit --> CalculateEnemyHP2
+
+    CheckActivatedCounter{反撃は発動済み?};
+    CounterAbility[反撃アビリティ発動];
+    CheckCounter{反撃率 > 乱数?};
+
+    CheckActivatedCounter -- Yes --> CalculateEnemyHP2;
+    CheckActivatedCounter -- No --> CheckCounter;
+    CheckCounter -- Yes --> CounterAbility;
+    CheckCounter -- No --> CalculateEnemyHP2;
+
+    CheckEmptyHP{相手のHP > 0?};
+    KilledAbility[HP0時のアビリティ発動];
+    CounterAbility --> CalculateFriendHP
+    CalculateEnemyHP2 --> CheckEmptyHP
+    CalculateFriendHP --> CalculateEnemyHP2
+    CheckEmptyHP -- Yes --> CheckEmptyList
+    CheckEmptyHP -- No --> KilledAbility
+    KilledAbility --> CheckEmptyList
+
+    CheckAttackerHP{攻撃者のHP > 0?};
+    KilledAttackerAbility[HP0時のアビリティ発動];
+    CheckAttackerHP -- Yes --> End
+    CheckAttackerHP -- No --> KilledAttackerAbility
+    KilledAttackerAbility --> End
+```
