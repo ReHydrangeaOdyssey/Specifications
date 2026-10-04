@@ -1,0 +1,134 @@
+
+
+## フロー
+### 戦闘
+
+```mermaid
+flowchart TD;
+    Start[戦闘開始];
+    End[戦闘終了];
+    TrunStart[ターン開始];
+    TrunEnd[ターン終了];
+    Judgment[勝敗判定]
+    CheckTurnLimit{指定ターン経過?};
+    CheckAnnihilation{どちらか全滅している?};
+    DetermineOrder[攻撃順の確定];
+    PopQueue[行動待機キューからPOP];
+    CharacterAttack[[キャラクター行動]];
+    Ability[アビリティ発動];
+    AddWaitCount[攻撃したキャラクターの待機時間を増加];
+    NextTurn[1ターン進める];
+    UpdateWaitCount[キャラクター速度に応じた待機カウントの更新];
+    UpdateStatusAbnormality[[状態異常更新]];
+    UpdateTurnEndEffect[[ターン終了時処理]];
+
+    Start --> Ability --> UpdateWaitCount --> DetermineOrder --> PopQueue --> NextTurn 
+    NextTurn--> TrunStart --> CharacterAttack --> UpdateStatusAbnormality --> UpdateTurnEndEffect --> AddWaitCount --> TrunEnd
+    TrunEnd --> CheckAnnihilation
+    CheckAnnihilation -- Yes --> Judgment;
+    CheckAnnihilation -- No --> CheckTurnLimit;
+    CheckTurnLimit -- Yes --> Judgment;
+    CheckTurnLimit -- No --> UpdateWaitCount;
+    Judgment --> End
+```
+
+### キャラクター行動
+
+```mermaid
+flowchart TD;
+    Start[行動開始];
+    End[行動終了];
+    Start --> CheckSkillCount
+
+    CheckEmptyList{攻撃対象リストが空?};
+    GetAttackRange[攻撃対象リストの取得];
+    PopAttackRange[攻撃対象リストからPOP];
+
+    CalculateEnemyHP[[相手HP処理]];
+    CalculateFriendHP[[味方HP処理]];
+    CalculateEnemyHP2[[相手HP処理]];
+
+    Attack[攻撃];
+
+    CheckSkillCount{スキル発動可能回数 > 0?};
+    CheckSilent{沈黙状態?};
+    CheckSkill{スキル発動率 > 乱数?};
+    ActivateSkill[[スキル発動]];
+
+    CheckSkillCount -- Yes --> CheckSilent;
+    CheckSkillCount -- No --> GetAttackRange;
+    CheckSilent -- Yes --> GetAttackRange;
+    CheckSilent -- No --> CheckSkill;
+    CheckSkill -- Yes --> ActivateSkill;
+    CheckSkill -- No --> GetAttackRange;
+    
+    ActivateSkill --> End
+
+    GetAttackRange --> CheckEmptyList
+    CheckEmptyList -- Yes --> CheckAttackerHP;
+    CheckEmptyList -- No --> PopAttackRange;
+
+    CheckActivatedAvoidance{回避は発動済み?};
+    CheckAvoidance{回避率 > 乱数?};
+    AvoidanceAbility[回避アビリティ発動];
+
+    PopAttackRange --> CheckActivatedAvoidance
+    CheckActivatedAvoidance -- Yes --> CheckBlindness;
+    CheckActivatedAvoidance -- No --> CheckAvoidance;
+    CheckAvoidance -- Yes --> AvoidanceAbility;
+    CheckAvoidance -- No --> CheckBlindness;
+    AvoidanceAbility --> CheckActivatedCounter
+
+    CheckBlindness{暗闇状態?};
+    CheckBlindnessAttack{攻撃成功?};
+
+    CheckBlindness -- Yes --> CheckBlindnessAttack;
+    CheckBlindness -- No --> CheckActivatedStatusAbnormality;
+    CheckBlindnessAttack -- Yes --> CheckActivatedStatusAbnormality;
+    CheckBlindnessAttack -- No --> CheckPursuit;
+
+    CheckActivatedStatusAbnormality{状態異常付与アビリティは発動済み?};
+    CheckStatusAbnormality{状態異常付与率 > 乱数?};
+    AddStatusAbnormality[状態異常付与]; 
+
+    CheckActivatedStatusAbnormality -- Yes --> Attack;
+    CheckActivatedStatusAbnormality -- No --> CheckStatusAbnormality;
+    CheckStatusAbnormality -- Yes --> AddStatusAbnormality;
+    CheckStatusAbnormality -- No --> Attack;
+
+    AddStatusAbnormality --> Attack;
+    Attack --> CalculateEnemyHP --> CheckActivatedPursuit;
+
+    CheckActivatedPursuit{追撃は発動済み?};
+    CheckPursuit{追撃率 > 乱数?};
+    Pursuit[追撃アビリティ発動]; 
+    CheckActivatedPursuit -- Yes --> CheckActivatedCounter;
+    CheckActivatedPursuit -- No --> CheckPursuit;
+    CheckPursuit -- Yes --> Pursuit;
+    CheckPursuit -- No --> CheckActivatedCounter;
+    Pursuit --> CalculateEnemyHP2
+
+    CheckActivatedCounter{反撃は発動済み?};
+    CounterAbility[反撃アビリティ発動];
+    CheckCounter{反撃率 > 乱数?};
+
+    CheckActivatedCounter -- Yes --> CalculateEnemyHP2;
+    CheckActivatedCounter -- No --> CheckCounter;
+    CheckCounter -- Yes --> CounterAbility;
+    CheckCounter -- No --> CalculateEnemyHP2;
+
+    CheckEmptyHP{相手のHP > 0?};
+    KilledAbility[HP0時のアビリティ発動];
+    CounterAbility --> CalculateFriendHP
+    CalculateEnemyHP2 --> CheckEmptyHP
+    CalculateFriendHP --> CalculateEnemyHP2
+    CheckEmptyHP -- Yes --> CheckEmptyList
+    CheckEmptyHP -- No --> KilledAbility
+    KilledAbility --> CheckEmptyList
+
+    CheckAttackerHP{攻撃者のHP > 0?};
+    KilledAttackerAbility[HP0時のアビリティ発動];
+    CheckAttackerHP -- Yes --> End
+    CheckAttackerHP -- No --> KilledAttackerAbility
+    KilledAttackerAbility --> End
+```

@@ -44,6 +44,7 @@ sequenceDiagram
 
         User->>Client: アクセストークン入力
         Client->>Client: PlayerIDチェック
+        Note over Client: PlayerID=0は未取得を表す予約値
         opt PlayerID が 0
             Client->>User: ユーザー名要求
             User->>Client: ユーザー名入力
@@ -62,10 +63,11 @@ sequenceDiagram
 
         Client->>PublicAPIServer: Login(PlayerID, AccessToken) 
         PublicAPIServer->>GameServer: Login(PlayerID, AccessToken) 
-        GameServer->>GameServer: アクセストークン無効化
-        GameServer->>GameServer: セッションID生成
+        GameServer->>GameServer: AccessToken検証
+        GameServer->>GameServer: Login成功時にAccessToken無効化
+        GameServer->>GameServer: 暗号学的乱数でセッションID生成
         GameServer->>PrivateAPIServer: SaveSessionID
-        PrivateAPIServer->DB: 送信(PlayerID, セッションID, 期限)
+        PrivateAPIServer->DB: UPSERT(PlayerID, セッションID, 期限)
         GameServer-->>PublicAPIServer: Login
         PublicAPIServer-->>Client: Login    
         Client->>Client: セッションID保存
@@ -98,22 +100,22 @@ sequenceDiagram
 
     alt 有効なSessionが存在する
         GameServer->>PrivateAPIServer: InvalidateSession
-        PrivateAPIServer->>Database: ExistingSessionを無効化
-        Database-->>PrivateAPIServer: 無効化完了
+        PrivateAPIServer->>Database: ExistingSessionレコードを削除
+        Database-->>PrivateAPIServer: 削除完了
         PrivateAPIServer-->>GameServer: InvalidateSession
 
         GameServer->>GameServer: 新しいSessionID生成
         GameServer->>PrivateAPIServer: SaveSessionID
-        PrivateAPIServer->>Database: 新Session登録(PlayerID, SessionID, 期限)
+        PrivateAPIServer->>Database: Session UPSERT(PlayerID, SessionID, 期限)
         Database-->>PrivateAPIServer: 登録完了
         PrivateAPIServer-->>GameServer: SaveSessionID
 
         GameServer-->>PublicAPI: Login
         PublicAPI-->>ClientB: Login
 
-        ClientA->>PublicAPI: ValidateSession(ExistingSession)
-        PublicAPI->>GameServer: ValidateSession(ExistingSession)
-        GameServer->>PrivateAPIServer: ValidateSession
+        ClientA->>PublicAPI: ValidateSession(ExistingSession, PlayerID)
+        PublicAPI->>GameServer: ValidateSession(ExistingSession, PlayerID)
+        GameServer->>PrivateAPIServer: ValidateSession(SessionID, PlayerID)
         PrivateAPIServer->>Database: Session確認
         Database-->>PrivateAPIServer: 無効
         PrivateAPIServer-->>GameServer: ValidateSession
@@ -122,7 +124,7 @@ sequenceDiagram
     else 有効なSessionが存在しない
         GameServer->>GameServer: 新しいSessionID生成
         GameServer->>PrivateAPIServer: SaveSessionID
-        PrivateAPIServer->>Database: 新Session登録(PlayerID, SessionID, 期限)
+        PrivateAPIServer->>Database: Session UPSERT(PlayerID, SessionID, 期限)
         Database-->>PrivateAPIServer: 登録完了
         PrivateAPIServer-->>GameServer: SaveSessionID
 
@@ -130,3 +132,18 @@ sequenceDiagram
         PublicAPI-->>ClientB: Login
     end
 ```
+
+
+## SessionID生成規則
+
+* SessionIDは暗号学的乱数で生成する.
+* Databaseの`PLAYER_SESSION.session_id` UNIQUE制約に衝突した場合は再生成する.
+* `SaveSessionID`はPlayerIDを競合キーとしたUPSERTとする.
+
+## PublicAPIでのSession検証
+
+SessionIDを要求するPublicAPIは、要求本体を処理する前に以下をすべて検証する.
+
+* Sessionレコードが存在すること.
+* Sessionが有効期限内であること.
+* SessionIDが要求PlayerIDに所有されていること.
