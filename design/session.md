@@ -58,7 +58,7 @@ sequenceDiagram
             PrivateAPIServer->DB: 保存(PlayerID, ユーザー名)
             GameServer-->>PublicAPIServer: CreatePlayer
             PublicAPIServer-->>Client: CreatePlayer
-            Client->>Client: PlayerID保存
+            Client->>Client: PlayerID保存・新規プレイヤーフラグ保持
         end
 
         Client->>PublicAPIServer: Login(PlayerID, AccessToken) 
@@ -71,6 +71,19 @@ sequenceDiagram
         GameServer-->>PublicAPIServer: Login
         PublicAPIServer-->>Client: Login    
         Client->>Client: セッションID保存
+
+        opt 新規作成したPlayerIDの場合
+            Client->>User: 初期騎士団名・昼開始時刻・夜開始時刻を要求
+            User->>Client: 初期騎士団設定入力
+            Client->>PublicAPIServer: CreateGuild(SessionID, PlayerID, GuildName, DaytimeStartTime, NighttimeStartTime)
+            PublicAPIServer->>GameServer: CreateGuild
+            GameServer->>PrivateAPIServer: SaveGuild(GuildID=PlayerID, GuildName, LeaderPlayerID=PlayerID, DaytimeStartTime, NighttimeStartTime)
+            PrivateAPIServer->>DB: 初期騎士団・初期所属を保存
+            DB-->>PrivateAPIServer: 保存完了
+            PrivateAPIServer-->>GameServer: SaveGuild
+            GameServer-->>PublicAPIServer: CreateGuild
+            PublicAPIServer-->>Client: CreateGuild
+        end
     else 検証失敗
         Bot-->>Discord: 検証失敗返答
         Discord-->>User: 検証失敗返答

@@ -30,6 +30,8 @@
 | `SkillEffectID` | `u32` | `SkillEffectID` | `smallint` | スキル効果ID。値は本書の`SkillEffectID`列挙型を参照 |
 | `AbilityEffectID` | `u32` | `AbilityEffectID` | `smallint` | アビリティ効果ID。値は本書の`AbilityEffectID`列挙型を参照 |
 | `TacticsEffectID` | `u32` | `TacticsEffectID` | `smallint` | タクティクス効果ID。値は本書の`TacticsEffectID`列挙型を参照 |
+| `StatusAbnormalityID` | `u32` | `StatusAbnormalityID` | `smallint` | 状態異常ID。値は本書の`StatusAbnormalityID`列挙型を参照 |
+| `SkillTargetConditionID` | `u32` | `uint32` | `bigint` | 単体スキルで優先対象条件を識別するマスターデータ上のID。`0`は条件なし |
 | `ConditionID` | `u32` | `ConditionID` | `smallint` | 条件ID。値は本書の`ConditionID`列挙型を参照 |
 | `FormationSlotID` | `u8` | `uint32` | `smallint` | 編成内の選択ID/位置ID。`255`は未使用を表す予約値とし、通常の配置位置として使用しない |
 | `SlotIndex` | `u8` | `uint32` | `smallint` | スロット番号 |
@@ -74,6 +76,7 @@
 | `CorrectionValue` | `f32` | `float` | `real` | 補正値 |
 | `ConditionValue` | `u32` | `uint32` | `bigint` | 条件に付随する値。`every_n_turns`のターン数、`hp_at_or_below_threshold`の閾値等に使用 |
 | `BinaryData` | `Vec<u8>` | `bytes` | `bytea` | バイナリデータ |
+| `JsonData` | `serde_json::Value` | `string` | `jsonb` | UTF-8 JSONデータ。Protocol Buffers上ではJSON文字列として扱う |
 
 ## 文字列
 
@@ -125,6 +128,49 @@ enum SkillEffectID {
   SKILL_EFFECT_STATUS_ABNORMALITY = 2;
   SKILL_EFFECT_HEAL = 3;
   SKILL_EFFECT_ATTACK = 4;
+}
+```
+
+
+### StatusAbnormalityID
+
+`StatusAbnormalityID`は付与する状態異常の種類を表す。
+
+```proto
+enum StatusAbnormalityID {
+  STATUS_ABNORMALITY_POISON = 0;
+  STATUS_ABNORMALITY_BLINDNESS = 1;
+  STATUS_ABNORMALITY_SILENCE = 2;
+  STATUS_ABNORMALITY_RANGE_ATTACK_DISABLED = 3;
+  STATUS_ABNORMALITY_COMA = 4;
+}
+```
+
+### SkillTargetRange
+
+`SkillTargetRange`はスキルの対象範囲を表す。
+
+```proto
+enum SkillTargetRange {
+  SKILL_TARGET_RANGE_ALL = 0;
+  SKILL_TARGET_RANGE_SINGLE = 1;
+  SKILL_TARGET_RANGE_RANDOM = 2;
+  SKILL_TARGET_RANGE_VERTICAL_COLUMN = 3;
+  SKILL_TARGET_RANGE_HORIZONTAL_ROW = 4;
+  SKILL_TARGET_RANGE_X_SHAPE = 5;
+  SKILL_TARGET_RANGE_CROSS_SHAPE = 6;
+}
+```
+
+### SkillStatTarget
+
+バフ・デバフスキルが補正する能力を表す。
+
+```proto
+enum SkillStatTarget {
+  SKILL_STAT_TARGET_NONE = 0;
+  SKILL_STAT_TARGET_ATTACK = 1;
+  SKILL_STAT_TARGET_DEFENSE = 2;
 }
 ```
 
@@ -203,10 +249,28 @@ enum ConditionID {
 ```proto
 enum TacticsTarget {
   TACTICS_TARGET_SELF_PARTY = 0;
-  TACTICS_TARGET_ALLY_GUILD_ALL_PARTIES = 1;
-  TACTICS_TARGET_ENEMY_GUILD_ALL_PARTIES = 2;
+  TACTICS_TARGET_OPPONENT_PARTY = 1;
+  TACTICS_TARGET_ALLY_GUILD = 2;
+  TACTICS_TARGET_ENEMY_GUILD = 3;
 }
 ```
+
+
+### TacticsEndType
+
+タクティクス効果の終了方式を表す。
+
+```proto
+enum TacticsEndType {
+  TACTICS_END_TYPE_DURATION = 0;
+  TACTICS_END_TYPE_COUNT = 1;
+  TACTICS_END_TYPE_ON_ACTIVATION = 2;
+}
+```
+
+* `TACTICS_END_TYPE_DURATION`は`DurationSeconds`を使用する.
+* `TACTICS_END_TYPE_COUNT`は`effect_count`を使用する.
+* `TACTICS_END_TYPE_ON_ACTIVATION`は発動時の1回のみ効果を適用し、継続状態を保持しない.
 
 ### GuildBattleStartTime
 
@@ -258,6 +322,8 @@ enum ApiErrorCode {
   API_ERROR_REVIVE_COMPLETE_NOT_ALLOWED = 17;
   API_ERROR_INVALID_GUILD_BATTLE_SEQUENCE = 18;
   API_ERROR_GUILD_FULL = 19;
+  API_ERROR_GUILD_MEMBERSHIP_CHANGE_NOT_ALLOWED = 20;
+  API_ERROR_INVALID_PARTY = 21;
 }
 ```
 

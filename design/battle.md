@@ -32,6 +32,9 @@ flowchart TD;
     Judgment --> End
 ```
 
+`状態異常更新`で毒ダメージによりHPが0になった場合は、戦闘不能時アビリティを発動せず、そのままターン終了時処理へ進む.
+同一キャラクターで同一タイミングに複数アビリティの発動条件が成立した場合は、Abilityスロット番号の小さい順に判定・処理する.
+
 ### キャラクター行動
 
 ```mermaid
@@ -70,13 +73,16 @@ flowchart TD;
 
     CheckActivatedAvoidance{回避は発動済み?};
     CheckAvoidance{回避率 > 乱数?};
+    CheckAvoidanceDisable{回避無効化率 > 乱数?};
     AvoidanceAbility[回避アビリティ発動];
 
     PopAttackRange --> CheckActivatedAvoidance
     CheckActivatedAvoidance -- Yes --> CheckBlindness;
     CheckActivatedAvoidance -- No --> CheckAvoidance;
-    CheckAvoidance -- Yes --> AvoidanceAbility;
+    CheckAvoidance -- Yes --> CheckAvoidanceDisable;
     CheckAvoidance -- No --> CheckBlindness;
+    CheckAvoidanceDisable -- Yes --> CheckBlindness;
+    CheckAvoidanceDisable -- No --> AvoidanceAbility;
     AvoidanceAbility --> CheckActivatedCounter
 
     CheckBlindness{暗闇状態?};
@@ -111,11 +117,14 @@ flowchart TD;
     CheckActivatedCounter{反撃は発動済み?};
     CounterAbility[反撃アビリティ発動];
     CheckCounter{反撃率 > 乱数?};
+    CheckCounterDisable{反撃無効化率 > 乱数?};
 
     CheckActivatedCounter -- Yes --> CalculateEnemyHP2;
     CheckActivatedCounter -- No --> CheckCounter;
-    CheckCounter -- Yes --> CounterAbility;
+    CheckCounter -- Yes --> CheckCounterDisable;
     CheckCounter -- No --> CalculateEnemyHP2;
+    CheckCounterDisable -- Yes --> CalculateEnemyHP2;
+    CheckCounterDisable -- No --> CounterAbility;
 
     CheckEmptyHP{相手のHP > 0?};
     KilledAbility[HP0時のアビリティ発動];

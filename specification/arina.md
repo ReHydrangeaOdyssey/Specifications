@@ -9,8 +9,10 @@
 * 任意の相手と戦闘する.
 * ランダムな相手と戦闘する.
   - 自分自身を除いた全プレイヤーを候補とする.
+  - 候補PlayerIDはPlayerID昇順に並べてから抽選へ渡す.
   - 対戦相手は「[疑似乱数](../design/pseudorandom.md)」の「[抽選](../design/pseudorandom.md#抽選)」により1人決定する.
   - `StartArenaBattle`要求の検証完了後にGameServerが生成したSeedを使用する.
+  - 対戦相手抽選後、戦闘開始前に同じSeedから戦闘専用の新しいPRNGを生成する. 対戦相手抽選で進んだPRNG状態は戦闘へ引き継がない.
   - 候補プレイヤーが0人の場合は`ArenaBattleErrorResponse`で`no_opponent_available`を返す.
 
 ## 制約
@@ -20,7 +22,7 @@
 * 同一キャラクターを複数編成できない.
 * 最低1キャラクターを編成する必要がある.
   - 最大5キャラクター
-* 初期シード値は`StartArenaBattle`要求のSessionID・PlayerID等の検証完了後にGameServerが生成し、その値を戦闘およびランダム対戦の抽選に使用する.
+* 初期シード値は`StartArenaBattle`要求のSessionID・PlayerID等の検証完了後にGameServerが生成し、その値をランダム対戦の抽選に使用する. 戦闘開始前には同じSeedから戦闘専用の新しいPRNGを生成する.
 
 ## 勝敗条件
 

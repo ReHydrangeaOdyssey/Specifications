@@ -35,6 +35,8 @@ erDiagram
         Count smithy_level
         Count strategy_office_level
         Count tavern_level
+        GuildBattleStartTime daytime_start_time
+        GuildBattleStartTime nighttime_start_time
     }
 
     GUILD_MEMBER {
@@ -52,6 +54,9 @@ erDiagram
 
 `InvalidateSession`実行時は対象`SessionID`の`PLAYER_SESSION`レコードを削除する.
 
+`PLAYER.guild_battle_win_count`と`PLAYER.guild_battle_lose_count`の初期値はともに`0`とする.
+
+
 ## GUILD / GUILD_MEMBER 制約
 
 * プレイヤーの初期騎士団は`GUILD.id = PLAYER.id`となるように作成する.
@@ -62,6 +67,8 @@ erDiagram
 * `player_id`には一意制約を設定し、1つのPlayerIDが同時に複数騎士団へ所属できないようにする.
 * 所属変更時は、対象PlayerIDの既存`GUILD_MEMBER`行を削除してから新しいGuildIDの行を挿入する処理を同一トランザクションで行う.
 * `LeaveGuild`では新しい`GUILD`レコードを作成せず、`guild_id = player_id`の既存初期騎士団へ`GUILD_MEMBER`を戻す.
+* `GUILD.daytime_start_time`は`GUILD_BATTLE_START_1130`、`GUILD_BATTLE_START_1215`、`GUILD_BATTLE_START_1300`のいずれか1つとする.
+* `GUILD.nighttime_start_time`は`GUILD_BATTLE_START_2100`、`GUILD_BATTLE_START_2200`、`GUILD_BATTLE_START_2300`のいずれか1つとする.
 
 `SaveSessionID`は`player_id`を競合キーとしてUPSERTする。既存レコードが存在する場合は`session_id`と`expires_at`を更新し、存在しない場合はINSERTする。`session_id`のUNIQUE制約に衝突した場合は保存失敗としてGameServerへ返し、GameServerはSessionIDを再生成する.
 
@@ -87,6 +94,14 @@ erDiagram
         SkillEffectID effect_id
         Rate activation_rate
         CorrectionValue correction_value
+        SkillTargetRange target_range
+        SkillTargetConditionID target_condition_id
+        Count random_hit_count
+        StatusAbnormalityID status_abnormality_id
+        Rate status_abnormality_rate
+        SkillStatTarget stat_target
+        Bool can_heal_incapacitated
+        CorrectionValue heal_value
     }
 
     ABILITY {
@@ -97,6 +112,7 @@ erDiagram
         ConditionID condition_id
         ConditionValue condition_value
         Rate activation_rate
+        Count max_activation_count
         CorrectionValue correction_value
     }
 
@@ -111,6 +127,7 @@ erDiagram
         Description description
         TacticsCategory category
         TP tp_cost
+        TacticsEndType end_type
         DurationSeconds duration
         Count effect_count
     }
@@ -119,7 +136,9 @@ erDiagram
         RecordID id PK
         TacticsID tactics_id FK
         Stage stage
-        CorrectionValue effect_value
+        TacticsEffectID effect_id
+        TacticsTarget target
+        CorrectionValue increase_value
     }
 
     TACTICS_EFFECT {
@@ -163,9 +182,9 @@ erDiagram
 
 ```
 
-`SKILL.activation_rate`は基本スキル発動率`0.2`へ加算する値とする。
+`SKILL.activation_rate`は基本スキル発動率`0.2`へ加算する値とする。`SKILL`の効果別フィールドは該当する`SkillEffectID`または`SkillTargetRange`の場合のみ参照する。該当しない効果別フィールドは未使用とし、DatabaseではNULLを許可する.
 `SKILL.effect_id`は「[型定義](types.md)」の`SkillEffectID`、`ABILITY.effect_id`は`AbilityEffectID`、`TACTICS_EFFECT.effect_id`は`TacticsEffectID`を使用する。これら3つは相互に別の列挙型とする。
-同一`TacticsEffectID`系列の効果値はすべて加算する。
+同一`TacticsEffectID`系列の効果値はすべて加算する。`TACTICS_STAGE_EFFECT`は段階ごと・`TacticsEffectID`ごと・`TacticsTarget`ごとの効果上昇量を保持する。
 
 
 ```mermaid
@@ -189,6 +208,8 @@ erDiagram
 
     FORMATION ||--o{ FORMATION_POSITION : has
 ```
+
+`FORMATION_POSITION.condition_id`の条件と配置キャラクターの属性条件が一致する場合のみ、その位置の攻撃・防御・速度・スキル補正を適用する. 条件不一致時はその位置の補正を適用しない.
 
 
 ```mermaid
@@ -326,7 +347,7 @@ erDiagram
         GuildBattleID guild_battle_id FK
         GameServerTime time
         GuildBattleReplayProcessType process_type
-        BinaryData payload
+        JsonData payload
     }
 
     ERROR_LOG {
@@ -340,4 +361,18 @@ erDiagram
     GUILD_BATTLE ||--o{ ERROR_LOG : has_error
 ```
 
-`GUILD_BATTLE_REPLAY_LOG.payload`には、リプレイログファイルへ書き込むものと同じ処理種別対応構造体のバイナリデータを保存する。
+`GUILD_BATTLE_REPLAY_LOG.payload`には、リプレイログファイルへ書き込むものと同じ処理種別対応JSONオブジェクトを`jsonb`として保存する。
+
+
+## 騎士団戦DB送信失敗時
+
+騎士団戦中のDatabase更新・ログ保存要求が失敗した場合は、同一要求を1回だけ再試行する. 再試行も失敗した場合、GameServerはDB障害発生状態へ移行し、それ以降の騎士団戦中DB送信を停止して送信予定データをローカル保存する. 騎士団戦終了時にローカル保存データをDatabaseへ一括送信する.
+
+`SaveGuildBattleResult`はこの一般規則とは別に、初回失敗後1回だけ再試行し、再試行も失敗した場合はErrorLogを保存してBotへ通知する. その後の原因調査・復旧は運営が手動で行う. `GUILD_BATTLE.status`の`completed`更新は最終結果保存が完了した場合に行う.
+
+
+## GUILD_BATTLE生成規則
+
+対象日・`GuildBattleStartTime`ごとに、その開始時刻を設定している騎士団を抽出し、疑似乱数の「抽選」を使用して順序を決める. 先頭から2騎士団ずつペアにし、奇数の場合は最後の騎士団を事前作成済みダミープレイヤーの初期騎士団と組み合わせる. 各ペアについて`GUILD_BATTLE`を`scheduled`状態で作成する.
+
+`GuildBattleID`は`u64`で、`GuildBattleID = YYYYMMDD * 10^11 + GuildBattleStartTimeEnumValue * 10^8 + PairIndex`とする. これは`<YYYYMMDD 8桁><GuildBattleStartTime Enum値 3桁><PairIndex 8桁>`を10進連結した値に相当する.

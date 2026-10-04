@@ -68,6 +68,7 @@
 `FollowerCharacterID[2]`および`AbilityID[2]`の空き要素は、それぞれ`CharacterID`および`AbilityID`の予約済み無効値`u32::MAX`で表現する。
 
 `ArenaPartyCharacter`の`FollowerCharacterID[2]`および`AbilityID[2]`についても、空き要素は同じ予約済み無効値を使用する。
+`FollowerCharacterID[2]`はスロット0を「編成先キャラクターと同一レアリティ以下」、スロット1を「編成先キャラクターより低レアリティのみ」の従者枠として扱う。
 
 ### ApiErrorResponse
 
@@ -137,6 +138,8 @@ PublicAPIで失敗レスポンスが必要な場合は、個別に別構造が�
 | SessionID | `SessionID` | セッションID |
 | PlayerID | `PlayerID` | 騎士団を作成するプレイヤーID |
 | GuildName | `Name` | 作成する騎士団名 |
+| DaytimeStartTime | `GuildBattleStartTime` | 昼開始時刻。11:30 / 12:15 / 13:00のいずれか |
+| NighttimeStartTime | `GuildBattleStartTime` | 夜開始時刻。21:00 / 22:00 / 23:00のいずれか |
 
 ### CreateGuildResponse
 
@@ -203,6 +206,7 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 
 | 項目 | 型 | 内容 |
 |---|---|---|
+| EnemyFormationID | `FormationID` | 戦闘開始時点の相手フォーメーションID |
 | EnemyCharacters | `BattleCharacterStatus[]` | 戦闘開始時点の相手キャラクターステータス。最大5件 |
 | Seed | `Seed` | GameServerとClientが同じ戦闘を実行するために使用するシード値 |
 
@@ -233,6 +237,7 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 |---|---|---|
 | SessionID | `SessionID` | セッションID |
 | PlayerID | `PlayerID` | プレイヤーID |
+| GuildID | `GuildID` | 参加要求する騎士団ID |
 | GuildBattleID | `GuildBattleID` | 参加対象の騎士団戦ID |
 
 ### GuildBattleJoinResponse
@@ -445,6 +450,8 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 | GuildID | `GuildID` | 保存する騎士団ID |
 | GuildName | `Name` | 騎士団名 |
 | LeaderPlayerID | `PlayerID` | 団長PlayerID |
+| DaytimeStartTime | `GuildBattleStartTime` | 昼開始時刻。11:30 / 12:15 / 13:00のいずれか |
+| NighttimeStartTime | `GuildBattleStartTime` | 夜開始時刻。21:00 / 22:00 / 23:00のいずれか |
 
 ### SetPlayerGuildRequest
 
@@ -541,6 +548,19 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 | FormationID | `FormationID` | 使用するフォーメーションID |
 | Characters | `GuildBattlePartyCharacter[10]` | 編成キャラクター情報 |
 
+### CreateScheduledGuildBattlesRequest
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| TargetDate | `DateTime` | 対象日。JSTの日付部分を使用する |
+| StartTime | `GuildBattleStartTime` | 組み合わせを生成する固定開戦時刻 |
+
+### CreateScheduledGuildBattlesResponse
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| Battles | `ScheduledGuildBattle[]` | 生成・保存した騎士団戦一覧 |
+
 ### ScheduledGuildBattle
 
 | 項目 | 型 | 内容 |
@@ -606,7 +626,7 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| PlayerID | `PlayerID[]` | Databaseに存在する全PlayerID |
+| PlayerID | `PlayerID[]` | Databaseに存在する全PlayerID。PlayerID昇順で返す |
 
 ### GetGuildMembersRequest
 
@@ -618,7 +638,7 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| PlayerID | `PlayerID[]` | 所属プレイヤーID一覧 |
+| PlayerID | `PlayerID[]` | 所属プレイヤーID一覧。PlayerID昇順で返す |
 
 ### GuildLevelData
 
@@ -685,6 +705,13 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 | GuildBattleID | `GuildBattleID` | 騎士団戦に紐づく場合の騎士団戦ID |
 | ErrorLog | `ErrorLogMessage` | 追記するエラーログ文字列 |
 
+### UpdatePlayerGuildBattleRecordRequest
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| PlayerID | `PlayerID` | 更新対象PlayerID |
+| Result | `GuildBattleResult` | 当該Playerの勝敗。drawの場合は更新しない |
+
 ### GuildBattleResultSaveRequest
 
 | 項目 | 型 | 内容 |
@@ -697,7 +724,7 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 
 ### GuildBattleReplayPlayerSnapshot
 
-騎士団戦開始時点で参加対象として確定したプレイヤーの可変データを保存する.
+騎士団戦開始時点でGameServerの騎士団戦データとして保持するプレイヤーの可変データを保存する.
 
 | 項目 | 型 | 内容 |
 |---|---|---|
@@ -713,9 +740,9 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 |---|---|---|
 | Guild | `GuildLevelData` | 開始時点の騎士団レベル情報 |
 | MemberPlayerID | `PlayerID[]` | 開始時点の所属メンバー一覧 |
-| Participants | `GuildBattleReplayPlayerSnapshot[]` | 開始時点で騎士団戦参加対象として確定したプレイヤーのスナップショット |
+| Participants | `GuildBattleReplayPlayerSnapshot[]` | 開始時点でGameServerの騎士団戦データとして保持するプレイヤーのスナップショット |
 
-`MemberPlayerID`には所属メンバー全員を保存し、開戦前データ取得失敗により参加対象から除外されたPlayerIDも含める. `Participants`には最終的に参加対象として確定したプレイヤーのみを保存する.
+`MemberPlayerID`には所属メンバー全員を保存する. 開戦前データ取得に失敗したPlayerIDは騎士団への所属・参加資格から除外せず、当該騎士団戦でGameServerが保持する騎士団戦データからのみ除外する. `Participants`には開戦時点でGameServerの騎士団戦データとして保持できたプレイヤーのみを保存する.
 
 ### GuildBattleInitialSnapshot
 

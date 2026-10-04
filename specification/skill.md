@@ -16,6 +16,18 @@
 * 攻撃
 
 
+
+## マスターデータ表現
+
+スキル固有の挙動は「[マスターデータ](../design/master_data.md)」のスキル構造で保持する.
+
+* 対象範囲は`SkillTargetRange`で保持する.
+* 単体対象で優先条件がある場合は`SkillTargetConditionID`で保持し、`0`は条件なしとする.
+* ランダム攻撃の回数は`random_hit_count`で保持する.
+* 状態異常付与スキルは`StatusAbnormalityID`と状態異常付与率を保持する.
+* バフ・デバフは`SkillStatTarget`で攻撃または防御のどちらへ作用するかを保持する.
+* 回復スキルは回復量とHP0回復可否を保持する.
+
 ## 発動条件
 
 * 「[沈黙状態](status_abnormality.md#沈黙)」ではない.

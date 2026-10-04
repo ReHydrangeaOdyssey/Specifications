@@ -8,6 +8,14 @@
 * 範囲攻撃不可
 * 昏睡
 
+状態異常の識別には「[型定義](../design/types.md)」の`StatusAbnormalityID`を使用する.
+
+* 毒: `STATUS_ABNORMALITY_POISON`
+* 暗闇: `STATUS_ABNORMALITY_BLINDNESS`
+* 沈黙: `STATUS_ABNORMALITY_SILENCE`
+* 範囲攻撃不可: `STATUS_ABNORMALITY_RANGE_ATTACK_DISABLED`
+* 昏睡: `STATUS_ABNORMALITY_COMA`
+
 ここで扱うターンはすべて戦闘全体のターン数を指す
 状態異常を付与したターンを1ターン目として数える
 複数の状態異常になることは可能
@@ -24,6 +32,7 @@
 
 3ターン毎のターン終了時に現在HPを5%減らす.
 ダメージは小数点以下切り上げ
+毒ダメージによってHPが0になった場合は「戦闘不能時に発動」条件のアビリティを発動しない.
 回復スキル以外で解除されない.
 
 ## 暗闇

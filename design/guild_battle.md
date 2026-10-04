@@ -62,10 +62,6 @@ flowchart TD;
 stateDiagram-v2
     [*] --> 通常
 
-    通常 --> 出撃処理中: 出撃開始
-    出撃処理中 --> 出撃待機中: 出撃完了
-    出撃待機中 --> 通常: 待機時間経過
-
     通常 --> 回復中: 治療開始
     全滅 --> 回復中: 治療開始
     回復中 --> 通常: 治療キャンセル（通常から開始）
@@ -78,6 +74,9 @@ stateDiagram-v2
     復活中 --> 復活完了: 5秒経過
     復活完了 --> 通常: 復活完了待機終了
 ```
+
+出撃待機は上記のプレイヤー状態とは別の独立タイマーとして保持する. 出撃処理が成功した時点でタイマーを設定し、0より大きい間は出撃のみ不可とする. 治療・復活・タクティクス等の状態とは併存できる.
+出撃要求送信後から結果応答を受信するまではClientが通信中として追加操作送信を抑止する. GameServerはこの通信待ちを独立したプレイヤー状態として保持しない.
 
 
 ### UI
@@ -104,6 +103,8 @@ stateDiagram-v2
 ## シーケンス
 
 騎士団戦参加時、GameServerは`GuildBattleID`単位で`PlayerID -> RequestSequence`マップを作成する。初期値は0で、参加成功時に`1..=1,000,000,000`の範囲乱数を`RequestSequence`として割り当てる。他プレイヤーとの`RequestSequence`重複は許可する。参加後の要求は保持値と一致する`RequestSequence`のみ処理し、成功するたびに1加算した`NextRequestSequence`をClientへ返す。失敗時は加算しない。
+
+相手プレイヤーの重み付き抽選へ渡す候補PlayerIDはPlayerID昇順とする.
 
 
 ### 編成登録時
@@ -147,11 +148,13 @@ sequenceDiagram
     participant DB
 
     User ->> Client: 参加ボタン押下
-    Client ->> PublicAPIServer: JoinGuildBattle
-    PublicAPIServer ->> GameServer: JoinGuildBattle
-    GameServer ->> GameServer: 参加チェック処理
+    Client ->> PublicAPIServer: JoinGuildBattle(SessionID, PlayerID, GuildID, GuildBattleID)
+    PublicAPIServer ->> GameServer: JoinGuildBattle(SessionID, PlayerID, GuildID, GuildBattleID)
+    GameServer ->> GameServer: 要求GuildBattleIDが騎士団戦中であることを確認
+    GameServer ->> GameServer: 要求GuildIDが要求GuildBattleIDの対戦騎士団であることを確認
+    GameServer ->> GameServer: PlayerIDの現在所属GuildIDと要求GuildIDが一致することを確認
 
-    alt 参加可能
+    alt 両条件を満たし参加可能
         GameServer ->> PrivateAPIServer: SaveSessionID
         PrivateAPIServer ->> DB: セッション期限UPSERT(PlayerID, SessionID, 72時間後)
         DB -->> PrivateAPIServer: 更新完了
@@ -214,7 +217,7 @@ sequenceDiagram
                     alt 取得成功
                         GameServer->>GameServer: 最大BP・編成・アイテム情報保管
                     else 処理失敗
-                        GameServer->>GameServer: 当該PlayerIDを騎士団戦参加対象から除外
+                        GameServer->>GameServer: 当該PlayerIDを当該GuildBattleIDの騎士団戦データから除外
                         GameServer->>GameServer: エラーログ追記
                         GameServer->>PrivateAPIServer: SaveErrorLog(GuildBattleID)
                         PrivateAPIServer->>DB: エラーログ保存
@@ -225,16 +228,16 @@ sequenceDiagram
 
             GameServer->>GameServer: InitialSeed = 固定値 XOR GuildBattleID
 
-            Note over GameServer: 開戦前データ処理終了後から開戦前まで
-            opt 除外プレイヤーの再取得を行う場合
+            Note over GameServer: 開戦前データ処理終了。対象2騎士団の加入・脱退を騎士団戦終了まで禁止
+            opt 騎士団戦データから除外したプレイヤーの再取得を行う場合
                 GameServer->>PrivateAPIServer: RetryGuildBattlePreload(GuildBattleID, 取得失敗PlayerID[])
                 PrivateAPIServer->>DB: 指定PlayerID[]の最大BP・編成情報・PLAYER_ITEMを再取得
                 PrivateAPIServer-->>GameServer: RetryGuildBattlePreload
-                GameServer->>GameServer: 再取得成功PlayerIDを参加対象へ復帰
+                GameServer->>GameServer: 再取得成功PlayerIDを当該GuildBattleIDの騎士団戦データへ追加
             end
 
             Note over GameServer: 開戦時刻到達
-            GameServer->>GameServer: 最終参加対象を確定しGuildBattleInitialSnapshotを生成
+            GameServer->>GameServer: 開戦時に保持する騎士団戦データを確定しGuildBattleInitialSnapshotを生成
             GameServer->>PrivateAPIServer: SaveGuildBattleCreateLog(GuildBattleID, InitialSeed, GuildID[2], InitialSnapshot, Version)
             PrivateAPIServer->>DB: リプレイ作成ログ・開戦時スナップショット保存
             GameServer->>PrivateAPIServer: UpdateGuildBattleStatus(GuildBattleID, in_progress)
@@ -284,57 +287,11 @@ sequenceDiagram
     end
 ```
 
-#### 同時出撃時
+#### 要求処理順
 
-```mermaid
-sequenceDiagram
-    actor UserA
-    actor UserB
-    participant ClientA
-    participant ClientB
-    participant PublicAPIServer
-    participant GameServer
+GameServerが受信するあらゆる要求は先に到達した順に処理する. GameServer受信時刻が異なる要求は受信時刻の早い要求を先に処理する. GameServer上で完全に同時として扱われる要求同士の順序は処理系定義とし、疑似乱数による順序決定は行わない.
 
-    UserA->>ClientA: 出撃
-    UserB->>ClientB: 出撃
-
-    ClientA->>PublicAPIServer: GuildBattleSortie(SessionID, PlayerID, GuildBattleID, RequestSequence, SelectID[])
-    ClientB->>PublicAPIServer: GuildBattleSortie(SessionID, PlayerID, GuildBattleID, RequestSequence, SelectID[])
-
-    PublicAPIServer->>GameServer: GuildBattleSortie(A)
-    PublicAPIServer->>GameServer: GuildBattleSortie(B)
-
-    GameServer->>GameServer: AのPlayerID・GuildBattleID・RequestSequence一致確認
-    GameServer->>GameServer: BのPlayerID・GuildBattleID・RequestSequence一致確認
-    GameServer->>GameServer: 一致した要求のみ同時出撃要求キューへ追加
-    GameServer->>GameServer: 疑似乱数で処理対象を抽選
-
-    Note over GameServer: 抽選されたプレイヤーと<br/>処理待ちプレイヤーは操作不可
-
-    alt UserAが抽選された場合
-        GameServer->>GameServer: UserA 出撃処理
-        GameServer->>GameServer: UserAのRequestSequenceを1加算
-        GameServer-->>PublicAPIServer: GuildBattleSortie(A, NextRequestSequence)
-        PublicAPIServer-->>ClientA: GuildBattleSortie
-
-        GameServer->>GameServer: 残り要求から再抽選
-        GameServer->>GameServer: UserB 出撃処理
-        GameServer->>GameServer: UserBのRequestSequenceを1加算
-        GameServer-->>PublicAPIServer: GuildBattleSortie(B, NextRequestSequence)
-        PublicAPIServer-->>ClientB: GuildBattleSortie
-    else UserBが抽選された場合
-        GameServer->>GameServer: UserB 出撃処理
-        GameServer->>GameServer: UserBのRequestSequenceを1加算
-        GameServer-->>PublicAPIServer: GuildBattleSortie(B, NextRequestSequence)
-        PublicAPIServer-->>ClientB: GuildBattleSortie
-
-        GameServer->>GameServer: 残り要求から再抽選
-        GameServer->>GameServer: UserA 出撃処理
-        GameServer->>GameServer: UserAのRequestSequenceを1加算
-        GameServer-->>PublicAPIServer: GuildBattleSortie(A, NextRequestSequence)
-        PublicAPIServer-->>ClientA: GuildBattleSortie
-    end
-```
+出撃要求についても同じ規則を使用する. Clientは出撃要求送信後から処理結果応答受信まで通信中として追加操作送信を抑止するため、GameServer側に出撃処理中・処理待ちを表す独立状態は持たせない.
 
 
 ##### タクティクス使用時
@@ -354,7 +311,6 @@ sequenceDiagram
     PublicAPIServer->>GameServer: UseTactics(SessionID, PlayerID, GuildBattleID, RequestSequence, TacticsID)
 
     GameServer->>GameServer: GuildBattleID・PlayerID・RequestSequence一致確認
-    GameServer->>GameServer: 操作ロック状態を確認
     GameServer->>GameServer: TP, 使用回数チェック
 
     alt 使用可能
@@ -627,6 +583,14 @@ sequenceDiagram
     end
 ```
 
+### Database送信失敗時
+
+騎士団戦中にDatabaseへの送信が失敗した場合は、同一送信を1回だけ再試行する. 再試行も失敗した場合、GameServerは当該騎士団戦についてDB障害発生状態へ移行する.
+
+DB障害発生状態では、それ以降の騎士団戦中Database送信を行わず、本来送信するデータをGameServerローカルへ保存する. 騎士団戦終了時にローカル保存したデータをDatabaseへ一括送信する.
+
+騎士団戦最終結果の保存は下記終了シーケンスの専用規則を使用する.
+
 #### 騎士団戦終了時
 
 ```mermaid
@@ -657,15 +621,34 @@ sequenceDiagram
         DB-->>PrivateAPIServer: 保存結果
         PrivateAPIServer-->>GameServer: SaveGuildBattleResult
 
-        opt 保存失敗
-            GameServer->>GameServer: エラーログ追記
-            GameServer->>PrivateAPIServer: SaveErrorLog
-            PrivateAPIServer->>DB: エラーログ保存
-            GameServer->>Bot: エラーメッセージ送信
+        opt 初回保存失敗
+            GameServer->>PrivateAPIServer: SaveGuildBattleResult 再試行（1回）
+            PrivateAPIServer->>DB: スコア・勝敗結果再保存
+            DB-->>PrivateAPIServer: 再保存結果
+            PrivateAPIServer-->>GameServer: SaveGuildBattleResult
+            opt 再試行も失敗
+                GameServer->>GameServer: エラーログ追記
+                GameServer->>PrivateAPIServer: SaveErrorLog
+                PrivateAPIServer->>DB: エラーログ保存
+                GameServer->>Bot: エラーメッセージ送信
+                Note over GameServer,Bot: 原因調査および復旧は運営が手動で行う
+            end
         end
     end
 
-    GameServer->>PrivateAPIServer: UpdateGuildBattleStatus(GuildBattleID, completed)
-    PrivateAPIServer->>DB: GUILD_BATTLE.status = completed
+    Note over GameServer: 最終結果処理完了後
+    loop 勝敗数更新対象Player
+        GameServer->>PrivateAPIServer: UpdatePlayerGuildBattleRecord(PlayerID, Result)
+        PrivateAPIServer->>DB: 勝利ならwin_count+1 / 敗北ならlose_count+1 / 引き分けは更新なし
+    end
+
+    GameServer->>GameServer: 対象2騎士団の加入・脱退禁止を解除
+
+    alt 最終結果保存が完了
+        GameServer->>PrivateAPIServer: UpdateGuildBattleStatus(GuildBattleID, completed)
+        PrivateAPIServer->>DB: GUILD_BATTLE.status = completed
+    else 再試行後も最終結果保存失敗
+        Note over GameServer: ErrorLog・Bot通知済み。運営が原因調査し手動復旧する
+    end
 ```
 
