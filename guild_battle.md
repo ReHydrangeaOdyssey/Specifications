@@ -78,7 +78,7 @@
 * 計算の途中式は全てこの仕様書に記載された順序で行われる.
 * 「ランダム」といった記載がある場合はシード値に基づいた再現性のある「疑似乱数生成式」から算出される.
   - 初期シード値は`固定値 ^ 騎士団戦時の固有ID`とする.
-    - いずれも`u64`として扱う.
+    - 型は「[型定義](types.md)」の`Seed`および`GuildBattleID`を参照.
   - 「疑似乱数生成式」は「[疑似乱数](pseudorandom.md)」を参照.
   - 1つのPRNG状態を騎士団戦全体で共有する
     - 「戦闘」のみ初期シード値に「シーケンス番号」を足したシード値を使用した専用のPRNGを生成し, その戦闘内ではその専用のPRNGを使用する.
@@ -549,21 +549,25 @@ stateDiagram-v2
 sequenceDiagram
     actor User
     participant Client
-    participant APIServer
+    participant PublicAPIServer
     participant GameServer
+    participant PrivateAPIServer
     participant DB
 
     User->>Client: 編成変更完了
-    Client->>+APIServer: 編成変更
-    APIServer->>GameServer: 変更可能時間問い合わせ
-    GameServer-->>APIServer: 変更可否返答
+    Client->>+PublicAPIServer: UpdateGuildBattleParty
+    PublicAPIServer->>GameServer: UpdateGuildBattleParty
+    GameServer-->>PublicAPIServer: UpdateGuildBattleParty
 
     alt 編成変更可能
-        APIServer->>DB: 編成情報登録
-        DB-->>APIServer: 登録完了
-        APIServer-->>-Client: 登録完了通知
+        GameServer->>PrivateAPIServer: SaveGuildBattleParty
+        PrivateAPIServer->>DB: 編成情報登録
+        DB-->>PrivateAPIServer: 登録完了
+        PrivateAPIServer-->>GameServer: SaveGuildBattleParty
+        GameServer-->>PublicAPIServer: UpdateGuildBattleParty
+        PublicAPIServer-->>-Client: UpdateGuildBattleParty
     else 編成変更不可
-        APIServer-->>Client: 登録拒否通知
+        PublicAPIServer-->>Client: UpdateGuildBattleParty
         Client->>User: 変更失敗表示
     end
 ```
@@ -576,20 +580,26 @@ sequenceDiagram
     participant Client
     participant PublicAPIServer
     participant GameServer
+    participant PrivateAPIServer
+    participant DB
 
     User ->> Client: 参加ボタン押下
-    Client ->> PublicAPIServer: 参加通知
-    PublicAPIServer ->> GameServer: 参加通知
+    Client ->> PublicAPIServer: JoinGuildBattle
+    PublicAPIServer ->> GameServer: JoinGuildBattle
     GameServer ->> GameServer: 参加チェック処理
-    GameServer -->> PublicAPIServer: 参加可否返答
+    GameServer -->> PublicAPIServer: JoinGuildBattle
 
     alt 参加可能
-        PublicAPIServer ->> GameServer: 現在HPの状態要求
-        GameServer -->> PublicAPIServer: 編成ID, 現在HPのペア返答
-        PublicAPIServer -->> Client: 編成ID, 現在HPのペア返答
+        GameServer ->> PrivateAPIServer: SaveSessionID
+        PrivateAPIServer ->> DB: セッション期限更新(PlayerID, SessionID, 72時間後)
+        DB -->> PrivateAPIServer: 更新完了
+        PrivateAPIServer -->> GameServer: SaveSessionID
+        PublicAPIServer ->> GameServer: GetGuildBattleStatus
+        GameServer -->> PublicAPIServer: GetGuildBattleStatus
+        PublicAPIServer -->> Client: GetGuildBattleStatus
         Client ->> User: 結果表示
     else 参加不可
-        PublicAPIServer -->> Client: 開戦前通知
+        PublicAPIServer -->> Client: JoinGuildBattle
         Client ->> User: 結果表示
     end
 
@@ -606,20 +616,30 @@ sequenceDiagram
     participant PrivateAPIServer
     participant DB
 
+    GameServer->>PrivateAPIServer: GetScheduledGuilds
+    PrivateAPIServer->>DB: 指定時間開戦予定の騎士団要求
+    DB-->>PrivateAPIServer: 指定時間開戦予定の騎士団返答
+    PrivateAPIServer-->>GameServer: GetScheduledGuilds
+
     loop 指定時間の対象騎士団すべて
+        alt GameServerの処理容量上限に到達
+            GameServer->>Bot: 処理容量上限到達メッセージ送信
+            Note over GameServer,DB: 対象騎士団戦については何も処理せず、DB上の状態はscheduledのまま維持する
+        else 処理容量に空きあり
         loop 所属しているメンバー全員
-            GameServer->>PrivateAPIServer: 編成情報要求
+            GameServer->>PrivateAPIServer: GetGuildBattleFormation
             PrivateAPIServer->>DB: 編成情報要求
             DB-->>PrivateAPIServer: 編成情報返答
-            PrivateAPIServer-->>GameServer: 編成情報返答
+            PrivateAPIServer-->>GameServer: GetGuildBattleFormation
             GameServer->>GameServer: 編成情報保管
 
             opt 処理失敗時
                 GameServer->>GameServer: エラーログ追記
-                GameServer->>PrivateAPIServer: エラーログ送信
+                GameServer->>PrivateAPIServer: SaveErrorLog
                 PrivateAPIServer->>DB: エラーログ送信
                 GameServer->>Bot: エラーメッセージ送信
             end  
+        end
         end
     end
     
@@ -639,25 +659,25 @@ sequenceDiagram
 
     loop 30分経過するまで
         User ->> Client: 出撃ボタン押下
-        Client ->> PublicAPIServer: 情報送信(SessionID, SelectID*5)
-        PublicAPIServer ->> GameServer: 情報送信(SessionID, SelectID*5)
+        Client ->> PublicAPIServer: GuildBattleSortie(SessionID, SelectID[5])
+        PublicAPIServer ->> GameServer: GuildBattleSortie(SessionID, SelectID[5])
         GameServer ->> GameServer: 出撃可否チェック
         GameServer ->> GameServer: シーケンス加算
         GameServer ->> GameServer: 出撃内容抽選
 
         alt キャッスルブレイク
             GameServer ->> GameServer: キャッスルブレイク処理
-            GameServer -->> PublicAPIServer: 返答(Score, Seed)
-            PublicAPIServer -->> Client: 返答(Score, Seed)
+            GameServer -->> PublicAPIServer: GuildBattleSortie
+            PublicAPIServer -->> Client: GuildBattleSortie
         else 殲滅
             GameServer ->> GameServer: 戦闘処理
-            GameServer ->> PublicAPIServer: 返答(Score, Seed, EnemyInfo)
-            PublicAPIServer ->> Client: 返答(Score, Seed, EnemyInfo)
+            GameServer ->> PublicAPIServer: GuildBattleSortie
+            PublicAPIServer ->> Client: GuildBattleSortie
         end
 
         GameServer ->> GameServer: チェイン処理
 
-        GameServer ->> PrivateAPIServer: ログ送信(Time, PlayerID, SelectID*5)
+        GameServer ->> PrivateAPIServer: SaveGuildBattleSortieLog
         PrivateAPIServer ->> DB: ログ送信(Time, PlayerID)
     end
 ```
@@ -676,11 +696,11 @@ sequenceDiagram
     UserA->>ClientA: 出撃
     UserB->>ClientB: 出撃
 
-    ClientA->>PublicAPIServer: 出撃要求(SessionID, SelectID[])
-    ClientB->>PublicAPIServer: 出撃要求(SessionID, SelectID[])
+    ClientA->>PublicAPIServer: GuildBattleSortie(SessionID, SelectID[])
+    ClientB->>PublicAPIServer: GuildBattleSortie(SessionID, SelectID[])
 
-    PublicAPIServer->>GameServer: 出撃要求A
-    PublicAPIServer->>GameServer: 出撃要求B
+    PublicAPIServer->>GameServer: GuildBattleSortie(A)
+    PublicAPIServer->>GameServer: GuildBattleSortie(B)
 
     GameServer->>GameServer: 同時出撃要求をキューへ追加
     GameServer->>GameServer: 疑似乱数で処理対象を抽選
@@ -689,22 +709,22 @@ sequenceDiagram
 
     alt UserAが抽選された場合
         GameServer->>GameServer: UserA 出撃処理
-        GameServer-->>PublicAPIServer: UserA 出撃結果
-        PublicAPIServer-->>ClientA: 出撃結果
+        GameServer-->>PublicAPIServer: GuildBattleSortie(A)
+        PublicAPIServer-->>ClientA: GuildBattleSortie
 
         GameServer->>GameServer: 残り要求から再抽選
         GameServer->>GameServer: UserB 出撃処理
-        GameServer-->>PublicAPIServer: UserB 出撃結果
-        PublicAPIServer-->>ClientB: 出撃結果
+        GameServer-->>PublicAPIServer: GuildBattleSortie(B)
+        PublicAPIServer-->>ClientB: GuildBattleSortie
     else UserBが抽選された場合
         GameServer->>GameServer: UserB 出撃処理
-        GameServer-->>PublicAPIServer: UserB 出撃結果
-        PublicAPIServer-->>ClientB: 出撃結果
+        GameServer-->>PublicAPIServer: GuildBattleSortie(B)
+        PublicAPIServer-->>ClientB: GuildBattleSortie
 
         GameServer->>GameServer: 残り要求から再抽選
         GameServer->>GameServer: UserA 出撃処理
-        GameServer-->>PublicAPIServer: UserA 出撃結果
-        PublicAPIServer-->>ClientA: 出撃結果
+        GameServer-->>PublicAPIServer: GuildBattleSortie(A)
+        PublicAPIServer-->>ClientA: GuildBattleSortie
     end
 ```
 
@@ -722,8 +742,8 @@ sequenceDiagram
 
     User->>Client: タクティクス使用
     Client->>Client: TP, 使用回数チェック
-    Client->>PublicAPIServer: タクティクス使用要求(SessionID, TacticsID)
-    PublicAPIServer->>GameServer: タクティクス使用要求(SessionID, TacticsID)
+    Client->>PublicAPIServer: UseTactics(SessionID, TacticsID)
+    PublicAPIServer->>GameServer: UseTactics(SessionID, TacticsID)
 
     GameServer->>GameServer: 操作ロック状態を確認
     GameServer->>GameServer: TP, 使用回数チェック
@@ -731,14 +751,14 @@ sequenceDiagram
     alt 使用可能
         GameServer->>GameServer: 使用可能回数, TP処理
         GameServer->>GameServer: タクティクス固有効果を適用
-        GameServer-->>PublicAPIServer: 使用結果(TP, RemainingCount, Effect)
-        PublicAPIServer-->>Client: 使用結果(TP, RemainingCount, Effect)
+        GameServer-->>PublicAPIServer: UseTactics
+        PublicAPIServer-->>Client: UseTactics
 
-        GameServer ->> PrivateAPIServer: ログ送信(Time, PlayerID, TacticsID)
+        GameServer ->> PrivateAPIServer: SaveGuildBattleTacticsLog
         PrivateAPIServer ->> DB: ログ送信(Time, PlayerID, TacticsID)
     else 使用不可
-        GameServer-->>PublicAPIServer: 使用拒否
-        PublicAPIServer-->>Client: 使用拒否
+        GameServer-->>PublicAPIServer: UseTactics
+        PublicAPIServer-->>Client: UseTactics
     end
     
     Client->>Client: TP, 使用回数更新
@@ -757,21 +777,21 @@ sequenceDiagram
 
     User->>Client: BP回復アイテム使用
     Client->>Client: 所持数チェック
-    Client->>PublicAPIServer: アイテム使用要求(SessionID, ItemID)
-    PublicAPIServer->>GameServer: アイテム使用要求(SessionID, ItemID)
+    Client->>PublicAPIServer: UseItem(SessionID, ItemID)
+    PublicAPIServer->>GameServer: UseItem(SessionID, ItemID)
 
     GameServer->>GameServer: 所持数チェック
 
     alt 使用可能
         GameServer->>GameServer: アイテム使用処理
-        GameServer-->>PublicAPIServer: 使用成功(現在BP, 残り所持数)
-        PublicAPIServer-->>Client: 使用成功(現在BP, 残り所持数)
+        GameServer-->>PublicAPIServer: UseItem
+        PublicAPIServer-->>Client: UseItem
 
-        GameServer ->> PrivateAPIServer: ログ送信(Time, PlayerID, ItemID)
+        GameServer ->> PrivateAPIServer: SaveGuildBattleItemLog
         PrivateAPIServer ->> DB: ログ送信(Time, PlayerID, ItemID)
     else 使用不可
-        GameServer-->>PublicAPIServer: 使用拒否
-        PublicAPIServer-->>Client: 使用拒否
+        GameServer-->>PublicAPIServer: UseItem
+        PublicAPIServer-->>Client: UseItem
     end
 
 ```
@@ -788,26 +808,26 @@ sequenceDiagram
     participant DB
 
     User->>Client: 治療開始
-    Client->>PublicAPIServer: 治療開始要求(SessionID)
-    PublicAPIServer->>GameServer: 治療開始要求(SessionID)
+    Client->>PublicAPIServer: StartHeal(SessionID)
+    PublicAPIServer->>GameServer: StartHeal(SessionID)
 
     GameServer->>GameServer: 回復状態でないことを確認
 
     alt 開始可能
         GameServer->>GameServer: 回復待機時間算出
         GameServer->>GameServer: 回復中状態へ変更
-        GameServer-->>PublicAPIServer: 開始成功(回復待機時間)
-        PublicAPIServer-->>Client: 開始成功(回復待機時間)
+        GameServer-->>PublicAPIServer: StartHeal
+        PublicAPIServer-->>Client: StartHeal
 
-        GameServer ->> PrivateAPIServer: ログ送信(Time, PlayerID, HealState)
+        GameServer ->> PrivateAPIServer: SaveGuildBattleHealLog
         PrivateAPIServer ->> DB: ログ送信(Time, PlayerID, HealState)
 
         Note over GameServer: 回復待機時間経過
 
         GameServer->>GameServer: 回復完了状態へ変更
     else 開始不可
-        GameServer-->>PublicAPIServer: 開始拒否
-        PublicAPIServer-->>Client: 開始拒否
+        GameServer-->>PublicAPIServer: StartHeal
+        PublicAPIServer-->>Client: StartHeal
     end
 ```
 
@@ -824,8 +844,8 @@ sequenceDiagram
     participant DB
 
     User->>Client: 治療キャンセル
-    Client->>PublicAPIServer: 治療キャンセル要求(SessionID)
-    PublicAPIServer->>GameServer: 治療キャンセル要求(SessionID)
+    Client->>PublicAPIServer: CancelHeal(SessionID)
+    PublicAPIServer->>GameServer: CancelHeal(SessionID)
 
     GameServer->>GameServer: 回復中状態を確認
 
@@ -833,14 +853,14 @@ sequenceDiagram
         GameServer->>GameServer: 回復待機時間をリセット
         GameServer->>GameServer: 回復中状態を解除
         Note over GameServer: HP/BPは回復しない
-        GameServer-->>PublicAPIServer: キャンセル成功
-        PublicAPIServer-->>Client: キャンセル成功
+        GameServer-->>PublicAPIServer: CancelHeal
+        PublicAPIServer-->>Client: CancelHeal
 
-        GameServer ->> PrivateAPIServer: ログ送信(Time, PlayerID, HealState)
+        GameServer ->> PrivateAPIServer: SaveGuildBattleHealLog
         PrivateAPIServer ->> DB: ログ送信(Time, PlayerID, HealState)
     else キャンセル不可
-        GameServer-->>PublicAPIServer: キャンセル拒否
-        PublicAPIServer-->>Client: キャンセル拒否
+        GameServer-->>PublicAPIServer: CancelHeal
+        PublicAPIServer-->>Client: CancelHeal
     end
 ```
 
@@ -856,22 +876,22 @@ sequenceDiagram
     participant DB
 
     User->>Client: 回復完了状態解除
-    Client->>PublicAPIServer: 治療完了要求(SessionID)
-    PublicAPIServer->>GameServer: 治療完了要求(SessionID)
+    Client->>PublicAPIServer: CompleteHeal(SessionID)
+    PublicAPIServer->>GameServer: CompleteHeal(SessionID)
 
     GameServer->>GameServer: 回復完了状態を確認
 
     alt 完了可能
         GameServer->>GameServer: BP, HP回復処理
         GameServer->>GameServer: 回復状態を解除
-        GameServer-->>PublicAPIServer: 完了(BP, CharacterHP[]) 
-        PublicAPIServer-->>Client: 完了(BP, CharacterHP[])
+        GameServer-->>PublicAPIServer: CompleteHeal 
+        PublicAPIServer-->>Client: CompleteHeal
 
-        GameServer ->> PrivateAPIServer: ログ送信(Time, PlayerID, HealState)
+        GameServer ->> PrivateAPIServer: SaveGuildBattleHealLog
         PrivateAPIServer ->> DB: ログ送信(Time, PlayerID, HealState)
     else 完了不可
-        GameServer-->>PublicAPIServer: 完了拒否
-        PublicAPIServer-->>Client: 完了拒否
+        GameServer-->>PublicAPIServer: CompleteHeal
+        PublicAPIServer-->>Client: CompleteHeal
     end
 ```
 
@@ -887,26 +907,26 @@ sequenceDiagram
     participant DB
 
     User->>Client: 復活開始
-    Client->>PublicAPIServer: 復活開始要求(SessionID)
-    PublicAPIServer->>GameServer: 復活開始要求(SessionID)
+    Client->>PublicAPIServer: StartRevive(SessionID)
+    PublicAPIServer->>GameServer: StartRevive(SessionID)
 
     GameServer->>GameServer: 使用可能かチェック
 
     alt 復活可能
         GameServer->>GameServer: 復活中状態へ変更
-        GameServer-->>PublicAPIServer: 復活開始成功(待機時間=5秒)
-        PublicAPIServer-->>Client: 復活開始成功(待機時間=5秒)
+        GameServer-->>PublicAPIServer: StartRevive
+        PublicAPIServer-->>Client: StartRevive
 
-        GameServer ->> PrivateAPIServer: ログ送信(Time, PlayerID, HealState)
-        PrivateAPIServer ->> DB: ログ送信(Time, PlayerID, HealState)
+        GameServer ->> PrivateAPIServer: SaveGuildBattleReviveLog
+        PrivateAPIServer ->> DB: ログ送信(Time, PlayerID, ReviveState)
 
         Note over GameServer: 5秒経過
 
         GameServer->>GameServer: 復活完了状態へ変更
         Note over GameServer: この時点ではBP消費・HP回復なし
     else 復活不可
-        GameServer-->>PublicAPIServer: 復活開始拒否
-        PublicAPIServer-->>Client: 復活開始拒否
+        GameServer-->>PublicAPIServer: StartRevive
+        PublicAPIServer-->>Client: StartRevive
     end
 ```
 
@@ -923,22 +943,22 @@ sequenceDiagram
     participant DB
 
     User->>Client: 復活キャンセル
-    Client->>PublicAPIServer: 復活キャンセル要求(SessionID)
-    PublicAPIServer->>GameServer: 復活キャンセル要求(SessionID)
+    Client->>PublicAPIServer: CancelRevive(SessionID)
+    PublicAPIServer->>GameServer: CancelRevive(SessionID)
 
     GameServer->>GameServer: 復活中状態を確認
 
     alt キャンセル可能
         GameServer->>GameServer: 復活待機時間を破棄
         GameServer->>GameServer: 全滅状態へ戻す
-        GameServer-->>PublicAPIServer: キャンセル成功
-        PublicAPIServer-->>Client: キャンセル成功
+        GameServer-->>PublicAPIServer: CancelRevive
+        PublicAPIServer-->>Client: CancelRevive
 
-        GameServer ->> PrivateAPIServer: ログ送信(Time, PlayerID, HealState)
-        PrivateAPIServer ->> DB: ログ送信(Time, PlayerID, HealState)
+        GameServer ->> PrivateAPIServer: SaveGuildBattleReviveLog
+        PrivateAPIServer ->> DB: ログ送信(Time, PlayerID, ReviveState)
     else キャンセル不可
-        GameServer-->>PublicAPIServer: キャンセル拒否
-        PublicAPIServer-->>Client: キャンセル拒否
+        GameServer-->>PublicAPIServer: CancelRevive
+        PublicAPIServer-->>Client: CancelRevive
     end
 ```
 
@@ -955,22 +975,22 @@ sequenceDiagram
     participant DB
 
     User->>Client: 復活完了状態解除
-    Client->>PublicAPIServer: 復活完了要求(SessionID)
-    PublicAPIServer->>GameServer: 復活完了要求(SessionID)
+    Client->>PublicAPIServer: CompleteRevive(SessionID)
+    PublicAPIServer->>GameServer: CompleteRevive(SessionID)
 
     GameServer->>GameServer: 復活完了状態を確認
 
     alt 完了可能
         GameServer->>GameServer: BP, HP処理
         GameServer->>GameServer: 全滅状態を解除
-        GameServer-->>PublicAPIServer: 復活完了(BP, CharacterHP[])
-        PublicAPIServer-->>Client: 復活完了(BP, CharacterHP[])
+        GameServer-->>PublicAPIServer: CompleteRevive
+        PublicAPIServer-->>Client: CompleteRevive
 
-        GameServer ->> PrivateAPIServer: ログ送信(Time, PlayerID, HealState)
-        PrivateAPIServer ->> DB: ログ送信(Time, PlayerID, HealState)
+        GameServer ->> PrivateAPIServer: SaveGuildBattleReviveLog
+        PrivateAPIServer ->> DB: ログ送信(Time, PlayerID, ReviveState)
     else 完了不可
-        GameServer-->>PublicAPIServer: 復活完了拒否
-        PublicAPIServer-->>Client: 復活完了拒否
+        GameServer-->>PublicAPIServer: CompleteRevive
+        PublicAPIServer-->>Client: CompleteRevive
     end
 ```
 
@@ -997,14 +1017,14 @@ sequenceDiagram
     GameServer->>GameServer: 勝敗判定
 
     loop 対象騎士団
-        GameServer->>PrivateAPIServer: 最終結果保存
+        GameServer->>PrivateAPIServer: SaveGuildBattleResult
         PrivateAPIServer->>DB: スコア・勝敗結果保存
         DB-->>PrivateAPIServer: 保存結果
-        PrivateAPIServer-->>GameServer: 保存結果
+        PrivateAPIServer-->>GameServer: SaveGuildBattleResult
 
         opt 保存失敗
             GameServer->>GameServer: エラーログ追記
-            GameServer->>PrivateAPIServer: エラーログ送信
+            GameServer->>PrivateAPIServer: SaveErrorLog
             PrivateAPIServer->>DB: エラーログ保存
             GameServer->>Bot: エラーメッセージ送信
         end

@@ -11,10 +11,10 @@
 
 ### セッションID新規取得
 
+GameServerはBotから起動される. BotはGameServer起動時に`[a-zA-Z0-9_]{64}`のTokenを生成し, 起動引数としてGameServerへ渡す.
 botの検証は特定のロールを持っているか, 前回要求時から5分以上経過しているか
 アクセストークンの期限は5分
-アクセストークンはu64
-セッションIDはu64
+アクセストークンおよびセッションIDの型は「[型定義](types.md)」を参照
 
 
 ```mermaid
@@ -33,12 +33,12 @@ sequenceDiagram
     Bot->>Bot: 検証
 
     alt 検証成功
-        Bot->>PublicAPIServer: アクセストークン要求
-        PublicAPIServer->>GameServer: アクセストークン要求
-        GameServer->>GameServer: 送信元検証
+        Bot->>PublicAPIServer: IssueAccessToken(Token)
+        PublicAPIServer->>GameServer: IssueAccessToken(Token)
+        GameServer->>GameServer: 起動時Tokenとの一致検証
         GameServer->>GameServer: アクセストークン生成
-        GameServer-->>PublicAPIServer: アクセストークン返答
-        PublicAPIServer-->>Bot: アクセストークン返答
+        GameServer-->>PublicAPIServer: IssueAccessToken
+        PublicAPIServer-->>Bot: IssueAccessToken
         Bot-->>Discord: アクセストークン返答
         Discord-->>User: アクセストークン返答(DM)
 
@@ -48,25 +48,26 @@ sequenceDiagram
             Client->>User: ユーザー名要求
             User->>Client: ユーザー名入力
             Client->>Client: ユーザー名チェック
-            Client->>PublicAPIServer: 新規PlayerID要求(ユーザー名)
-            PublicAPIServer->>GameServer: 新規PlayerID要求(ユーザー名)
+            Client->>PublicAPIServer: CreatePlayer(UserName, AccessToken)
+            PublicAPIServer->>GameServer: CreatePlayer(UserName, AccessToken)
+            GameServer->>GameServer: AccessToken検証
             GameServer->>GameServer: ユーザー名チェック
             GameServer->>GameServer: PlayerID生成
-            GameServer->PrivateAPIServer: 送信(PlayerID)
-            PrivateAPIServer->DB: 保存(PlayerID)
-            GameServer-->>PublicAPIServer: PlayerID返答
-            PublicAPIServer-->>Client: PlayerID返答
+            GameServer->>PrivateAPIServer: SavePlayerID
+            PrivateAPIServer->DB: 保存(PlayerID, ユーザー名)
+            GameServer-->>PublicAPIServer: CreatePlayer
+            PublicAPIServer-->>Client: CreatePlayer
             Client->>Client: PlayerID保存
         end
 
-        Client->>PublicAPIServer: ログイン要求(PlayerID, AccessToken) 
-        PublicAPIServer->>GameServer: ログイン要求(PlayerID, AccessToken) 
+        Client->>PublicAPIServer: Login(PlayerID, AccessToken) 
+        PublicAPIServer->>GameServer: Login(PlayerID, AccessToken) 
         GameServer->>GameServer: アクセストークン無効化
         GameServer->>GameServer: セッションID生成
-        GameServer->PrivateAPIServer: 送信(PlayerID, セッションID)
-        PrivateAPIServer->DB: セッションID保存
-        GameServer-->>PublicAPIServer: セッションID返答
-        PublicAPIServer-->>Client: セッションID返答    
+        GameServer->>PrivateAPIServer: SaveSessionID
+        PrivateAPIServer->DB: 送信(PlayerID, セッションID, 期限)
+        GameServer-->>PublicAPIServer: Login
+        PublicAPIServer-->>Client: Login    
         Client->>Client: セッションID保存
     else 検証失敗
         Bot-->>Discord: 検証失敗返答
@@ -83,38 +84,49 @@ sequenceDiagram
     participant ClientB as 新Client
     participant PublicAPI
     participant GameServer
+    participant PrivateAPIServer
     participant Database
 
     User->>ClientB: ログイン操作
-    ClientB->>PublicAPI: ログイン要求(PlayerID, AccessToken)
-    PublicAPI->>GameServer: ログイン要求(PlayerID, AccessToken)
+    ClientB->>PublicAPI: Login(PlayerID, AccessToken)
+    PublicAPI->>GameServer: Login(PlayerID, AccessToken)
 
-    GameServer->>Database: PlayerIDの有効Session検索
-    Database-->>GameServer: ExistingSession
+    GameServer->>PrivateAPIServer: GetActiveSession
+    PrivateAPIServer->>Database: PlayerIDの有効Session検索
+    Database-->>PrivateAPIServer: ExistingSession
+    PrivateAPIServer-->>GameServer: GetActiveSession
 
     alt 有効なSessionが存在する
-        GameServer->>Database: ExistingSessionを無効化
-        Database-->>GameServer: 無効化完了
+        GameServer->>PrivateAPIServer: InvalidateSession
+        PrivateAPIServer->>Database: ExistingSessionを無効化
+        Database-->>PrivateAPIServer: 無効化完了
+        PrivateAPIServer-->>GameServer: InvalidateSession
 
         GameServer->>GameServer: 新しいSessionID生成
-        GameServer->>Database: 新Session登録(PlayerID, SessionID)
-        Database-->>GameServer: 登録完了
+        GameServer->>PrivateAPIServer: SaveSessionID
+        PrivateAPIServer->>Database: 新Session登録(PlayerID, SessionID, 期限)
+        Database-->>PrivateAPIServer: 登録完了
+        PrivateAPIServer-->>GameServer: SaveSessionID
 
-        GameServer-->>PublicAPI: ログイン成功(SessionID)
-        PublicAPI-->>ClientB: ログイン成功(SessionID)
+        GameServer-->>PublicAPI: Login
+        PublicAPI-->>ClientB: Login
 
-        ClientA->>PublicAPI: ExistingSessionを使用したAPI要求
-        PublicAPI->>GameServer: API要求(ExistingSession)
-        GameServer->>Database: Session確認
-        Database-->>GameServer: 無効
-        GameServer-->>PublicAPI: Session無効
-        PublicAPI-->>ClientA: 再ログイン要求
+        ClientA->>PublicAPI: ValidateSession(ExistingSession)
+        PublicAPI->>GameServer: ValidateSession(ExistingSession)
+        GameServer->>PrivateAPIServer: ValidateSession
+        PrivateAPIServer->>Database: Session確認
+        Database-->>PrivateAPIServer: 無効
+        PrivateAPIServer-->>GameServer: ValidateSession
+        GameServer-->>PublicAPI: ValidateSession
+        PublicAPI-->>ClientA: ValidateSession
     else 有効なSessionが存在しない
         GameServer->>GameServer: 新しいSessionID生成
-        GameServer->>Database: 新Session登録(PlayerID, SessionID)
-        Database-->>GameServer: 登録完了
+        GameServer->>PrivateAPIServer: SaveSessionID
+        PrivateAPIServer->>Database: 新Session登録(PlayerID, SessionID, 期限)
+        Database-->>PrivateAPIServer: 登録完了
+        PrivateAPIServer-->>GameServer: SaveSessionID
 
-        GameServer-->>PublicAPI: ログイン成功(SessionID)
-        PublicAPI-->>ClientB: ログイン成功(SessionID)
+        GameServer-->>PublicAPI: Login
+        PublicAPI-->>ClientB: Login
     end
 ```

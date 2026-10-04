@@ -8,6 +8,8 @@
 相手は2つのパターンがあり, どちらのパターンを選ぶかはプレイヤーが選ぶことができる.
 * 任意の相手と戦闘する.
 * ランダムな相手と戦闘する.
+  - 自分自身を除いた全プレイヤーを候補とする.
+  - 対戦相手は「[疑似乱数](pseudorandom.md)」の「抽選」により1人決定する.
 
 ## 制約
 
@@ -69,14 +71,14 @@ sequenceDiagram
     participant DB
 
     User->>Client: 編成変更完了
-    Client->>PublicAPIServer: 編成変更
-    PublicAPIServer->>GameServer: 編成情報登録
-    GameServer->>PrivateAPIServer: 編成情報登録
+    Client->>PublicAPIServer: UpdateArenaParty
+    PublicAPIServer->>GameServer: UpdateArenaParty
+    GameServer->>PrivateAPIServer: SaveArenaParty
     PrivateAPIServer->>DB: 編成情報登録
     DB-->>PrivateAPIServer: 登録完了
-    PrivateAPIServer-->>GameServer: 登録完了
-    GameServer-->>PublicAPIServer: 登録完了通知
-    PublicAPIServer-->>Client: 登録完了通知
+    PrivateAPIServer-->>GameServer: SaveArenaParty
+    GameServer-->>PublicAPIServer: UpdateArenaParty
+    PublicAPIServer-->>Client: UpdateArenaParty
     Client-->>User: 変更完了通知
 ```
 
@@ -93,9 +95,9 @@ sequenceDiagram
 
     User->>Client: 対戦開始
     Client->>PublicAPIServer: GetArenaBattleSeed
-    PublicAPIServer->>GameServer: seed発行依頼
-    GameServer-->>PublicAPIServer: initial_seed
-    PublicAPIServer-->>Client: initial_seed
+    PublicAPIServer->>GameServer: GetArenaBattleSeed
+    GameServer-->>PublicAPIServer: GetArenaBattleSeed
+    PublicAPIServer-->>Client: GetArenaBattleSeed
 
     alt ランダム対戦
         Client->>PublicAPIServer: StartArenaBattle(mode=random)
@@ -103,12 +105,12 @@ sequenceDiagram
         Client->>PublicAPIServer: StartArenaBattle(mode=friend, opponent_id)
     end
 
-    PublicAPIServer->>GameServer: 戦闘実行
-    GameServer->>PrivateAPIServer: 必要データ取得
+    PublicAPIServer->>GameServer: StartArenaBattle
+    GameServer->>PrivateAPIServer: GetArenaBattleData
     PrivateAPIServer->>DB: 必要データ取得
     DB-->>PrivateAPIServer: データ返却
-    PrivateAPIServer-->>GameServer: データ返却
-    GameServer-->>PublicAPIServer: 戦闘結果
-    PublicAPIServer-->>Client: 戦闘結果
+    PrivateAPIServer-->>GameServer: GetArenaBattleData
+    GameServer-->>PublicAPIServer: StartArenaBattle
+    PublicAPIServer-->>Client: StartArenaBattle
     Client->>User: 戦闘内容表示
 ```
