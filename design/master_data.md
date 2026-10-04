@@ -34,11 +34,11 @@
 * 名前
 * 効果説明文
 * 効果ID
-  - 「[型定義](types.md)」の`EffectID`で定義する効果分類
+  - 「[型定義](types.md)」の`SkillEffectID`で定義するスキル効果種別
 * 発動率
   - `0.2`の基本スキル発動率へ加算する値
 * 補正値
-  - `EffectID`で示す分類に対する効果値
+  - `SkillEffectID`で示す効果に対する効果値
 
 ## アビリティ
 
@@ -46,7 +46,7 @@
 * 名前
 * 効果説明文
 * 効果ID
-  - 「[型定義](types.md)」の`EffectID`で定義する効果分類
+  - 「[型定義](types.md)」の`AbilityEffectID`で定義するアビリティ効果種別
 * 発動条件ID
   - 「[型定義](types.md)」の`ConditionID`を使用する
 * 発動条件値
@@ -68,8 +68,8 @@
 * 各段階の効果量
 * 効果時間
 * 効果回数
-* 各種補正
-  - `CorrectionID`
+* 各種効果
+  - `TacticsEffectID`
   - `TacticsTarget`
   - 効果値
 
@@ -108,5 +108,6 @@
 ## 効果値の合算規則
 
 * スキル、アビリティ、タクティクス、フォーメーションの効果値はマスターデータに保持する.
-* 同一系列の効果値はすべて加算する. 補正値は同じ`CorrectionID`系列、効果値は同じ`EffectID`系列として扱う.
-* `EffectID`は効果の分類を表し、個別のマスターデータIDとしては使用しない.
+* 同一系列の効果値はすべて加算する.
+* スキルは同じ`SkillEffectID`系列、アビリティは同じ`AbilityEffectID`系列、タクティクスは同じ`TacticsEffectID`系列として扱う.
+* `SkillEffectID`、`AbilityEffectID`、`TacticsEffectID`は相互に別の列挙型であり、異なる種別間で列挙値を共有しない.

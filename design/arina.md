@@ -1,6 +1,13 @@
 
 
 
+
+## 戦闘結果の扱い
+
+ClientとGameServerは同一バージョンの戦闘ロジックを保持する. GameServerは戦闘を実行するが、`StartArenaBattle`の成功レスポンスでは戦闘結果そのものを返さず、Clientで同じ戦闘を再現するための相手キャラクター初期状態とSeedを返す.
+
+Clientは自身の初期状態、GameServerから受け取った相手初期状態、Seedを用いて同一の戦闘ロジックを実行する. 同一入力から算出される結果は一致することを前提とし、結果の正本はGameServerの計算結果とする.
+
 ## 遷移
 
 ```mermaid
@@ -69,8 +76,9 @@ sequenceDiagram
             PrivateAPIServer->>DB: 必要データ取得
             DB-->>PrivateAPIServer: データ返却
             PrivateAPIServer-->>GameServer: GetArenaBattleData
-            GameServer-->>PublicAPIServer: StartArenaBattle
-            PublicAPIServer-->>Client: StartArenaBattle
+            GameServer-->>PublicAPIServer: StartArenaBattle(EnemyCharacters, Seed)
+            PublicAPIServer-->>Client: StartArenaBattle(EnemyCharacters, Seed)
+            Client->>Client: GameServerと同一の戦闘ロジックで戦闘を再現
             Client->>User: 戦闘内容表示
         end
     else フレンド対戦
@@ -82,8 +90,9 @@ sequenceDiagram
         PrivateAPIServer->>DB: 必要データ取得
         DB-->>PrivateAPIServer: データ返却
         PrivateAPIServer-->>GameServer: GetArenaBattleData
-        GameServer-->>PublicAPIServer: StartArenaBattle
-        PublicAPIServer-->>Client: StartArenaBattle
+        GameServer-->>PublicAPIServer: StartArenaBattle(EnemyCharacters, Seed)
+        PublicAPIServer-->>Client: StartArenaBattle(EnemyCharacters, Seed)
+        Client->>Client: GameServerと同一の戦闘ロジックで戦闘を再現
         Client->>User: 戦闘内容表示
     end
 ```

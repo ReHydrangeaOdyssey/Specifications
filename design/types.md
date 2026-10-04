@@ -27,9 +27,10 @@
 | `TacticsID` | `u32` | `uint32` | `bigint` | タクティクスID |
 | `FormationID` | `u32` | `uint32` | `bigint` | フォーメーションID |
 | `ItemID` | `u32` | `uint32` | `bigint` | アイテムID |
-| `EffectID` | `u32` | `EffectID` | `smallint` | 効果分類ID。値は本書の`EffectID`列挙型を参照 |
+| `SkillEffectID` | `u32` | `SkillEffectID` | `smallint` | スキル効果ID。値は本書の`SkillEffectID`列挙型を参照 |
+| `AbilityEffectID` | `u32` | `AbilityEffectID` | `smallint` | アビリティ効果ID。値は本書の`AbilityEffectID`列挙型を参照 |
+| `TacticsEffectID` | `u32` | `TacticsEffectID` | `smallint` | タクティクス効果ID。値は本書の`TacticsEffectID`列挙型を参照 |
 | `ConditionID` | `u32` | `ConditionID` | `smallint` | 条件ID。値は本書の`ConditionID`列挙型を参照 |
-| `CorrectionID` | `u32` | `CorrectionID` | `smallint` | 補正種別ID。値は本書の`CorrectionID`列挙型を参照 |
 | `FormationSlotID` | `u8` | `uint32` | `smallint` | 編成内の選択ID/位置ID。`255`は未使用を表す予約値とし、通常の配置位置として使用しない |
 | `SlotIndex` | `u8` | `uint32` | `smallint` | スロット番号 |
 
@@ -59,7 +60,7 @@
 | `Attack` | `u16` | `uint32` | `integer` | 攻撃力 |
 | `Defense` | `u16` | `uint32` | `integer` | 防御力 |
 | `BP` | `u8` | `uint32` | `smallint` | BP |
-| `TP` | `u8` | `uint32` | `smallint` | TP |
+| `TP` | `u8` | `uint32` | `smallint` | TP。型としての絶対上限は255。騎士団戦での通常最大値は100で、最大TP補正適用後も255を超えない |
 | `Score` | `u64` | `uint64` | `numeric(20,0)` | pt/スコア |
 | `Sequence` | `u64` | `uint64` | `numeric(20,0)` | 騎士団戦全体の処理順を表すシーケンス番号 |
 | `RequestSequence` | `u64` | `uint64` | `numeric(20,0)` | 騎士団戦参加プレイヤーごとの要求検証用シーケンス番号 |
@@ -113,27 +114,62 @@ enum ArenaBattleErrorCode {
 ```
 
 
-### EffectID
+### SkillEffectID
 
-`EffectID`は個別処理IDではなく、仕様上の効果分類を表す。マスターデータの効果値は、この分類に応じて適用する。
+`SkillEffectID`はスキルの効果種別を表す。列挙値は仕様上の分類と1対1に対応する。
 
 ```proto
-enum EffectID {
-  EFFECT_NONE = 0;
-  EFFECT_BUFF = 1;
-  EFFECT_DEBUFF = 2;
-  EFFECT_STATUS_ABNORMALITY = 3;
-  EFFECT_HEAL = 4;
-  EFFECT_ATTACK = 5;
-  EFFECT_BUFF_DEBUFF = 6;
-  EFFECT_DEFENSE_REFLECTION = 7;
-  EFFECT_STATUS_ATTACK = 8;
-  EFFECT_OTHER = 9;
-  EFFECT_BP_RECOVERY = 10;
+enum SkillEffectID {
+  SKILL_EFFECT_BUFF = 0;
+  SKILL_EFFECT_DEBUFF = 1;
+  SKILL_EFFECT_STATUS_ABNORMALITY = 2;
+  SKILL_EFFECT_HEAL = 3;
+  SKILL_EFFECT_ATTACK = 4;
 }
 ```
 
-根拠となる分類は「スキル仕様」「アビリティ仕様」「アイテム仕様」に明記されている分類のみとする。
+### AbilityEffectID
+
+`AbilityEffectID`はアビリティの効果種別を表す。列挙値は仕様上の分類と1対1に対応する。
+
+```proto
+enum AbilityEffectID {
+  ABILITY_EFFECT_BUFF = 0;
+  ABILITY_EFFECT_DEBUFF = 1;
+  ABILITY_EFFECT_AVOIDANCE = 2;
+  ABILITY_EFFECT_COUNTER = 3;
+  ABILITY_EFFECT_AVOIDANCE_DISABLE = 4;
+  ABILITY_EFFECT_COUNTER_DISABLE = 5;
+  ABILITY_EFFECT_STATUS_ABNORMALITY_ATTACK = 6;
+  ABILITY_EFFECT_DAMAGE_INCREASE = 7;
+  ABILITY_EFFECT_FIXED_DAMAGE_INCREASE = 8;
+  ABILITY_EFFECT_HEAL = 9;
+  ABILITY_EFFECT_COVER = 10;
+  ABILITY_EFFECT_DRAW_AGGRO = 11;
+  ABILITY_EFFECT_PURSUIT = 12;
+}
+```
+
+### TacticsEffectID
+
+`TacticsEffectID`はタクティクスの効果種別を表す。列挙値は仕様上の分類と1対1に対応する。
+
+```proto
+enum TacticsEffectID {
+  TACTICS_EFFECT_ATTACK_CORRECTION = 0;
+  TACTICS_EFFECT_DEFENSE_CORRECTION = 1;
+  TACTICS_EFFECT_SPEED_CORRECTION = 2;
+  TACTICS_EFFECT_SCORE_CORRECTION = 3;
+  TACTICS_EFFECT_CASTLE_DEFENSE_CORRECTION = 4;
+  TACTICS_EFFECT_SCORE_LIMIT_CORRECTION = 5;
+  TACTICS_EFFECT_MAX_TP_CORRECTION = 6;
+  TACTICS_EFFECT_BP_RECOVERY = 7;
+  TACTICS_EFFECT_HP_RECOVERY = 8;
+  TACTICS_EFFECT_ASSAULT_CASTLE_BREAK_RATE_CORRECTION = 9;
+  TACTICS_EFFECT_BATTLE_SPECIAL = 10;
+  TACTICS_EFFECT_OPPONENT_SORTIE_SELECTION_RATE_CORRECTION = 11;
+}
+```
 
 ### ConditionID
 
@@ -159,31 +195,6 @@ enum ConditionID {
 * フォーメーション位置条件では`none`、`slash_only`、`pierce_only`、`strike_only`、`ranged_only`のみを使用する.
 * アビリティ発動条件では`battle_start`、`incapacitated`、`normal_attack`、`every_n_turns`、`attacked`、`hp_at_or_below_threshold`、`castle_break`を使用する.
 * `every_n_turns`および`hp_at_or_below_threshold`の具体値は`ConditionValue`で保持する.
-
-### CorrectionID
-
-`CorrectionID`は仕様書で明示されている補正系列を表す。
-
-```proto
-enum CorrectionID {
-  CORRECTION_NONE = 0;
-  CORRECTION_ATTACK = 1;
-  CORRECTION_DEFENSE = 2;
-  CORRECTION_SPEED = 3;
-  CORRECTION_SKILL_ACTIVATION = 4;
-  CORRECTION_SCORE = 5;
-  CORRECTION_CASTLE_DEFENSE = 6;
-  CORRECTION_SCORE_LIMIT = 7;
-  CORRECTION_MAX_TP = 8;
-  CORRECTION_BP_RECOVERY = 9;
-  CORRECTION_HP_RECOVERY = 10;
-  CORRECTION_ASSAULT_CASTLE_BREAK_RATE = 11;
-  CORRECTION_BATTLE_SPECIAL = 12;
-  CORRECTION_OPPONENT_SORTIE_SELECTION_RATE = 13;
-}
-```
-
-同一`CorrectionID`系列の効果値が複数存在する場合、効果値はすべて加算する。
 
 ### TacticsTarget
 
@@ -249,6 +260,20 @@ enum ApiErrorCode {
   API_ERROR_GUILD_FULL = 19;
 }
 ```
+
+### SaveSessionIDErrorCode
+
+Private APIの`SaveSessionID`で発生し得るエラーを表す。
+
+```proto
+enum SaveSessionIDErrorCode {
+  SAVE_SESSION_ID_ERROR_SESSION_ID_CONFLICT = 0;
+}
+```
+
+| 値 | 内容 |
+|---|---|
+| `SAVE_SESSION_ID_ERROR_SESSION_ID_CONFLICT` | `PLAYER_SESSION.session_id`のUNIQUE制約に衝突した |
 
 ### Rarity
 

@@ -8,6 +8,10 @@
 
 ## サーバーへの接続
 
-ゲーム結果はGameServerの計算結果を正とする
+ゲーム結果はGameServerの計算結果を正とする.
+
+アリーナではClientとGameServerが同一バージョンの戦闘ロジックを保持する. `StartArenaBattle`の成功レスポンスでは、Clientが戦闘を再現するために必要な相手キャラクター初期状態とSeedのみを返し、GameServerが算出した勝敗や最終HP等の戦闘結果自体は返さない. Clientは自身の初期状態、レスポンスで受け取った相手初期状態、Seedを入力としてGameServerと同一の戦闘ロジックを実行し、表示用の戦闘進行を再現する.
+
+同一の初期状態、Seed、戦闘ロジックからClientとGameServerは同一結果を算出することを前提とし、結果の正本はGameServer側の計算結果とする.
 
 

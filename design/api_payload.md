@@ -30,7 +30,7 @@
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| CorrectionID | `CorrectionID` | 適用した補正系列 |
+| TacticsEffectID | `TacticsEffectID` | 適用したタクティクス効果種別 |
 | Target | `TacticsTarget` | 効果対象 |
 | EffectValue | `Float32` | 効果値 |
 
@@ -199,10 +199,12 @@ PublicAPIで失敗レスポンスが必要な場合は、個別に別構造が�
 
 ### ArenaBattleResponse
 
+GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. ClientがGameServerと同一の戦闘ロジックを同一入力で実行するために必要な相手初期状態とSeedのみを返す.
+
 | 項目 | 型 | 内容 |
 |---|---|---|
-| EnemyCharacters | `BattleCharacterStatus[]` | 相手のキャラクターステータス。最大5件 |
-| Seed | `Seed` | 戦闘で使用するシード値 |
+| EnemyCharacters | `BattleCharacterStatus[]` | 戦闘開始時点の相手キャラクターステータス。最大5件 |
+| Seed | `Seed` | GameServerとClientが同じ戦闘を実行するために使用するシード値 |
 
 ### ArenaBattleErrorResponse
 
@@ -467,6 +469,12 @@ PublicAPIで失敗レスポンスが必要な場合は、個別に別構造が�
 | SessionID | `SessionID` | 保存するSessionID |
 | ExpiresAt | `SessionExpiresAt` | セッション有効期限 |
 
+### SaveSessionIDErrorResponse
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| ErrorCode | `SaveSessionIDErrorCode` | SessionID保存失敗理由。現在定義される値は`SAVE_SESSION_ID_ERROR_SESSION_ID_CONFLICT` |
+
 ### GetActiveSessionRequest
 
 | 項目 | 型 | 内容 |
@@ -563,6 +571,7 @@ PublicAPIで失敗レスポンスが必要な場合は、個別に別構造が�
 
 | 項目 | 型 | 内容 |
 |---|---|---|
+| MaxBP | `BP` | 対象プレイヤーの最大BP。騎士団戦開始時の現在BP初期値にも使用する |
 | FormationID | `FormationID` | 使用するフォーメーションID |
 | Characters | `GuildBattlePartyCharacter[10]` | 騎士団戦パーティ情報 |
 
@@ -647,6 +656,7 @@ PublicAPIで失敗レスポンスが必要な場合は、個別に別構造が�
 | 項目 | 型 | 内容 |
 |---|---|---|
 | PlayerID | `PlayerID` | プレイヤーID |
+| MaxBP | `BP` | 最大BP |
 | FormationID | `FormationID` | 騎士団戦フォーメーションID |
 | Characters | `GuildBattlePartyCharacter[10]` | 騎士団戦編成 |
 | Items | `PlayerItemData[]` | 所持アイテム一覧 |
@@ -685,6 +695,36 @@ PublicAPIで失敗レスポンスが必要な場合は、個別に別構造が�
 | Result | `GuildBattleResult` | 勝敗結果 |
 
 
+### GuildBattleReplayPlayerSnapshot
+
+騎士団戦開始時点で参加対象として確定したプレイヤーの可変データを保存する.
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| PlayerID | `PlayerID` | プレイヤーID |
+| MaxBP | `BP` | 騎士団戦開始時点の最大BP。開始時の現在BPはこの値と同じ |
+| FormationID | `FormationID` | 開始時点の騎士団戦フォーメーションID |
+| Characters | `GuildBattlePartyCharacter[10]` | 開始時点の騎士団戦編成 |
+| Items | `PlayerItemData[]` | 開始時点の所持アイテム一覧 |
+
+### GuildBattleReplayGuildSnapshot
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| Guild | `GuildLevelData` | 開始時点の騎士団レベル情報 |
+| MemberPlayerID | `PlayerID[]` | 開始時点の所属メンバー一覧 |
+| Participants | `GuildBattleReplayPlayerSnapshot[]` | 開始時点で騎士団戦参加対象として確定したプレイヤーのスナップショット |
+
+`MemberPlayerID`には所属メンバー全員を保存し、開戦前データ取得失敗により参加対象から除外されたPlayerIDも含める. `Participants`には最終的に参加対象として確定したプレイヤーのみを保存する.
+
+### GuildBattleInitialSnapshot
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| Guilds | `GuildBattleReplayGuildSnapshot[2]` | 対戦する2騎士団の開戦時スナップショット |
+
+マスターデータそのものはスナップショットへ重複保存せず、`Version`で対象リプレイに使用する同一マスターデータとゲームロジックを特定する.
+
 ### GuildBattleCreateLogPayload
 
 | 項目 | 型 | 内容 |
@@ -694,6 +734,7 @@ PublicAPIで失敗レスポンスが必要な場合は、個別に別構造が�
 | ProcessType | `GuildBattleReplayProcessType` | 処理の種類。`create` |
 | InitialSeed | `Seed` | 騎士団戦の初期シード |
 | GuildID | `GuildID[2]` | 対戦する2騎士団のID |
+| InitialSnapshot | `GuildBattleInitialSnapshot` | 開戦時点の騎士団レベル、所属メンバー、参加者の最大BP・編成・所持アイテム等の初期状態 |
 | Version | `Version` | リプレイに使用するマスターデータおよびゲームロジックのバージョン |
 
 ### GuildBattleSortieLogPayload

@@ -137,7 +137,7 @@ sequenceDiagram
 ## SessionID生成規則
 
 * SessionIDは暗号学的乱数で生成する.
-* Databaseの`PLAYER_SESSION.session_id` UNIQUE制約に衝突した場合は再生成する.
+* Databaseの`PLAYER_SESSION.session_id` UNIQUE制約に衝突した場合、Private APIは`SaveSessionIDErrorResponse`で`SAVE_SESSION_ID_ERROR_SESSION_ID_CONFLICT`を返す. GameServerはSessionIDを再生成して`SaveSessionID`を再実行する.
 * `SaveSessionID`はPlayerIDを競合キーとしたUPSERTとする.
 
 ## PublicAPIでのSession検証

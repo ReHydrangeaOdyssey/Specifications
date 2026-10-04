@@ -10,13 +10,22 @@ flowchart TD;
     CheckCBC{CBC発生中?};
     CheckCBCCondition{CBC発生条件を満たした?};
     Reflected[結果反映];
+    StopAccept[新規処理受付停止];
+    CheckQueue{処理キューが空?};
+    ResolveQueue[キュー先頭処理を実行];
+    Judgment[最終合計pt算出・勝敗判定];
     End[騎士団戦終了];
     StartPlayerAttack[出撃開始];
     EndPlayerAttack[出撃終了];
     CB[キャッスルブレイク];
 
     Start --> ChackTimeLimit;
-    ChackTimeLimit -- Yes --> End;
+    ChackTimeLimit -- Yes --> StopAccept;
+    StopAccept --> CheckQueue;
+    CheckQueue -- No --> ResolveQueue;
+    ResolveQueue --> CheckQueue;
+    CheckQueue -- Yes --> Judgment;
+    Judgment --> End;
     ChackTimeLimit -- No --> ChackAttack;
     ChackAttack -- Yes --> StartPlayerAttack;
     ChackAttack -- No --> ChackTimeLimit;
@@ -59,7 +68,8 @@ stateDiagram-v2
 
     通常 --> 回復中: 治療開始
     全滅 --> 回復中: 治療開始
-    回復中 --> 通常: 治療キャンセル
+    回復中 --> 通常: 治療キャンセル（通常から開始）
+    回復中 --> 全滅: 治療キャンセル（全滅から開始）
     回復中 --> 回復完了: 回復待機時間経過
     回復完了 --> 通常: 治療完了
 
@@ -192,8 +202,8 @@ sequenceDiagram
 
                 loop 所属しているメンバー全員
                     GameServer->>PrivateAPIServer: GetGuildBattleFormation(PlayerID)
-                    PrivateAPIServer->>DB: 編成情報要求
-                    DB-->>PrivateAPIServer: 編成情報返答
+                    PrivateAPIServer->>DB: 最大BP・編成情報要求
+                    DB-->>PrivateAPIServer: 最大BP・編成情報返答
                     PrivateAPIServer-->>GameServer: GetGuildBattleFormation
 
                     GameServer->>PrivateAPIServer: GetPlayerItems(PlayerID)
@@ -202,7 +212,7 @@ sequenceDiagram
                     PrivateAPIServer-->>GameServer: GetPlayerItems
 
                     alt 取得成功
-                        GameServer->>GameServer: 編成・アイテム情報保管
+                        GameServer->>GameServer: 最大BP・編成・アイテム情報保管
                     else 処理失敗
                         GameServer->>GameServer: 当該PlayerIDを騎士団戦参加対象から除外
                         GameServer->>GameServer: エラーログ追記
@@ -214,18 +224,19 @@ sequenceDiagram
             end
 
             GameServer->>GameServer: InitialSeed = 固定値 XOR GuildBattleID
-            GameServer->>PrivateAPIServer: SaveGuildBattleCreateLog(GuildBattleID, InitialSeed, GuildID[2], Version)
-            PrivateAPIServer->>DB: リプレイ作成ログ保存
 
             Note over GameServer: 開戦前データ処理終了後から開戦前まで
             opt 除外プレイヤーの再取得を行う場合
                 GameServer->>PrivateAPIServer: RetryGuildBattlePreload(GuildBattleID, 取得失敗PlayerID[])
-                PrivateAPIServer->>DB: 指定PlayerID[]の編成情報・PLAYER_ITEMを再取得
+                PrivateAPIServer->>DB: 指定PlayerID[]の最大BP・編成情報・PLAYER_ITEMを再取得
                 PrivateAPIServer-->>GameServer: RetryGuildBattlePreload
                 GameServer->>GameServer: 再取得成功PlayerIDを参加対象へ復帰
             end
 
             Note over GameServer: 開戦時刻到達
+            GameServer->>GameServer: 最終参加対象を確定しGuildBattleInitialSnapshotを生成
+            GameServer->>PrivateAPIServer: SaveGuildBattleCreateLog(GuildBattleID, InitialSeed, GuildID[2], InitialSnapshot, Version)
+            PrivateAPIServer->>DB: リプレイ作成ログ・開戦時スナップショット保存
             GameServer->>PrivateAPIServer: UpdateGuildBattleStatus(GuildBattleID, in_progress)
             PrivateAPIServer->>DB: GUILD_BATTLE.status更新
         end
@@ -460,6 +471,11 @@ sequenceDiagram
     alt キャンセル可能
         GameServer->>GameServer: 回復待機時間をリセット
         GameServer->>GameServer: 回復中状態を解除
+        alt 治療開始前が全滅状態
+            GameServer->>GameServer: 全滅状態へ戻す
+        else 治療開始前が全滅状態ではない
+            GameServer->>GameServer: 通常状態へ戻す
+        end
         Note over GameServer: HP/BPは回復しない
         GameServer->>GameServer: 成功した要求のRequestSequenceを1加算
         GameServer-->>PublicAPIServer: CancelHeal

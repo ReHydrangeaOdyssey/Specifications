@@ -84,7 +84,7 @@ erDiagram
         SkillID id PK
         Name name
         Description description
-        EffectID effect_id
+        SkillEffectID effect_id
         Rate activation_rate
         CorrectionValue correction_value
     }
@@ -93,7 +93,7 @@ erDiagram
         AbilityID id PK
         Name name
         Description description
-        EffectID effect_id
+        AbilityEffectID effect_id
         ConditionID condition_id
         ConditionValue condition_value
         Rate activation_rate
@@ -122,12 +122,12 @@ erDiagram
         CorrectionValue effect_value
     }
 
-    TACTICS_CORRECTION {
+    TACTICS_EFFECT {
         RecordID id PK
         TacticsID tactics_id FK
-        CorrectionID correction_id
+        TacticsEffectID effect_id
         TacticsTarget target
-        CorrectionValue correction_value
+        CorrectionValue effect_value
     }
 
     CHARACTER_SKILL {
@@ -159,13 +159,13 @@ erDiagram
     ABILITY ||--o{ ABILITY_ATTRIBUTE : allowed_for
 
     TACTICS ||--o{ TACTICS_STAGE_EFFECT : has
-    TACTICS ||--o{ TACTICS_CORRECTION : has
+    TACTICS ||--o{ TACTICS_EFFECT : has
 
 ```
 
 `SKILL.activation_rate`は基本スキル発動率`0.2`へ加算する値とする。
-`SKILL.effect_id`および`ABILITY.effect_id`は個別処理IDではなく「[型定義](types.md)」の`EffectID`で定義する効果分類とする。
-同一`CorrectionID`系列の補正値はすべて加算する。
+`SKILL.effect_id`は「[型定義](types.md)」の`SkillEffectID`、`ABILITY.effect_id`は`AbilityEffectID`、`TACTICS_EFFECT.effect_id`は`TacticsEffectID`を使用する。これら3つは相互に別の列挙型とする。
+同一`TacticsEffectID`系列の効果値はすべて加算する。
 
 
 ```mermaid
@@ -198,7 +198,6 @@ erDiagram
         Name name
         Description description
         ItemType item_type
-        EffectID effect_id
         CorrectionValue effect_value
     }
 

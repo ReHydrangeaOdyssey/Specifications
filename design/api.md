@@ -235,7 +235,8 @@
 - GameServerがアリーナ戦闘用Seedを生成する
 - `Mode=random`の場合は生成したSeedを用いて対戦相手を抽選する
 - GameServerはPrivate API Server経由でDatabaseから必要データを取得する
-- GameServerが戦闘を実行する
+- GameServerが戦闘を実行し、その計算結果を正本とする
+- 成功レスポンスでは戦闘結果そのものは返さず、Clientが同一戦闘を再現するための相手初期状態とSeedのみを返す
 
 #### 要求データ
 
@@ -426,6 +427,7 @@ GameServer側のチェック
 
 #### 開始可能時の処理
 
+- 治療開始前が全滅状態であるかを回復状態に保持する
 - 回復待機時間を算出する
 - 回復中状態へ変更する
 
@@ -457,6 +459,8 @@ GameServer側のチェック
 
 - 回復待機時間をリセットする
 - 回復中状態を解除する
+- 治療開始前が全滅状態の場合は全滅状態へ戻す
+- 治療開始前が全滅状態でない場合は通常状態へ戻す
 - HP / BPは回復しない
 
 #### レスポンス
@@ -657,6 +661,14 @@ GameServer側のチェック
 
 [API Payload](api_payload.md)の「SaveSessionIDRequest」を参照
 
+#### 成功時レスポンス
+
+- 保存完了
+
+#### エラー時レスポンス
+
+[API Payload](api_payload.md)の「SaveSessionIDErrorResponse」を参照. SessionIDのUNIQUE制約衝突時は`SAVE_SESSION_ID_ERROR_SESSION_ID_CONFLICT`を返す.
+
 ### 有効セッション取得
 
 #### メソッド名
@@ -793,7 +805,7 @@ GameServer側のチェック
 
 #### 処理内容
 
-- 騎士団戦開戦前に、対象騎士団へ所属している各メンバーの編成情報を取得する
+- 騎士団戦開戦前に、対象騎士団へ所属している各メンバーの最大BPと編成情報を取得する
 
 #### 要求データ
 
