@@ -12,6 +12,7 @@ PostgreSQLを使用する
 erDiagram
     PLAYER {
         PlayerID id PK
+        DiscordUserID discord_user_id UK
         UserName name
         Count guild_battle_win_count
         Count guild_battle_lose_count
@@ -96,12 +97,13 @@ erDiagram
         CorrectionValue correction_value
         SkillTargetRange target_range
         SkillTargetConditionID target_condition_id
+        StatusAbnormalityID target_condition_status_abnormality_id
         Count random_hit_count
         StatusAbnormalityID status_abnormality_id
         Rate status_abnormality_rate
         SkillStatTarget stat_target
         Bool can_heal_incapacitated
-        CorrectionValue heal_value
+        Rate heal_rate
     }
 
     ABILITY {
@@ -109,11 +111,31 @@ erDiagram
         Name name
         Description description
         AbilityEffectID effect_id
-        ConditionID condition_id
-        ConditionValue condition_value
+        AbilityConditionID condition_id
         Rate activation_rate
         Count max_activation_count
+    }
+
+    ABILITY_EFFECT_CORRECTION {
+        AbilityID ability_id PK, FK
         CorrectionValue correction_value
+    }
+
+    ABILITY_EFFECT_STATUS {
+        AbilityID ability_id PK, FK
+        StatusAbnormalityID status
+    }
+
+    ABILITY_EFFECT_CONDITION_CORRECTION {
+        AbilityID ability_id PK, FK
+        ConditionValue condition_value
+        CorrectionValue correction_value
+    }
+
+    ABILITY_EFFECT_STAT_CORRECTION {
+        AbilityID ability_id PK, FK
+        CorrectionValue attack
+        CorrectionValue defense
     }
 
     ABILITY_ATTRIBUTE {
@@ -130,6 +152,7 @@ erDiagram
         TacticsEndType end_type
         DurationSeconds duration
         Count effect_count
+        TacticsCountConsumeTrigger count_consume_trigger
     }
 
     TACTICS_STAGE_EFFECT {
@@ -141,12 +164,35 @@ erDiagram
         CorrectionValue increase_value
     }
 
+    TACTICS_STAGE_BATTLE_SPECIAL_EFFECT {
+        RecordID tactics_stage_effect_id PK, FK
+        CorrectionValue attack
+        CorrectionValue defense
+        CorrectionValue speed
+    }
+
     TACTICS_EFFECT {
         RecordID id PK
         TacticsID tactics_id FK
         TacticsEffectID effect_id
         TacticsTarget target
         CorrectionValue effect_value
+    }
+
+    TACTICS_HP_RECOVERY_EFFECT {
+        RecordID tactics_effect_id PK, FK
+        TacticsHpRecoveryType recovery_type
+        Rate recovery_rate
+    }
+
+    TACTICS_BATTLE_SPECIAL_EFFECT {
+        RecordID tactics_effect_id PK, FK
+        TacticsBattleSpecialType special_type
+        TacticsBattleSpecialApplyTarget apply_target
+        TacticsBattleSpecialTrigger trigger
+        CorrectionValue attack
+        CorrectionValue defense
+        CorrectionValue speed
     }
 
     CHARACTER_SKILL {
@@ -176,15 +222,22 @@ erDiagram
     CHARACTER ||--o{ CHARACTER_ABILITY : has
     ABILITY ||--o{ CHARACTER_ABILITY : assigned
     ABILITY ||--o{ ABILITY_ATTRIBUTE : allowed_for
+    ABILITY ||--o| ABILITY_EFFECT_CORRECTION : effect_data
+    ABILITY ||--o| ABILITY_EFFECT_STATUS : effect_data
+    ABILITY ||--o| ABILITY_EFFECT_CONDITION_CORRECTION : effect_data
+    ABILITY ||--o| ABILITY_EFFECT_STAT_CORRECTION : effect_data
 
     TACTICS ||--o{ TACTICS_STAGE_EFFECT : has
+    TACTICS_STAGE_EFFECT ||--o| TACTICS_STAGE_BATTLE_SPECIAL_EFFECT : battle_special_increase
     TACTICS ||--o{ TACTICS_EFFECT : has
+    TACTICS_EFFECT ||--o| TACTICS_HP_RECOVERY_EFFECT : hp_recovery
+    TACTICS_EFFECT ||--o| TACTICS_BATTLE_SPECIAL_EFFECT : battle_special
 
 ```
 
-`SKILL.activation_rate`は基本スキル発動率`0.2`へ加算する値とする。`SKILL`の効果別フィールドは該当する`SkillEffectID`または`SkillTargetRange`の場合のみ参照する。該当しない効果別フィールドは未使用とし、DatabaseではNULLを許可する.
-`SKILL.effect_id`は「[型定義](types.md)」の`SkillEffectID`、`ABILITY.effect_id`は`AbilityEffectID`、`TACTICS_EFFECT.effect_id`は`TacticsEffectID`を使用する。これら3つは相互に別の列挙型とする。
-同一`TacticsEffectID`系列の効果値はすべて加算する。`TACTICS_STAGE_EFFECT`は段階ごと・`TacticsEffectID`ごと・`TacticsTarget`ごとの効果上昇量を保持する。
+`SKILL.activation_rate`は基本スキル発動率`0.2`へ加算する値とする。`SKILL`の効果別フィールドは加工済み`SkillMasterData.effect_data`の`oneof`に対応して格納する。該当しない効果別フィールドは未使用とし、DatabaseではNULLを許可する。`SKILL.target_condition_status_abnormality_id`は`target_condition_id=SKILL_TARGET_CONDITION_STATUS_ABNORMALITY`の場合のみ使用する。`SKILL.heal_rate`は対象の最大HPに対する回復割合とし、`SKILL.effect_id=SKILL_EFFECT_HEAL`では`SKILL.correction_value`を使用しない。
+`SKILL.effect_id`は「[型定義](types.md)」の`SkillEffectID`、`ABILITY.effect_id`は`AbilityEffectID`、`TACTICS_EFFECT.effect_id`は`TacticsEffectID`を使用する。これら3つは相互に別の列挙型とする。`ABILITY`の効果固有値は加工済み`AbilityMasterData.effect_data`の`oneof`に対応する4つの詳細テーブルへ格納し、1つのAbilityIDについて有効な共有体に対応する詳細だけを使用する。
+同一`TacticsEffectID`系列の効果値はすべて加算する。`TACTICS_STAGE_EFFECT`は段階ごと・`TacticsEffectID`ごと・`TacticsTarget`ごとの効果上昇量を保持する。`TACTICS_EFFECT_BATTLE_SPECIAL`の段階上昇量は`TACTICS_STAGE_BATTLE_SPECIAL_EFFECT`へ攻撃・防御・速度の3値として保持する。`TACTICS_EFFECT_HP_RECOVERY`は`TACTICS_HP_RECOVERY_EFFECT`、`TACTICS_EFFECT_BATTLE_SPECIAL`は`TACTICS_BATTLE_SPECIAL_EFFECT`へ効果固有値を保持し、それらでは`TACTICS_EFFECT.effect_value`を使用しないためNULLを許可する。`TACTICS.end_type=TACTICS_END_TYPE_COUNT`の場合は`TACTICS.count_consume_trigger`で残り回数を消費するイベントを指定する。
 
 
 ```mermaid
@@ -199,7 +252,7 @@ erDiagram
         RecordID id PK
         FormationID formation_id FK
         FormationSlotID position_no
-        ConditionID condition_id
+        FormationConditionID condition_id
         CorrectionValue attack_correction
         CorrectionValue defense_correction
         CorrectionValue speed_correction
@@ -209,7 +262,7 @@ erDiagram
     FORMATION ||--o{ FORMATION_POSITION : has
 ```
 
-`FORMATION_POSITION.condition_id`の条件と配置キャラクターの属性条件が一致する場合のみ、その位置の攻撃・防御・速度・スキル補正を適用する. 条件不一致時はその位置の補正を適用しない.
+`FORMATION_POSITION.condition_id`の`FormationConditionID`条件と配置キャラクターの属性条件が一致する場合のみ、その位置の攻撃・防御・速度・スキル補正を適用する. 条件不一致時はその位置の補正を適用しない.
 
 
 ```mermaid

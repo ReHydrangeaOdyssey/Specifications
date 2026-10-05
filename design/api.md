@@ -10,6 +10,18 @@
 - `SessionID`を要求するPublicAPIは、処理前にSessionの存在、有効期限、要求`PlayerID`との所有関係をすべて検証する
   - いずれかが不正な場合は`ApiErrorResponse(API_ERROR_INVALID_SESSION)`を返し、要求本体を処理しない
 - 個別に失敗レスポンスが定義されていないPublicAPIの失敗時は`ApiErrorResponse`を使用する
+- PublicAPIは下記「レート制限」に従って要求数を制限する。超過時は`ApiErrorResponse(API_ERROR_RATE_LIMIT_EXCEEDED)`を返し、要求本体を処理しない
+
+## レート制限
+
+`RPM`は1分あたり、`RPH`は1時間あたり、`PRD`は1日あたりの最大要求数を表す。各窓は同時に適用し、いずれか1つでも超過した要求を拒否する。
+
+| 区分 | 対象PublicAPI | RPM | RPH | PRD | カウント単位 |
+|---|---|---:|---:|---:|---|
+| ログイン | `Login` | 1 | 5 | 25 | PlayerID |
+| 新規作成時のみ | `CreatePlayer` | 1 | 5 | 10 | AccessToken |
+| 新規作成時のみ | `CreateGuild` | 1 | 5 | 10 | PlayerID |
+| アリーナ | `UpdateArenaParty`, `StartArenaBattle` | 2 | 50 | 100 | PlayerID |
 
 ## システム
 
@@ -21,12 +33,15 @@
 
 #### 処理内容
 
-- AccessTokenRequest.TokenがGameServer起動時にBotから引数で渡されたTokenと一致することを検証する
+- `AccessTokenRequest.DiscordUserID`はBotがDiscord上で本人確認済みのユーザーIDとして受け取る
+- Private APIの`GetPlayerIDByDiscordUserID`で既存PlayerIDを検索する
 - アクセストークンを生成する
   - 有効期限: 5分
   - 型は「[型定義](types.md)」の`AccessToken`を参照
   - 暗号学的乱数を用いて生成
-  - ゲームサーバーのメモリ上のみ保管
+  - `AccessTokenState`としてDiscordUserID、既存PlayerID（存在しない場合は0）、有効期限、使用回数0をGameServerメモリ上だけに保持する
+  - AccessTokenは本人確認済みDiscordUserIDとPlayerIDのBindingとして扱い、別PlayerIDのLoginには使用できない
+- GameServer起動引数へStartup Tokenを渡す方式は廃止する。Botから`IssueAccessToken`を許可する代替認証方式は未確定とし、本仕様では定義しない
 
 #### 要求データ
 
@@ -38,7 +53,7 @@
 
 #### 失敗時レスポンス
 
-[API Payload](api_payload.md)の「ApiErrorResponse」を参照。Token不一致は`API_ERROR_INVALID_TOKEN`.
+[API Payload](api_payload.md)の「ApiErrorResponse」を参照。Bot認証方式は未確定のため、Bot認証失敗の具体的エラー条件は代替認証方式確定時に定義する.
 
 ### 新規PlayerID要求
 
@@ -49,7 +64,11 @@
 #### 処理内容
 
 - AccessTokenを検証する
+  - 有効期限内であることを確認する
+  - `AccessTokenState.bound_player_id=0`であり、まだ既存PlayerIDへBindingされていないことを確認する
+  - 検証前に`use_count >= 3`の場合は`API_ERROR_INVALID_ACCESS_TOKEN`として拒否し、検証成功時に`use_count`を1増加する
 - CreatePlayerではAccessTokenを無効化しない
+- PlayerID生成後、AccessTokenに保持するDiscordUserIDを`PLAYER.discord_user_id`として保存し、`AccessTokenState.bound_player_id`へ生成したPlayerIDを設定する
 - AccessTokenはLogin成功時に無効化する
 - ユーザー名をチェックする
   - 有効なUTF-8であること
@@ -61,7 +80,7 @@
   - Private API Serverの`CheckPlayerIDExists`で重複を確認する
   - 重複している場合は再生成する
   - 重複していないことを確認してからClientへ返す
-- 生成したPlayerIDをPrivate API Server経由でDatabaseへ保存する
+- 生成したPlayerID、AccessTokenに結び付いたDiscordUserID、ユーザー名をPrivate API Server経由でDatabaseへ保存する
 
 #### 必要パラメータ
 
@@ -84,6 +103,9 @@
 #### 処理内容
 
 - AccessTokenを検証する
+  - 有効期限内であることを確認する
+  - `AccessTokenState.bound_player_id`が要求`PlayerID`と一致することを確認し、AccessTokenとPlayerIDの本人性を検証する
+  - 検証前に`use_count >= 3`の場合は`API_ERROR_INVALID_ACCESS_TOKEN`として拒否し、検証成功時に`use_count`を1増加する
 - Login成功時にアクセストークンを無効化する
 - セッションIDを暗号学的乱数で生成する
 - PlayerIDとセッションIDをPrivate API Server経由でDatabaseへUPSERTする
@@ -166,7 +188,7 @@
 
 - SessionIDを検証する
 - 指定GuildIDの所属人数が20未満であることを確認する
-- 現在所属する騎士団および指定GuildIDが騎士団戦開戦前処理完了後から終了までの所属変更禁止期間ではないことを確認する
+- 現在所属する騎士団および指定GuildIDが騎士団戦開戦前処理開始後から終了までの所属変更禁止期間ではないことを確認する
 - プレイヤーの所属を指定GuildIDへ更新する
 
 #### 要求データ
@@ -190,7 +212,7 @@
 #### 処理内容
 
 - SessionIDを検証する
-- 現在所属している騎士団が騎士団戦開戦前処理完了後から終了までの所属変更禁止期間ではないことを確認する
+- 現在所属している騎士団が騎士団戦開戦前処理開始後から終了までの所属変更禁止期間ではないことを確認する
 - 現在所属している騎士団からプレイヤーを脱退させる
 - 新しい騎士団は生成しない
 - `GuildID = PlayerID`で既存の初期騎士団を特定する
@@ -611,6 +633,21 @@ GameServer側のチェック
 
 ## セッション・プレイヤー関連
 
+### Discord User IDからPlayerID取得
+
+#### メソッド名
+
+`GetPlayerIDByDiscordUserID`
+
+#### 処理内容
+
+- 指定DiscordUserIDに一意に結び付くPlayerIDをDatabaseから取得する
+- 未登録の場合は`Exists=false`を返す
+
+#### 要求・レスポンス
+
+[API Payload](api_payload.md)の「GetPlayerIDByDiscordUserIDRequest」「GetPlayerIDByDiscordUserIDResponse」を参照
+
 ### PlayerID重複確認
 
 #### メソッド名
@@ -661,7 +698,8 @@ GameServer側のチェック
 
 #### 処理内容
 
-- DatabaseへPlayerIDを保存する
+- DatabaseへPlayerID、DiscordUserID、UserNameを保存する
+- `PLAYER.discord_user_id`は一意制約で1つのDiscord User IDが複数PlayerIDへ結び付かないようにする
 
 #### 要求データ
 

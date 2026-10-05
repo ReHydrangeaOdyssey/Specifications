@@ -24,7 +24,7 @@
 
 ## 発動条件
 
-発動条件はマスターデータの`ConditionID`および必要に応じて`ConditionValue`で表現する.
+発動条件はマスターデータの`AbilityConditionID`で表現する. 発動条件に具体値が必要なアビリティでは、`AbilityMasterData.effect_data`の`condition_correction.condition_value`へ保持する.
 
 * 「[戦闘](battle.md)」開始時に発動
 * 戦闘不能時に発動
@@ -43,6 +43,14 @@
 
 同一キャラクターで同一タイミングに複数アビリティの発動条件が成立した場合はAbilityスロット番号の小さい順に処理する.
 
+複数キャラクターのアビリティが同一タイミングに成立した場合は以下の順に処理する.
+
+1. 戦闘計算上の速度が速いキャラクターを先に処理する.
+2. 同一速度の場合はフォーメーション内部値が小さいキャラクターを先に処理する.
+3. 同一速度かつフォーメーション内部値も同一の場合は「[疑似乱数](../design/pseudorandom.md)」の「抽選」で処理順を決定する.
+
+キャラクター間の順序を決定した後、各キャラクター内ではAbilityスロット番号の小さい順に処理する.
+
 ## 発動確率
 
 アビリティによって変わる
@@ -58,7 +66,7 @@
 
 ## 効果
 
-効果種別は`AbilityEffectID`に従う.
+効果種別は`AbilityEffectID`に従う. 効果固有値は「[マスターデータ](../design/master_data.md)」の`AbilityMasterData.effect_data`共有体から取得する. バフ・デバフは`attack`・`defense`、状態異常攻撃は`status: StatusAbnormalityID`を使用する.
 
 ### 追撃
 

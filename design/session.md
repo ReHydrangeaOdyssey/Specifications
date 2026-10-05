@@ -11,9 +11,10 @@
 
 ### セッションID新規取得
 
-GameServerはBotから起動される. BotはGameServer起動時に`[a-zA-Z0-9_]{64}`のTokenを生成し, 起動引数としてGameServerへ渡す.
-botの検証は特定のロールを持っているか, 前回要求時から5分以上経過しているか
-アクセストークンの期限は5分
+GameServer起動引数へStartup Tokenを渡す方式は廃止する. BotからPublicAPIの`IssueAccessToken`を呼び出すための代替認証方式は未確定であり、本書では定義しない.
+Bot側のユーザー検証は特定のロールを持っているか、前回要求時から5分以上経過しているかを確認する.
+アクセストークンの期限は5分とし、Login成功前に検証成功できる回数は最大3回とする.
+AccessTokenはDiscord User IDとPlayerIDを結び付けて保持し、別PlayerIDのLoginへ流用できない.
 アクセストークンおよびセッションIDの型は「[型定義](types.md)」を参照
 
 
@@ -33,10 +34,14 @@ sequenceDiagram
     Bot->>Bot: 検証
 
     alt 検証成功
-        Bot->>PublicAPIServer: IssueAccessToken(Token)
-        PublicAPIServer->>GameServer: IssueAccessToken(Token)
-        GameServer->>GameServer: 起動時Tokenとの一致検証
-        GameServer->>GameServer: アクセストークン生成
+        Bot->>PublicAPIServer: IssueAccessToken(DiscordUserID)
+        PublicAPIServer->>GameServer: IssueAccessToken(DiscordUserID)
+        Note over Bot,GameServer: Bot認証方式は未確定。Startup Token方式は使用しない
+        GameServer->>PrivateAPIServer: GetPlayerIDByDiscordUserID(DiscordUserID)
+        PrivateAPIServer->>DB: DiscordUserIDに対応するPlayerID検索
+        DB-->>PrivateAPIServer: Exists, PlayerID
+        PrivateAPIServer-->>GameServer: GetPlayerIDByDiscordUserID
+        GameServer->>GameServer: DiscordUserID・PlayerIDをBindingしてアクセストークン生成
         GameServer-->>PublicAPIServer: IssueAccessToken
         PublicAPIServer-->>Bot: IssueAccessToken
         Bot-->>Discord: アクセストークン返答
@@ -51,11 +56,13 @@ sequenceDiagram
             Client->>Client: ユーザー名チェック
             Client->>PublicAPIServer: CreatePlayer(UserName, AccessToken)
             PublicAPIServer->>GameServer: CreatePlayer(UserName, AccessToken)
-            GameServer->>GameServer: AccessToken検証
+            GameServer->>GameServer: AccessToken検証・使用回数加算（最大3回）
+            GameServer->>GameServer: bound_player_id=0を確認
             GameServer->>GameServer: ユーザー名チェック
             GameServer->>GameServer: PlayerID生成
-            GameServer->>PrivateAPIServer: SavePlayerID
-            PrivateAPIServer->DB: 保存(PlayerID, ユーザー名)
+            GameServer->>PrivateAPIServer: SavePlayerID(PlayerID, DiscordUserID, UserName)
+            PrivateAPIServer->DB: 保存(PlayerID, DiscordUserID, ユーザー名)
+            GameServer->>GameServer: AccessToken.bound_player_idへPlayerIDをBinding
             GameServer-->>PublicAPIServer: CreatePlayer
             PublicAPIServer-->>Client: CreatePlayer
             Client->>Client: PlayerID保存・新規プレイヤーフラグ保持
@@ -63,7 +70,8 @@ sequenceDiagram
 
         Client->>PublicAPIServer: Login(PlayerID, AccessToken) 
         PublicAPIServer->>GameServer: Login(PlayerID, AccessToken) 
-        GameServer->>GameServer: AccessToken検証
+        GameServer->>GameServer: AccessToken検証・使用回数加算（最大3回）
+        GameServer->>GameServer: AccessToken.bound_player_id == PlayerIDを確認
         GameServer->>GameServer: Login成功時にAccessToken無効化
         GameServer->>GameServer: 暗号学的乱数でセッションID生成
         GameServer->>PrivateAPIServer: SaveSessionID
@@ -105,6 +113,8 @@ sequenceDiagram
     User->>ClientB: ログイン操作
     ClientB->>PublicAPI: Login(PlayerID, AccessToken)
     PublicAPI->>GameServer: Login(PlayerID, AccessToken)
+    GameServer->>GameServer: AccessToken検証・使用回数加算（最大3回）
+    GameServer->>GameServer: AccessToken.bound_player_id == PlayerIDを確認
 
     GameServer->>PrivateAPIServer: GetActiveSession
     PrivateAPIServer->>Database: PlayerIDの有効Session検索
@@ -146,6 +156,15 @@ sequenceDiagram
     end
 ```
 
+
+## AccessToken Binding・利用回数
+
+* GameServerはAccessTokenを`AccessTokenState`としてメモリ上に保持し、DiscordUserID、Binding済みPlayerID、有効期限、使用回数を保持する.
+* 既存Playerの場合、`IssueAccessToken`時にDiscordUserIDから取得したPlayerIDへBindingする.
+* 新規Playerの場合、発行時のBinding済みPlayerIDは予約値0とし、`CreatePlayer`成功時に生成PlayerIDへBindingする.
+* AccessToken検証前に使用回数が3以上なら拒否し、検証成功時に使用回数を1加算する. Login成功前に検証成功できる回数は最大3回とする.
+* Loginでは要求PlayerIDとBinding済みPlayerIDが一致しなければ拒否する.
+* Login成功時はAccessTokenを無効化する.
 
 ## SessionID生成規則
 

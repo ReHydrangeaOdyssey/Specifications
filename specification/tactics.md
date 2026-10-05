@@ -44,6 +44,59 @@
 * 相手の出撃時に選ばれる確率補正
 
 
+
+## 回復効果
+
+### BP回復
+
+`TACTICS_EFFECT_BP_RECOVERY`は固定値回復とする. マスターデータの効果値を現在BPへ加算し、最大BPを超える場合は最大BPへクランプする.
+
+### HP回復
+
+`TACTICS_EFFECT_HP_RECOVERY`は`TacticsHpRecoveryType`で以下2種類を識別する.
+
+* `TACTICS_HP_RECOVERY_INCAPACITATED_FULL`: HP0のキャラクターだけを対象とし、最大HPの100%まで回復する. HP1以上のキャラクターは対象外.
+* `TACTICS_HP_RECOVERY_POSITIVE_HP_RATE`: HP1以上のキャラクターだけを対象とし、タクティクスごとの回復割合を最大HPへ乗算して回復する. HP0のキャラクターは対象外.
+
+どちらの回復方式も最大値を超えて回復しない.
+
+## 戦闘時特殊効果
+
+`TACTICS_EFFECT_BATTLE_SPECIAL`は`TacticsBattleSpecialData`で具体的な特殊効果を保持する.
+
+### 特殊効果系列
+
+`TacticsBattleSpecialType`として、アクセラレーター、アサルト、イレイス、エース、エクスターライズ、エクスドライブ、エッジノート、エリュシオン、エンダーブレイク、オラクル、オラトリオ、カーズ、カウンター、キャッスルウィークネス、キャッスルヴェール、クラウストルム、グラビティアサルト、クレバーノート、ジャガーノート、シャドウ、ステルス、ストリーム、スラッシャー、スロウレート、タランテラ、ディバインアクティブ、ディバインエトワール、ディバインスラスト、ディバインラピッド、バーサク、ハイド、パンツァー、ヒール、ファランクス、フォースオブウィッシュ、フォースオブプレイ、フォートレス、ブリッツ、プロヴォーク、ポイントライズ、メナス、ランページ、リヴァイブ、リコントラクト、リザレクション、レクトノート、ワイズノートの47系列を定義する. Enum値は「[型定義](../design/types.md)」を参照する.
+
+### パラメータ
+
+特殊効果は`TacticsBattleSpecialParameters`として以下3値を同時に保持できる.
+
+* 攻撃
+* 防御
+* 速度
+
+### 適用箇所
+
+`TacticsBattleSpecialApplyTarget`で以下を識別する.
+
+* 味方騎士団
+* 相手騎士団
+* 戦闘時味方パーティ
+* 戦闘時相手パーティ
+* キャッスルブレイク時
+
+### 発動条件
+
+`TacticsBattleSpecialTrigger`で以下を識別する.
+
+* なし
+* 戦闘時
+* 敵全滅時
+* キャッスルブレイク時
+* 強襲キャッスルブレイク時
+* 迎撃（被弾）時
+
 ## 効果対象
 
 タクティクスはキャラクター単体を対象とせず、以下のパーティ単位または騎士団単位を対象とする. 効果対象は`TacticsTarget`で表現する.
@@ -60,7 +113,7 @@
 終了方式は`TacticsEndType`で識別する.
 
 * `TACTICS_END_TYPE_DURATION`: 特定の時間
-* `TACTICS_END_TYPE_COUNT`: 時間制限なしの回数制限
+* `TACTICS_END_TYPE_COUNT`: 時間制限なしの回数制限。残り回数の消費イベントは`TacticsCountConsumeTrigger`で識別する
 * `TACTICS_END_TYPE_ON_ACTIVATION`: 発動時の1回のみ.
 
 
@@ -71,5 +124,14 @@
 * 同じタクティクスを複数回使用しても効果時間は延長しない.
 * 同一系列の効果値は使用のたびに加算する.
 * 回数制限がある効果は、重複使用しても回数制限自体は増加しない.
-* 回数制限がある効果は、使用するたびに一律で残り回数を1回消費する.
+* 回数制限がある効果は、マスターデータの`TacticsCountConsumeTrigger`で指定された以下のイベント発生時に残り回数を1回消費する.
+  - `TACTICS_COUNT_CONSUME_TRIGGER_CASTLE_BREAK`: キャッスルブレイク時.
+  - `TACTICS_COUNT_CONSUME_TRIGGER_ANNIHILATION`: 殲滅時.
+  - `TACTICS_COUNT_CONSUME_TRIGGER_ANNIHILATION_ALL_ENEMIES`: 殲滅時に相手を全滅させた場合.
+  - `TACTICS_COUNT_CONSUME_TRIGGER_SORTIE`: 出撃時.
 * タクティクスの効果種別は`TacticsEffectID`、効果対象は`TacticsTarget`で表現する.
+
+
+## 騎士団戦中の継続効果状態
+
+継続中のタクティクス効果はGameServerが「[型定義](../design/types.md)」の`TacticsActiveEffectState`として保持する.

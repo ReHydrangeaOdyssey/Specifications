@@ -8,8 +8,8 @@
 
 ## キャラクター関連
 
-`Rarity`, `CharacterAttribute`, `SpeedRank`, `CharacterMasterData`, `CharacterBattle`, `HitPoints`は「[型定義](types.md)」を参照.
+`Rarity`, `CharacterAttribute`, `SpeedRank`, `CharacterBattle`, `HitPoints`は「[型定義](types.md)」を参照. `CharacterMasterData`を含む加工済みマスターデータ構造は「[マスターデータ](master_data.md)」を参照.
 
 ## タクティクス関連
 
-`TacticsEffect`, `TacticsBattleState`は「[型定義](types.md)」を参照.
+`TacticsEffect`, `TacticsBattleState`, `TacticsActiveEffectState`, `TacticsBattleSpecialParameters`, `TacticsBattleSpecialData`, `TacticsHpRecoveryData`は「[型定義](types.md)」を参照.

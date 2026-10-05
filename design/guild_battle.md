@@ -191,6 +191,7 @@ sequenceDiagram
             GameServer->>Bot: 処理容量上限到達メッセージ送信
             Note over GameServer,DB: 対象騎士団戦については何も処理せず、DB上の状態はscheduledのまま維持する
         else 処理容量に空きあり
+            Note over GameServer,DB: 騎士団戦開戦前処理開始。対象2騎士団の加入・脱退をこの時点から騎士団戦終了まで禁止
             loop 対戦する2騎士団
                 GameServer->>PrivateAPIServer: GetGuildData(GuildID)
                 PrivateAPIServer->>DB: 騎士団レベル情報要求
@@ -228,7 +229,7 @@ sequenceDiagram
 
             GameServer->>GameServer: InitialSeed = 固定値 XOR GuildBattleID
 
-            Note over GameServer: 開戦前データ処理終了。対象2騎士団の加入・脱退を騎士団戦終了まで禁止
+            Note over GameServer: 開戦前データ処理終了。所属変更禁止は開戦前処理開始時点から継続中
             opt 騎士団戦データから除外したプレイヤーの再取得を行う場合
                 GameServer->>PrivateAPIServer: RetryGuildBattlePreload(GuildBattleID, 取得失敗PlayerID[])
                 PrivateAPIServer->>DB: 指定PlayerID[]の最大BP・編成情報・PLAYER_ITEMを再取得
@@ -316,6 +317,7 @@ sequenceDiagram
     alt 使用可能
         GameServer->>GameServer: 使用可能回数, TP処理
         GameServer->>GameServer: タクティクス固有効果を適用
+        GameServer->>GameServer: 継続効果はTacticsActiveEffectStateとして保持
         GameServer->>GameServer: 成功した要求のRequestSequenceを1加算
         GameServer-->>PublicAPIServer: UseTactics
         PublicAPIServer-->>Client: UseTactics

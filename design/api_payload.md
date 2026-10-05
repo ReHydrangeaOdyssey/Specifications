@@ -84,7 +84,7 @@ PublicAPIで失敗レスポンスが必要な場合は、個別に別構造が�
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| Token | `Token` | トークン |
+| DiscordUserID | `DiscordUserID` | Botが本人確認済みのDiscord User ID。AccessTokenの本人性Bindingに使用する |
 
 ### AccessTokenResponse
 
@@ -431,6 +431,19 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 
 ## PrivateAPI
 
+### GetPlayerIDByDiscordUserIDRequest
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| DiscordUserID | `DiscordUserID` | PlayerIDとの本人性Bindingを検索するDiscord User ID |
+
+### GetPlayerIDByDiscordUserIDResponse
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| Exists | `Bool` | 対応するPlayerIDが存在する場合true |
+| PlayerID | `PlayerID` | `Exists=true`の場合のPlayerID。`Exists=false`では予約値0 |
+
 ### CheckPlayerIDExistsRequest
 
 | 項目 | 型 | 内容 |
@@ -466,6 +479,7 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 | 項目 | 型 | 内容 |
 |---|---|---|
 | PlayerID | `PlayerID` | 保存するPlayerID |
+| DiscordUserID | `DiscordUserID` | PlayerIDの本人として永続的に結び付けるDiscord User ID |
 | UserName | `UserName` | 保存するユーザー名 |
 
 ### SaveSessionIDRequest
