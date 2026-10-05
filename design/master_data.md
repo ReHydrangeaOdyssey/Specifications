@@ -115,6 +115,8 @@ message AbilityMasterData {
   }
 }
 
+```
+
 `AbilityMasterData.effect_data`は`AbilityEffectID`に応じて使用する共有体フィールドを切り替える.
 
 * `ABILITY_EFFECT_BUFF` / `ABILITY_EFFECT_DEBUFF`: `stat_correction`を使用する.
@@ -123,7 +125,7 @@ message AbilityMasterData {
 * 発動条件の具体値と効果補正値の両方を同時に保持する必要がある効果: `condition_correction`を使用する.
 * `condition_value`と`correction_value`は`AbilityMasterData`直下には保持しない.
 
-
+```proto
 message TacticsStageEffectData {
   uint32 stage = 1; // 効果上昇量を適用する段階. 論理型Stage.
   TacticsEffectID effect_id = 2; // 段階効果の対象となる効果種別.
