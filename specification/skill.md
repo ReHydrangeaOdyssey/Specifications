@@ -28,10 +28,11 @@
   - `SKILL_TARGET_CONDITION_DEBUFFED`: デバフ状態を優先する.
   - `SKILL_TARGET_CONDITION_HP_25_PERCENT_OR_BELOW`: 現在HPが最大HPの25%以下の対象を優先する.
   - `SKILL_TARGET_CONDITION_STATUS_ABNORMALITY`: 指定状態異常を優先し, 具体的な状態異常は`StatusAbnormalityID`で特定する.
-* ランダム攻撃の回数は`random_hit_count`で保持する.
+* ランダム攻撃の回数は`SkillMasterData.effect_data.random_attack.hit_count`で保持する.
 * 状態異常付与スキルは`StatusAbnormalityID`と状態異常付与率を保持する.
 * バフ・デバフは`SkillStatTarget`で攻撃または防御のどちらへ作用するかを保持する.
 * 回復スキルは回復割合とHP0回復可否を保持する. 回復割合は対象の最大HPに対する割合とする.
+* 1戦闘中の最大発動回数は`SkillMasterData.max_activation_count`で保持する. `Count`型の最大値`u32::MAX`は回数無制限を表す.
 
 ## 発動条件
 
@@ -117,8 +118,8 @@
 
 ## 発動回数
 
-バフおよびデバフスキルは1回とする.
-それ以外は`-1`を指定し, 回数無制限として扱う.
+バフおよびデバフスキルは`max_activation_count = 1`とする.
+それ以外は`max_activation_count = u32::MAX`とし, 回数無制限として扱う.
 
 ## 対象範囲
 

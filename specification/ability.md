@@ -24,7 +24,7 @@
 
 ## 発動条件
 
-発動条件はマスターデータの`AbilityConditionID`で表現する. 発動条件に具体値が必要なアビリティでは, `AbilityMasterData.effect_data`の`condition_correction.condition_value`へ保持する.
+発動条件はマスターデータの`AbilityMasterData.activation_condition.condition_id`に保持する`AbilityConditionID`で表現する. 発動条件に具体値が必要なアビリティでは, `AbilityMasterData.activation_condition.condition_value`へ保持する. 発動条件データと`effect_data`は独立して保持するため, 発動条件の具体値と効果固有値を同時に保持できる.
 
 * 「[戦闘](battle.md)」開始時に発動する.
 * 戦闘不能時に発動する.

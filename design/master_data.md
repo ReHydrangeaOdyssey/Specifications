@@ -68,13 +68,19 @@ message SkillMasterData {
   float correction_value = 6; // 攻撃威力やバフ・デバフ量等, 共有体に含まれないスキル効果の基本補正値. 論理型CorrectionValue. 回復スキルでは使用しない.
   SkillTargetRange target_range = 7; // スキルの対象範囲.
   SkillTargetConditionData target_condition = 8; // 単体対象で使用する優先対象条件.
+  uint32 max_activation_count = 9; // 1戦闘中に発動可能な最大回数. 論理型Count. u32::MAXは回数無制限を表す.
 
   oneof effect_data {
-    SkillRandomAttackData random_attack = 9; // ランダム攻撃スキルで使用する固有データ.
-    SkillStatusAbnormalityData status_abnormality = 10; // 状態異常付与スキルで使用する固有データ.
-    SkillStatCorrectionData stat_correction = 11; // バフ・デバフスキルで使用する固有データ.
-    SkillHealData heal = 12; // 回復スキルで使用する固有データ.
+    SkillRandomAttackData random_attack = 10; // ランダム攻撃スキルで使用する固有データ.
+    SkillStatusAbnormalityData status_abnormality = 11; // 状態異常付与スキルで使用する固有データ.
+    SkillStatCorrectionData stat_correction = 12; // バフ・デバフスキルで使用する固有データ.
+    SkillHealData heal = 13; // 回復スキルで使用する固有データ.
   }
+}
+
+message AbilityActivationConditionData {
+  AbilityConditionID condition_id = 1; // アビリティの発動条件.
+  uint32 condition_value = 2; // condition_idが具体値を必要とする場合の発動条件値. 論理型ConditionValue.
 }
 
 message AbilityCorrectionData {
@@ -86,7 +92,7 @@ message AbilityStatusAbnormalityData {
 }
 
 message AbilityConditionCorrectionData {
-  uint32 condition_value = 1; // 発動条件に必要な具体値. 論理型ConditionValue.
+  uint32 condition_value = 1; // AbilityEffectIDに応じて効果側で使用する条件値. 発動条件値とは別に保持する. 論理型ConditionValue.
   float correction_value = 2; // 当該アビリティの効果補正値. 論理型CorrectionValue.
 }
 
@@ -99,30 +105,31 @@ message AbilityMasterData {
   uint32 id = 1; // アビリティID. 論理型AbilityID.
   string name = 2; // アビリティ名. 論理型Name.
   string description = 3; // アビリティ効果説明文. 論理型Description.
-  AbilityEffectID effect_id = 4; // アビリティ効果種別.effect_dataの解釈を決定する.
-  AbilityConditionID condition_id = 5; // アビリティ発動条件.
-  reserved 6; // 旧condition_value. 共有体へ移行したため再利用しない.
-  repeated CharacterAttribute allowed_attributes = 7; // セット可能なキャラクター属性一覧.
-  float activation_rate = 8; // アビリティ発動率. 論理型Rate.
-  uint32 max_activation_count = 9; // 1戦闘中に発動可能な最大回数. 論理型Count.
-  reserved 10; // 旧correction_value. 共有体へ移行したため再利用しない.
+  repeated CharacterAttribute allowed_attributes = 4; // セット可能なキャラクター属性一覧.
+  float activation_rate = 5; // アビリティ発動率. 論理型Rate.
+  uint32 max_activation_count = 6; // 1戦闘中に発動可能な最大回数. 論理型Count.
+  AbilityActivationConditionData activation_condition = 7; // 発動条件と, 必要な場合の具体値.
+  AbilityEffectID effect_id = 8; // アビリティ効果種別. effect_dataの解釈を決定する.
 
   oneof effect_data {
-    AbilityCorrectionData correction = 11; // 単一の補正値を持つ効果で使用する.
-    AbilityStatusAbnormalityData status_abnormality = 12; // 状態異常攻撃で使用する.
-    AbilityConditionCorrectionData condition_correction = 13; // 条件値と補正値の両方を必要とする効果で使用する.
-    AbilityStatCorrectionData stat_correction = 14; // 攻撃・防御を同時または個別に補正するバフ・デバフで使用する.
+    AbilityCorrectionData correction = 9; // 単一の補正値を持つ効果で使用する.
+    AbilityStatusAbnormalityData status_abnormality = 10; // 状態異常攻撃で使用する.
+    AbilityConditionCorrectionData condition_correction = 11; // 効果側の条件値と補正値の両方を必要とする効果で使用する.
+    AbilityStatCorrectionData stat_correction = 12; // 攻撃・防御を同時または個別に補正するバフ・デバフで使用する.
   }
 }
 
 ```
 
+`AbilityMasterData.activation_condition`と`AbilityMasterData.effect_data`は独立して保持する. これにより, 発動条件の具体値と効果固有値を同時に保持できる.
 `AbilityMasterData.effect_data`は`AbilityEffectID`に応じて使用する共有体フィールドを切り替える.
 
 * `ABILITY_EFFECT_BUFF` / `ABILITY_EFFECT_DEBUFF`: `stat_correction`を使用する.
 * `ABILITY_EFFECT_STATUS_ABNORMALITY_ATTACK`: `status_abnormality`を使用する.
 * 単一補正値だけを必要とする効果: `correction`を使用する.
-* 発動条件の具体値と効果補正値の両方を同時に保持する必要がある効果: `condition_correction`を使用する.
+* 効果側の条件値と効果補正値の両方を必要とする効果: `condition_correction`を使用する.
+* 発動条件の具体値は`activation_condition.condition_value`に保持する.
+* `condition_correction.condition_value`は効果側の条件値であり, 発動条件の具体値には使用しない.
 * `condition_value`と`correction_value`は`AbilityMasterData`直下には保持しない.
 
 ```proto
@@ -182,19 +189,20 @@ message ItemMasterData {
 message GuildMasterData {
   uint64 id = 1; // 騎士団ID. 論理型GuildID.
   string name = 2; // 騎士団名. 論理型Name.
-  uint64 leader_player_id = 3; // 団長PlayerID. 論理型PlayerID.
-  repeated uint64 member_player_ids = 4; // 所属メンバーのPlayerID一覧. 各要素は論理型PlayerID.
-  uint32 castle_level = 5; // 城レベル.
-  uint32 armory_level = 6; // 武器庫レベル.
-  uint32 food_storage_level = 7; // 食糧庫レベル.
-  uint32 blacksmith_level = 8; // 鍛冶屋レベル.
-  uint32 tactics_room_level = 9; // 兵法所レベル.
-  uint32 tavern_level = 10; // 酒場レベル.
-  GuildBattleStartTime daytime_start_time = 11; // 昼時間帯の騎士団戦開始時刻.11:30 / 12:15 / 13:00のいずれか.
-  GuildBattleStartTime nighttime_start_time = 12; // 夜時間帯の騎士団戦開始時刻.21:00 / 22:00 / 23:00のいずれか.
+  repeated uint64 member_player_ids = 3; // 所属メンバーのPlayerID一覧. 各要素は論理型PlayerID.
+  uint32 castle_level = 4; // 城レベル.
+  uint32 armory_level = 5; // 武器庫レベル.
+  uint32 food_storage_level = 6; // 食糧庫レベル.
+  uint32 blacksmith_level = 7; // 鍛冶屋レベル.
+  uint32 tactics_room_level = 8; // 兵法所レベル.
+  uint32 tavern_level = 9; // 酒場レベル.
+  GuildBattleStartTime daytime_start_time = 10; // 昼時間帯の騎士団戦開始時刻.11:30 / 12:15 / 13:00のいずれか.
+  GuildBattleStartTime nighttime_start_time = 11; // 夜時間帯の騎士団戦開始時刻.21:00 / 22:00 / 23:00のいずれか.
 }
 
 ```
+
+`GuildMasterData`は団長・副団長を保持しない. 団長・副団長はプレイヤー操作によって決定される実行時データであり, Databaseの`GUILD.leader_player_id`および`GUILD.subleader_player_id`だけを正本とする.
 
 ## スキル固有データの共有体
 
@@ -211,7 +219,7 @@ message GuildMasterData {
 
 ## アビリティ固有データの共有体
 
-`AbilityMasterData.effect_data`はProtocol Buffersの`oneof`を使用する. `AbilityEffectID`と必要な効果パラメータに応じて1種類だけを保持する. 旧`condition_value`および旧`correction_value`は直下フィールドとして保持しない.
+`AbilityMasterData.effect_data`はProtocol Buffersの`oneof`を使用する. `AbilityEffectID`と必要な効果パラメータに応じて1種類だけを保持する. 発動条件は`activation_condition`として効果共有体と独立して保持し, 発動条件値と効果値を同時に保持できる. `condition_value`および`correction_value`は`AbilityMasterData`直下には保持しない.
 
 ## タクティクス特殊データ
 

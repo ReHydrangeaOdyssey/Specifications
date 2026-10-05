@@ -837,6 +837,7 @@ GameServer側のチェック.
 #### 処理内容
 
 - 対象日・`GuildBattleStartTime`に一致する騎士団を抽出する.
+- `GUILD_MEMBER`が0件の騎士団は対戦組み合わせ生成対象から除外する.
 - 抽出一覧へ疑似乱数の「抽選」を適用して順序を決め, 先頭から2騎士団ずつペアを作る.
 - 奇数の場合は最後の騎士団を事前作成済みダミープレイヤーの初期騎士団とペアにする.
 - `GuildBattleID = YYYYMMDD * 10^11 + GuildBattleStartTimeEnumValue * 10^8 + PairIndex`でIDを生成する.

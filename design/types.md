@@ -68,7 +68,7 @@
 | `Sequence` | `u64` | `uint64` | `numeric(20,0)` | 騎士団戦全体の処理順を表すシーケンス番号 |
 | `RequestSequence` | `u64` | `uint64` | `numeric(20,0)` | 騎士団戦参加プレイヤーごとの要求検証用シーケンス番号 |
 | `Seed` | `u64` | `uint64` | `numeric(20,0)` | 疑似乱数シード |
-| `Count` | `u32` | `uint32` | `bigint` | 回数/個数 |
+| `Count` | `u32` | `uint32` | `bigint` | 回数/個数. 回数上限で`u32::MAX`を指定した場合は回数無制限を表す |
 | `Stage` | `u32` | `uint32` | `bigint` | 段階 |
 | `DurationSeconds` | `u32` | `uint32` | `bigint` | 秒単位の時間 |
 | `GameServerTime` | `u64` | `uint64` | `numeric(20,0)` | UNIX epochからの経過マイクロ秒 |
@@ -351,7 +351,7 @@ enum AbilityConditionID {
 }
 ```
 
-`ABILITY_CONDITION_EVERY_N_TURNS`および`ABILITY_CONDITION_HP_AT_OR_BELOW_THRESHOLD`の具体値は, 加工済みアビリティマスターデータの`AbilityConditionCorrectionData.condition_value`で保持する.
+`ABILITY_CONDITION_EVERY_N_TURNS`および`ABILITY_CONDITION_HP_AT_OR_BELOW_THRESHOLD`の具体値は, 加工済みアビリティマスターデータの`AbilityMasterData.activation_condition.condition_value`で保持する.
 
 ### TacticsTarget
 

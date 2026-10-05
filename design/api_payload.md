@@ -26,13 +26,52 @@
 | AbilityID | `AbilityID[2]` | アビリティID |
 | MainSkillID | `SkillID` | 戦闘で使用するメインスキルID |
 
+### TacticsStatEffectResult
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| Attack | `Float32` | 攻撃に対する効果値 |
+| Defense | `Float32` | 防御に対する効果値 |
+| Speed | `Float32` | 速度に対する効果値 |
+
+### TacticsHpRecoveryEffectResult
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| RecoveryType | `TacticsHpRecoveryType` | HP回復方式 |
+| RecoveryRate | `Float32` | 対象最大HPに対する回復割合. HP0全回復型では1.0 |
+
+### TacticsBattleSpecialEffectResult
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| SpecialType | `TacticsBattleSpecialType` | 戦闘時特殊効果系列 |
+| StatusEffect | `TacticsStatEffectResult` | 攻撃・防御・速度へ同時に適用し得る効果値 |
+| ApplyTarget | `TacticsBattleSpecialApplyTarget` | 特殊効果の適用箇所 |
+| Trigger | `TacticsBattleSpecialTrigger` | 特殊効果の発動条件 |
+
+### TacticsEffectResultData
+
+`TacticsEffectResultData`は`TacticsEffectID`に応じて以下のいずれか1つを保持する共有体とする. Protocol Buffersで定義する際は`oneof`として表現する.
+
+| 共有体フィールド | 型 | 使用対象 |
+|---|---|---|
+| ScalarValue | `Float32` | スカラー値だけで表現できる効果 |
+| StatusEffect | `TacticsStatEffectResult` | 攻撃・防御・速度のステータス補正結果 |
+| HpRecovery | `TacticsHpRecoveryEffectResult` | `TACTICS_EFFECT_HP_RECOVERY` |
+| BattleSpecial | `TacticsBattleSpecialEffectResult` | `TACTICS_EFFECT_BATTLE_SPECIAL` |
+
+`TACTICS_EFFECT_ATTACK_CORRECTION`, `TACTICS_EFFECT_DEFENSE_CORRECTION`, `TACTICS_EFFECT_SPEED_CORRECTION`では`StatusEffect`を使用し, 対象となるフィールドへ効果値を設定する. 対象外フィールドは0とする.
+`TACTICS_EFFECT_BATTLE_SPECIAL`では`BattleSpecial`を使用し, 攻撃・防御・速度を`BattleSpecial.StatusEffect`へまとめて返す.
+それ以外で単一値として表現できる効果は`ScalarValue`を使用する.
+
 ### TacticsEffectResult
 
 | 項目 | 型 | 内容 |
 |---|---|---|
 | TacticsEffectID | `TacticsEffectID` | 適用したタクティクス効果種別 |
 | Target | `TacticsTarget` | 効果対象 |
-| EffectValue | `Float32` | 効果値 |
+| EffectData | `TacticsEffectResultData` | 効果種別に応じた共有体の効果値 |
 
 ### FormationCharacterHP
 
