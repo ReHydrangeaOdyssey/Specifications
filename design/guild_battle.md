@@ -75,7 +75,7 @@ stateDiagram-v2
     復活完了 --> 通常: 復活完了待機終了
 ```
 
-出撃待機は上記のプレイヤー状態とは別の独立タイマーとして保持する. 出撃処理が成功した時点でタイマーを設定し、0より大きい間は出撃のみ不可とする. 治療・復活・タクティクス等の状態とは併存できる.
+出撃待機は上記のプレイヤー状態とは別の独立タイマーとして保持する. 出撃処理が成功した時点でタイマーを設定し, 0より大きい間は出撃のみ不可とする. 治療・復活・タクティクス等の状態とは併存できる.
 出撃要求送信後から結果応答を受信するまではClientが通信中として追加操作送信を抑止する. GameServerはこの通信待ちを独立したプレイヤー状態として保持しない.
 
 
@@ -102,7 +102,7 @@ stateDiagram-v2
 
 ## シーケンス
 
-騎士団戦参加時、GameServerは`GuildBattleID`単位で`PlayerID -> RequestSequence`マップを作成する。初期値は0で、参加成功時に`1..=1,000,000,000`の範囲乱数を`RequestSequence`として割り当てる。他プレイヤーとの`RequestSequence`重複は許可する。参加後の要求は保持値と一致する`RequestSequence`のみ処理し、成功するたびに1加算した`NextRequestSequence`をClientへ返す。失敗時は加算しない。
+騎士団戦参加時, GameServerは`GuildBattleID`単位で`PlayerID -> RequestSequence`マップを作成する. 初期値は0で, 参加成功時に`1..=1,000,000,000`の範囲乱数を`RequestSequence`として割り当てる. 他プレイヤーとの`RequestSequence`重複は許可する. 参加後の要求は保持値と一致する`RequestSequence`のみ処理し, 成功するたびに1加算した`NextRequestSequence`をClientへ返す. 失敗時は加算しない.
 
 相手プレイヤーの重み付き抽選へ渡す候補PlayerIDはPlayerID昇順とする.
 
@@ -189,9 +189,9 @@ sequenceDiagram
     loop 対象騎士団戦すべて
         alt GameServerの処理容量上限に到達
             GameServer->>Bot: 処理容量上限到達メッセージ送信
-            Note over GameServer,DB: 対象騎士団戦については何も処理せず、DB上の状態はscheduledのまま維持する
+            Note over GameServer,DB: 対象騎士団戦については何も処理せず, DB上の状態はscheduledのまま維持する
         else 処理容量に空きあり
-            Note over GameServer,DB: 騎士団戦開戦前処理開始。対象2騎士団の加入・脱退をこの時点から騎士団戦終了まで禁止
+            Note over GameServer,DB: 騎士団戦開戦前処理開始. 対象2騎士団の加入・脱退をこの時点から騎士団戦終了まで禁止
             loop 対戦する2騎士団
                 GameServer->>PrivateAPIServer: GetGuildData(GuildID)
                 PrivateAPIServer->>DB: 騎士団レベル情報要求
@@ -229,7 +229,7 @@ sequenceDiagram
 
             GameServer->>GameServer: InitialSeed = 固定値 XOR GuildBattleID
 
-            Note over GameServer: 開戦前データ処理終了。所属変更禁止は開戦前処理開始時点から継続中
+            Note over GameServer: 開戦前データ処理終了. 所属変更禁止は開戦前処理開始時点から継続中
             opt 騎士団戦データから除外したプレイヤーの再取得を行う場合
                 GameServer->>PrivateAPIServer: RetryGuildBattlePreload(GuildBattleID, 取得失敗PlayerID[])
                 PrivateAPIServer->>DB: 指定PlayerID[]の最大BP・編成情報・PLAYER_ITEMを再取得
@@ -290,9 +290,9 @@ sequenceDiagram
 
 #### 要求処理順
 
-GameServerが受信するあらゆる要求は先に到達した順に処理する. GameServer受信時刻が異なる要求は受信時刻の早い要求を先に処理する. GameServer上で完全に同時として扱われる要求同士の順序は処理系定義とし、疑似乱数による順序決定は行わない.
+GameServerが受信するあらゆる要求は先に到達した順に処理する. GameServer受信時刻が異なる要求は受信時刻の早い要求を先に処理する. GameServer上で完全に同時として扱われる要求同士の順序は処理系定義とし, 疑似乱数による順序決定は行わない.
 
-出撃要求についても同じ規則を使用する. Clientは出撃要求送信後から処理結果応答受信まで通信中として追加操作送信を抑止するため、GameServer側に出撃処理中・処理待ちを表す独立状態は持たせない.
+出撃要求についても同じ規則を使用する. Clientは出撃要求送信後から処理結果応答受信まで通信中として追加操作送信を抑止するため, GameServer側に出撃処理中・処理待ちを表す独立状態は持たせない.
 
 
 ##### タクティクス使用時
@@ -587,9 +587,9 @@ sequenceDiagram
 
 ### Database送信失敗時
 
-騎士団戦中にDatabaseへの送信が失敗した場合は、同一送信を1回だけ再試行する. 再試行も失敗した場合、GameServerは当該騎士団戦についてDB障害発生状態へ移行する.
+騎士団戦中にDatabaseへの送信が失敗した場合は, 同一送信を1回だけ再試行する. 再試行も失敗した場合, GameServerは当該騎士団戦についてDB障害発生状態へ移行する.
 
-DB障害発生状態では、それ以降の騎士団戦中Database送信を行わず、本来送信するデータをGameServerローカルへ保存する. 騎士団戦終了時にローカル保存したデータをDatabaseへ一括送信する.
+DB障害発生状態では, それ以降の騎士団戦中Database送信を行わず, 本来送信するデータをGameServerローカルへ保存する. 騎士団戦終了時にローカル保存したデータをDatabaseへ一括送信する.
 
 騎士団戦最終結果の保存は下記終了シーケンスの専用規則を使用する.
 
@@ -650,7 +650,7 @@ sequenceDiagram
         GameServer->>PrivateAPIServer: UpdateGuildBattleStatus(GuildBattleID, completed)
         PrivateAPIServer->>DB: GUILD_BATTLE.status = completed
     else 再試行後も最終結果保存失敗
-        Note over GameServer: ErrorLog・Bot通知済み。運営が原因調査し手動復旧する
+        Note over GameServer: ErrorLog・Bot通知済み. 運営が原因調査し手動復旧する
     end
 ```
 
