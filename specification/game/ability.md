@@ -52,7 +52,7 @@
 
 1. 戦闘計算上の速度が速いキャラクターを先に処理する.
 2. 同一速度の場合はフォーメーション内部値が小さいキャラクターを先に処理する.
-3. 同一速度かつフォーメーション内部値も同一の場合は「[疑似乱数](../design/pseudorandom.md)」の「抽選」で処理順を決定する.
+3. 同一速度かつフォーメーション内部値も同一の場合は「[疑似乱数](../../design/game/pseudorandom.md)」の「抽選」で処理順を決定する.
    * 抽選対象リストの初期順序は, 各キャラクターを編成しているプレイヤーのPlayerID昇順とする.
 
 キャラクター間の順序を決定した後, 各キャラクター内ではAbilityスロット番号の小さい順に処理する.
@@ -61,7 +61,7 @@
 
 アビリティによって変わる. 発動確率には`AbilityMasterData.activation_rate`を使用する. 戦闘フロー上の回避率, 状態異常回避率, 回避無効化率, 状態異常付与率, 追撃率, 反撃率, 反撃無効化率は, 対応するアビリティの`AbilityMasterData.activation_rate`を意味する.
 
-「[疑似乱数](../design/pseudorandom.md)」の「[確率計算](../design/pseudorandom.md#確率計算)」によって判定.
+「[疑似乱数](../../design/game/pseudorandom.md)」の「[確率計算](../../design/game/pseudorandom.md#確率計算)」によって判定.
 
 
 ## 発動回数
@@ -72,7 +72,7 @@
 
 ## 効果
 
-効果種別は`AbilityEffectID`に従う. 効果固有値は「[マスターデータ](../design/master_data.md)」の`AbilityMasterData.effect_data`共有体から取得する. `AbilityEffectID`と共有体フィールドの対応は「[マスターデータ](../design/master_data.md)」を正とする. `ABILITY_EFFECT_AVOIDANCE`は`status_abnormality.status`が未設定の場合に攻撃回避, 設定されている場合に指定状態異常の回避を表す. `ABILITY_EFFECT_STATUS_ABNORMALITY_ATTACK`では`status_abnormality.status`を必須とし, 付与する状態異常を表す.
+効果種別は`AbilityEffectID`に従う. 効果固有値は「[マスターデータ](../../design/game/master_data.md)」の`AbilityMasterData.effect_data`共有体から取得する. `AbilityEffectID`と共有体フィールドの対応は「[マスターデータ](../../design/game/master_data.md)」を正とする. `ABILITY_EFFECT_AVOIDANCE`は`status_abnormality.status`が未設定の場合に攻撃回避, 設定されている場合に指定状態異常の回避を表す. `ABILITY_EFFECT_STATUS_ABNORMALITY_ATTACK`では`status_abnormality.status`を必須とし, 付与する状態異常を表す.
 
 `ABILITY_EFFECT_COUNTER`, `ABILITY_EFFECT_AVOIDANCE_DISABLE`, `ABILITY_EFFECT_COUNTER_DISABLE`, `ABILITY_EFFECT_COVER`, `ABILITY_EFFECT_DRAW_AGGRO`, `ABILITY_EFFECT_PURSUIT`は効果固有の数値パラメータを使用しない. 加工済みマスターデータでは`effect_data.no_parameter`を設定する.
 

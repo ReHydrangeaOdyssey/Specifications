@@ -5,7 +5,7 @@
 * 所属するギルドIDを持つ.
 * 自身の初期騎士団のGuildIDはPlayerIDと同一値とする.
 
-IDの型は「[型定義](../design/types.md)」を参照する.
+IDの型は「[型定義](../../design/shared/types.md)」を参照する.
 
 
 ## BP

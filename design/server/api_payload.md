@@ -2,9 +2,9 @@
 
 ## 共通
 
-各項目の型は「[型定義](types.md)」を参照する.
+各項目の型は「[型定義](../shared/types.md)」を参照する.
 
-`ArenaMode`は「[型定義](types.md)」を参照する.
+`ArenaMode`は「[型定義](../shared/types.md)」を参照する.
 
 ### CharacterHP
 
@@ -558,7 +558,7 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 | WaitTime | `DurationSeconds` | 復活待機時間 |
 | NextRequestSequence | `RequestSequence` | 要求成功後の次要求シーケンス番号 |
 
-`WaitTime`は「[パーティランク](../specification/party_rank.md)」で算出したパーティランクに対応する復活待機時間とする.
+`WaitTime`は「[パーティランク](../../specification/game/party_rank.md)」で算出したパーティランクに対応する復活待機時間とする.
 
 ### CancelReviveRequest
 

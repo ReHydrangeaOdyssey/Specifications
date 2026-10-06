@@ -1,105 +1,3 @@
-## フロー
-
-### 騎士団戦
-
-```mermaid
-flowchart TD;
-    Start[騎士団戦開始];
-    ChackTimeLimit{30分経過?};
-    ChackAttack{出撃要求がある?};
-    CheckCBC{CBC発生中?};
-    CheckCBCCondition{CBC発生条件を満たした?};
-    Reflected[結果反映];
-    StopAccept[新規処理受付停止];
-    CheckQueue{処理キューが空?};
-    ResolveQueue[キュー先頭処理を実行];
-    Judgment[最終合計pt算出・勝敗判定];
-    End[騎士団戦終了];
-    StartPlayerAttack[出撃開始];
-    EndPlayerAttack[出撃終了];
-    CB[キャッスルブレイク];
-
-    Start --> ChackTimeLimit;
-    ChackTimeLimit -- Yes --> StopAccept;
-    StopAccept --> CheckQueue;
-    CheckQueue -- No --> ResolveQueue;
-    ResolveQueue --> CheckQueue;
-    CheckQueue -- Yes --> Judgment;
-    Judgment --> End;
-    ChackTimeLimit -- No --> ChackAttack;
-    ChackAttack -- Yes --> StartPlayerAttack;
-    ChackAttack -- No --> ChackTimeLimit;
-    EndPlayerAttack --> Reflected;
-    Reflected --> ChackTimeLimit
-
-    subgraph 出撃
-        CheckChain{キリ番?};
-        CheckCB{CB発生?};
-        Attack[殲滅];
-
-        StartPlayerAttack --> CheckCBC;        
-        CheckCBC -- Yes --> CB;
-        CheckCBC -- No --> CheckCBCCondition;
-        CheckCBCCondition -- Yes --> CB;
-        CheckCBCCondition -- No --> CheckChain;
-        CheckChain -- Yes --> CB;
-        CheckChain -- No --> CheckCB;
-        CheckCB -- Yes --> CB;
-        CheckCB -- No --> Attack;
-        CB --> EndPlayerAttack;
-        Attack --> EndPlayerAttack;
-    end
-```
-
-
-## 遷移
-
-
-
-### 状態
-
-```mermaid
-stateDiagram-v2
-    [*] --> 通常
-
-    通常 --> 回復中: 治療開始
-    全滅 --> 回復中: 治療開始
-    回復中 --> 通常: 治療キャンセル（通常から開始）
-    回復中 --> 全滅: 治療キャンセル（全滅から開始）
-    回復中 --> 回復完了: 回復待機時間経過
-    回復完了 --> 通常: 治療完了
-
-    全滅 --> 復活中: 復活開始
-    復活中 --> 全滅: 復活キャンセル
-    復活中 --> 復活完了: パーティランクに応じた復活待機時間経過
-    復活完了 --> 通常: 復活完了待機終了
-```
-
-出撃待機は上記のプレイヤー状態とは別の独立タイマーとして保持する. 出撃処理が成功した時点でタイマーを設定し, 0より大きい間は出撃のみ不可とする. 治療・復活・タクティクス等の状態とは併存できる.
-出撃要求送信後から結果応答を受信するまではClientが通信中として追加操作送信を抑止する. GameServerはこの通信待ちを独立したプレイヤー状態として保持しない.
-
-
-### UI
-
-```mermaid
-stateDiagram-v2
-    [*] --> 騎士団戦
-    騎士団戦 --> 出撃
-    騎士団戦 --> 回復
-
-    出撃 --> 戦闘
-    出撃 --> キャッスルブレイク
-    戦闘 --> 騎士団戦
-    キャッスルブレイク --> 騎士団戦
-
-    回復 --> 騎士団戦
-    回復 --> アイテム回復
-    回復 --> 治療
-
-    アイテム回復 --> 騎士団戦
-    治療 --> 騎士団戦
-```
-
 ## シーケンス
 
 騎士団戦参加時, GameServerは`GuildBattleID`単位で`PlayerID -> RequestSequence`マップを作成する. 初期値は0で, 参加成功時に騎士団戦本体PRNGを1回消費して`next_bounded(1,000,000,000) + 1`を求め, `RequestSequence`として割り当てる. 他プレイヤーとの`RequestSequence`重複は許可する. 参加後の要求は保持値と一致する`RequestSequence`のみ処理し, 成功するたびに1加算した`NextRequestSequence`をClientへ返す. 失敗時は加算しない. JoinによるPRNG消費もリプレイ再現対象とする.
@@ -335,7 +233,7 @@ sequenceDiagram
 
 #### Battle Specialイベント処理
 
-騎士団戦中は出撃判定, キャッスルブレイク判定, 戦闘開始, 迎撃, 敵全滅, スコア反映の各処理で有効な`TACTICS_EFFECT_BATTLE_SPECIAL`を評価する. `TacticsBattleSpecialType`ごとの具体効果は「[タクティクス仕様](../specification/tactics.md#特殊効果系列)」を正本とする. 騎士団全体効果は対象Guildの各出撃処理へ反映し, 対戦騎士団全体へのデバフは相手Guildの各出撃処理へ反映する.
+騎士団戦中は出撃判定, キャッスルブレイク判定, 戦闘開始, 迎撃, 敵全滅, スコア反映の各処理で有効な`TACTICS_EFFECT_BATTLE_SPECIAL`を評価する. `TacticsBattleSpecialType`ごとの具体効果は「[タクティクス仕様](../../specification/game/tactics.md#特殊効果系列)」を正本とする. 騎士団全体効果は対象Guildの各出撃処理へ反映し, 対戦騎士団全体へのデバフは相手Guildの各出撃処理へ反映する.
 
 #### 要求処理順
 
@@ -345,7 +243,7 @@ GameServerが受信するあらゆる要求は先に到達した順に処理す�
 
 #### ログ・Metric
 
-騎士団戦のログ・Metric・Trace処理は「[ログ仕様](log.md)」に従う.
+騎士団戦のログ・Metric・Trace処理は「[ログ仕様](../system/log.md)」に従う.
 正常に成立した各操作は状態反映および`RequestSequence`更新後にReplay EventをReplayQueueへ追加する. Replay Workerによるファイル書き込み・Private API Server送信・Database保存は要求処理スレッドと非同期に行う.
 正常なゲームルール拒否は要求単位のApplication Logへ出力せずMetricへ集約する. `RequestSequence`不一致, 不正CharacterID, 不正TacticsID等は要求ごとに同期ログ出力せずMemory上で集約する.
 

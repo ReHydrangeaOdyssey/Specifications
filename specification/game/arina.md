@@ -10,7 +10,7 @@
 * ランダムな相手と戦闘する.
   - ArenaParty登録済みかつ自分自身を除いた全プレイヤーを候補とする. ArenaParty未登録Playerは候補へ含めない.
   - 候補PlayerIDはPlayerID昇順に並べてから抽選へ渡す.
-  - 対戦相手は「[疑似乱数](../design/pseudorandom.md)」の「[抽選](../design/pseudorandom.md#抽選)」により1人決定する.
+  - 対戦相手は「[疑似乱数](../../design/game/pseudorandom.md)」の「[抽選](../../design/game/pseudorandom.md#抽選)」により1人決定する.
   - `StartArenaBattle`要求の検証完了後にGameServer共通の時刻ベースSeed生成処理で生成したSeedを使用する.
   - 対戦相手抽選後, 戦闘開始前に同じSeedから戦闘専用の新しいPRNGを生成する. 対戦相手抽選で進んだPRNG状態は戦闘へ引き継がない.
   - 候補プレイヤーが0人の場合は`ArenaBattleErrorResponse`で`no_opponent_available`を返す.

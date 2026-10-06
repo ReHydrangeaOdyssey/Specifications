@@ -11,7 +11,7 @@
   - `GenerateTimeBasedSeed`は`固定シード値 ^ サーバーの時刻`を返す.
   - 時刻はUNIX時刻を採用する.
   - マイクロ秒単位とする.
-  - 型は「[型定義](types.md)」の`GameServerTime`を参照する.
+  - 型は「[型定義](../shared/types.md)」の`GameServerTime`を参照する.
   - Arenaの対戦開始Seedおよび騎士団戦マッチング用Seedは本共通内部APIを使用する.
 * 騎士団戦は16騎士団戦を1単位として1単位当たり1つの専用スレッド上で行う.
 	- CPUが扱えるスレッド数が4以下の場合は1スレッドとする.
@@ -26,7 +26,7 @@
 
 ## ログ・メトリクス処理
 
-* 騎士団戦のログ・Metric・Trace処理は「[ログ仕様](log.md)」に従う.
+* 騎士団戦のログ・Metric・Trace処理は「[ログ仕様](../system/log.md)」に従う.
 * 騎士団戦専用スレッドは, 正常な要求ごとのApplication Log出力, JSON Serialize, ファイル書き込み, `stdout` / `stderr`書き込み, 外部Telemetry送信を直接行わない.
 * 処理成立時のReplay Eventは状態反映および`RequestSequence`更新後にReplayQueueへ追加し, Replay Workerがファイル書き込みおよびPrivate API Serverへの保存を行う.
 * ReplayQueueとSystem Log Queueは分離する.

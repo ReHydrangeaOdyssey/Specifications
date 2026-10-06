@@ -557,7 +557,7 @@ enum BuffDebuffState {
 
 ### PartyRank
 
-`PartyRank`はHP, 攻撃, 防御の各ランクおよび最終的なパーティランクで使用する33段階のランクを表す. 値と算出規則は「[パーティランク](../specification/party_rank.md)」を参照する.
+`PartyRank`はHP, 攻撃, 防御の各ランクおよび最終的なパーティランクで使用する33段階のランクを表す. 値と算出規則は「[パーティランク](../../specification/game/party_rank.md)」を参照する.
 
 ```proto
 enum PartyRank {
@@ -601,7 +601,7 @@ enum PartyRank {
 
 Protocol Buffersでは以下を使用する.
 論理型の範囲制約は上記の型定義に従う.
-加工済みマスターデータの構造は「[マスターデータ](master_data.md)」を正とする.
+加工済みマスターデータの構造は「[マスターデータ](../game/master_data.md)」を正とする.
 
 ```proto
 syntax = "proto3";

@@ -73,7 +73,7 @@
 
 ### 特殊効果系列
 
-`TacticsBattleSpecialType`は「[型定義](../design/types.md)」のEnumを使用する. 以下の表を各Typeの具体効果の正本とする.
+`TacticsBattleSpecialType`は「[型定義](../../design/shared/types.md)」のEnumを使用する. 以下の表を各Typeの具体効果の正本とする.
 
 | TacticsBattleSpecialType | 名称 | 効果 |
 |---|---|---|
@@ -217,7 +217,7 @@
 
 ## 騎士団戦中の継続効果状態
 
-継続中のタクティクス効果はGameServerが「[型定義](../design/types.md)」の`TacticsActiveEffectState`として保持する. COUNT型では`count_consume_trigger`を保持し, 指定イベント発生時に残り回数を消費する. DURATION/COUNT/ON_ACTIVATIONの識別には`end_type`を保持する. DURATION型は`expires_at`へ絶対終了時刻を保持し, 残り秒数の減算管理は行わない.
+継続中のタクティクス効果はGameServerが「[型定義](../../design/shared/types.md)」の`TacticsActiveEffectState`として保持する. COUNT型では`count_consume_trigger`を保持し, 指定イベント発生時に残り回数を消費する. DURATION/COUNT/ON_ACTIVATIONの識別には`end_type`を保持する. DURATION型は`expires_at`へ絶対終了時刻を保持し, 残り秒数の減算管理は行わない.
 
 
 ## COUNT型効果の適用順

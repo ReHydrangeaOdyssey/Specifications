@@ -43,7 +43,7 @@ flowchart TD;
 
 ### TacticsBattleSpecialType適用
 
-騎士団戦の戦闘開始・行動・被弾・敵全滅処理では, 有効な`TACTICS_EFFECT_BATTLE_SPECIAL`を確認し, `special_type`ごとに「[タクティクス仕様](../specification/tactics.md#特殊効果系列)」の効果を適用する. 攻撃・防御・速度・スキル発動率・最大TP等の数値効果は`TacticsBattleSpecialParameters`の対応フィールドを使用する. 強襲無効, 最初の通常攻撃ダメージ0, 回避発動は`special_type`固有挙動として処理する. `ERASE`は`TacticsActiveEffectState.erase_consumed`を参照し, 最初の通常攻撃ダメージを0にした直後に`true`へ更新する.
+騎士団戦の戦闘開始・行動・被弾・敵全滅処理では, 有効な`TACTICS_EFFECT_BATTLE_SPECIAL`を確認し, `special_type`ごとに「[タクティクス仕様](../../specification/game/tactics.md#特殊効果系列)」の効果を適用する. 攻撃・防御・速度・スキル発動率・最大TP等の数値効果は`TacticsBattleSpecialParameters`の対応フィールドを使用する. 強襲無効, 最初の通常攻撃ダメージ0, 回避発動は`special_type`固有挙動として処理する. `ERASE`は`TacticsActiveEffectState.erase_consumed`を参照し, 最初の通常攻撃ダメージを0にした直後に`true`へ更新する.
 
 ### ダメージ計算フロー
 

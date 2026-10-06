@@ -73,7 +73,7 @@
   - 除外した騎士団も同じ開始時刻の騎士団戦終了処理時に加入・脱退禁止を解除する.
 * 抽出した騎士団一覧をGuildID昇順に並べる.
 * GameServer共通の時刻ベースSeed生成処理でマッチング用Seedを生成する.
-* GuildID昇順の騎士団一覧に, マッチング用Seedを使用して「[疑似乱数](../design/pseudorandom.md)」の「[抽選](../design/pseudorandom.md#抽選)」を適用し, シャッフル後の先頭から2騎士団ずつ順にペアを作成する.
+* GuildID昇順の騎士団一覧に, マッチング用Seedを使用して「[疑似乱数](../../design/game/pseudorandom.md)」の「[抽選](../../design/game/pseudorandom.md#抽選)」を適用し, シャッフル後の先頭から2騎士団ずつ順にペアを作成する.
 * 抽出数が奇数の場合, 最後の1騎士団は事前に作成したダミープレイヤーの初期騎士団を対戦相手とする.
 * `GuildBattleID`は`u64`で, `<日付(YYYYMMDD)8桁><開始時刻(GuildBattleStartTimeのEnum値)3桁><作成したペアの要素番号8桁>`を10進数として連結した値とする.
   - 数式では`GuildBattleID = YYYYMMDD * 10^11 + GuildBattleStartTimeEnumValue * 10^8 + PairIndex`とする.
@@ -121,8 +121,8 @@
 * 計算の途中式はすべてこの仕様書に記載された順序で行われる.
 * 「ランダム」といった記載がある場合はシード値に基づいた再現性のある「疑似乱数生成式」から算出される.
   - 初期シード値は`固定値 ^ 騎士団戦時の固有ID`とする.
-    - 型は「[型定義](../design/types.md)」の`Seed`および`GuildBattleID`を参照する.
-  - 「疑似乱数生成式」は「[疑似乱数](../design/pseudorandom.md)」を参照する.
+    - 型は「[型定義](../../design/shared/types.md)」の`Seed`および`GuildBattleID`を参照する.
+  - 「疑似乱数生成式」は「[疑似乱数](../../design/game/pseudorandom.md)」を参照する.
   - 1つのPRNG状態を騎士団戦全体で共有する.
     - 「[戦闘](battle.md)」のみ初期シード値に「シーケンス番号」を足したシード値を使用した専用のPRNGを生成し, その戦闘内ではその専用のPRNGを使用する.
 * 「[出撃](guild_battle.md#出撃)」および「[復活](guild_battle.md#復活)」以外で「[BP](guild_battle.md#事前用語説明)」が減少することはない.
@@ -168,7 +168,7 @@
 * プレイヤーの「[出撃](guild_battle.md#出撃)」時に発生するイベントは「[殲滅](guild_battle.md#殲滅)」と「強襲キャッスルブレイク」の2つのみである.
   - どちらが選ばれるかはランダムでプレイヤーが選択することはできない.
   - 「キャッスルブレイク確率」をもとに抽選される.
-    - 抽選には「[疑似乱数](../design/pseudorandom.md)」の「[確率計算](../design/pseudorandom.md#確率計算)」を使用する.
+    - 抽選には「[疑似乱数](../../design/game/pseudorandom.md)」の「[確率計算](../../design/game/pseudorandom.md#確率計算)」を使用する.
 * 現在の「[チェイン](guild_battle.md#チェイン)」数が10以上かつ10の倍数であれば必ず「[キャッスルブレイク](guild_battle.md#キャッスルブレイク)」が発生する.
   - キャッスルブレイク判定には出撃開始時点のチェイン値を使用する.
 
@@ -200,12 +200,12 @@
   - 相手プレイヤーをランダムに選択する.
     - 「生存状態」の相手プレイヤーから抽選される.
       - 候補PlayerIDをPlayerID昇順に並べてから抽選へ渡す.
-      - 抽選には「[疑似乱数](../design/pseudorandom.md)」の「重み付き抽選」を使用する.
+      - 抽選には「[疑似乱数](../../design/game/pseudorandom.md)」の「重み付き抽選」を使用する.
         - 各重みは「[被弾確率](guild_battle.md#被弾確率)」から求める.
   - 相手キャラクターをランダムに選択する.
     - HPが1以上のキャラクターが常に可能な限り5体選択される.
     - 選択されるキャラクターは重複しない.
-    - 抽選には「[疑似乱数](../design/pseudorandom.md)」の「[抽選](../design/pseudorandom.md#抽選)」を使用する.
+    - 抽選には「[疑似乱数](../../design/game/pseudorandom.md)」の「[抽選](../../design/game/pseudorandom.md#抽選)」を使用する.
       - 全候補を編成IDの小さい順に並べてからシャッフルし, 先頭5体を選択する.
   - 「[戦闘](battle.md)」終了時は現在HPのみを引き継ぐ.
     - その他状態はすべてリセットされる.

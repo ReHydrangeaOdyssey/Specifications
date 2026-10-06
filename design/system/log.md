@@ -159,7 +159,7 @@ Trace Exportは騎士団戦処理スレッドから同期実行しない.
 ## 騎士団戦リプレイログ
 
 ファイル名は`./log/guild_battle/<生成時刻(YYYY_MMDD_HHMMSS)(JST)>_<騎士団戦ID>_replay.log`とする.
-リプレイログファイルはJSON形式（UTF-8）とし, ファイル全体を1つのJSON配列とする. 配列要素は処理成立順に追加するJSONオブジェクトで, 各オブジェクトは[API Payload](api_payload.md)で定義された対応Payloadの項目名・型に従う. `ProcessType`の値から対応するPayloadを判定する.
+リプレイログファイルはJSON形式（UTF-8）とし, ファイル全体を1つのJSON配列とする. 配列要素は処理成立順に追加するJSONオブジェクトで, 各オブジェクトは[API Payload](../server/api_payload.md)で定義された対応Payloadの項目名・型に従う. `ProcessType`の値から対応するPayloadを判定する.
 処理が成立した場合のみReplay Eventを生成する(失敗は含まれない).
 成立した処理はReplayQueueへ追加し, Replay Workerが本リプレイログへ書き出すとともに, Private API Server経由でDatabaseへ保存する.
 ログの最初から辿ることで特定地点まで完全に再現可能にする.

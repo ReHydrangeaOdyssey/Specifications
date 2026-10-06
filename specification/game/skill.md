@@ -19,7 +19,7 @@
 
 ## マスターデータ表現
 
-スキル固有の挙動は「[マスターデータ](../design/master_data.md)」のスキル構造で保持する.
+スキル固有の挙動は「[マスターデータ](../../design/game/master_data.md)」のスキル構造で保持する.
 
 * 対象範囲は`SkillTargetRange`で保持する.
 * 単体対象の優先条件は`SkillTargetConditionID`で保持する.
@@ -36,7 +36,7 @@
 
 ## バフ・デバフ状態
 
-戦闘中キャラクターは「[型定義](../design/types.md)」の`BuffDebuffState`を保持し, 以下4状態のいずれかとする.
+戦闘中キャラクターは「[型定義](../../design/shared/types.md)」の`BuffDebuffState`を保持し, 以下4状態のいずれかとする.
 
 * `BUFF_DEBUFF_STATE_NONE`: バフもデバフも付与されていない状態.
 * `BUFF_DEBUFF_STATE_BUFF`: バフだけが付与されている状態.
@@ -54,7 +54,7 @@
 
 ## スキル発動率
 
-発動判定には「[疑似乱数](../design/pseudorandom.md)」の「[確率計算](../design/pseudorandom.md#確率計算)」を使用する.
+発動判定には「[疑似乱数](../../design/game/pseudorandom.md)」の「[確率計算](../../design/game/pseudorandom.md#確率計算)」を使用する.
 
 ### 騎士団戦
 
@@ -142,7 +142,7 @@
 * 単体.
   - 条件を満たす対象を優先する.
   - 条件付きスキルで条件一致対象が0体の場合は全対象を候補とする.
-  - 条件がない場合, 条件一致対象が0体の場合, または候補が複数いる場合は「[疑似乱数](../design/pseudorandom.md)」の「抽選」で1体を決定する.
+  - 条件がない場合, 条件一致対象が0体の場合, または候補が複数いる場合は「[疑似乱数](../../design/game/pseudorandom.md)」の「抽選」で1体を決定する.
   - 抽選候補リストはフォーメーション内部番号の小さい順に並べる.
 
 攻撃スキルの攻撃範囲は以下に分かれる.
@@ -150,7 +150,7 @@
 * 全体攻撃.
 * ランダム攻撃.
   - 回数はスキルごとに定義する.
-  - 攻撃対象全体をフォーメーション内部番号の小さい順で1つの候補リストへ追加し, その要素数を`bound`として各HITごとに「[疑似乱数](../design/pseudorandom.md)」の`next_bounded(bound)`を1回呼び出す.
+  - 攻撃対象全体をフォーメーション内部番号の小さい順で1つの候補リストへ追加し, その要素数を`bound`として各HITごとに「[疑似乱数](../../design/game/pseudorandom.md)」の`next_bounded(bound)`を1回呼び出す.
   - `next_bounded`が返したインデックスで候補リストへアクセスし, その対象へ当該HITを適用する.
   - 各HITで候補リストを作り直したり対象を削除したりしないため, 同じ敵に複数回当たる可能性がある.
     - このスキルによってHPが0になった場合でも抽選対象に残る.
@@ -184,7 +184,7 @@
 
 * 状態異常以外の効果は必中とする.
 * 状態異常系の成功率はスキルごとに異なる.
-  - 「[疑似乱数](../design/pseudorandom.md)」の「[確率計算](../design/pseudorandom.md#確率計算)」を使用する.
+  - 「[疑似乱数](../../design/game/pseudorandom.md)」の「[確率計算](../../design/game/pseudorandom.md#確率計算)」を使用する.
 
 
 

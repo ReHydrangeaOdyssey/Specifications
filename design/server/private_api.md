@@ -555,7 +555,7 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 騎士団戦中の成立した各種処理について, GameServerのReplay WorkerからPrivate API Serverへリプレイログ送信が行われる. 各Payloadは`GuildBattleID`を含み, `GUILD_BATTLE_REPLAY_LOG`へ保存する.
 通常の騎士団戦要求処理スレッドはPrivate API Serverへのリプレイログ保存完了を待機しない. 処理成立時はReplay EventをReplayQueueへ追加し, Replay Workerが成立順に送信する.
 騎士団戦作成ログだけは開戦時初期状態の保存を保証するため同期保存し, 保存成功後に`GUILD_BATTLE.status=in_progress`へ遷移する.
-ReplayQueueおよびDatabase送信失敗時の扱いは「[ログ仕様](log.md)」および「騎士団戦DB送信失敗時」に従う.
+ReplayQueueおよびDatabase送信失敗時の扱いは「[ログ仕様](../system/log.md)」および「騎士団戦DB送信失敗時」に従う.
 
 #### 騎士団戦作成
 
