@@ -5,13 +5,14 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 - Private Network 内に配置される.
 - 認証・Account・騎士団戦ルーティング関連要求はPublic API Serverから受ける.
 - Database保存・取得要求はGameServerから受ける.
-- Public API ServerおよびGameServerとPrivate API Server間の通信はmTLSを必須とし, 双方が信頼済みCAによる証明書を検証する. Clientからの直接接続を受け付けない.
-- mTLS証明書のService Identityを検証し, Public API Serverからは認証・Account・騎士団戦ルーティング関連API, GameServerからはゲームデータ関連APIだけを受け付ける.
+- `DiscordAuthorizationRequired=true`の場合, Discord BotからはRole喪失時の`RevokeDiscordSessions`だけを受け付ける.
+- Public API Server, GameServerおよびDiscord BotとPrivate API Server間の通信はmTLSを必須とし, 双方が信頼済みCAによる証明書を検証する. Clientからの直接接続を受け付けない.
+- mTLS証明書のService Identityを検証し, Public API Serverからは認証・Account・騎士団戦ルーティング関連API, GameServerからはゲームデータ関連API, Discord Botからは`RevokeDiscordSessions`だけを受け付ける.
 - Databaseへ直接接続できるApplication ComponentはPrivate API Serverだけとする.
 - AccessToken署名用秘密鍵はPrivate API Serverだけが保持する.
 - Databaseとのデータ保存・取得を仲介する. ゲームロジック上の抽選・マッチング生成はGameServerが行う.
 - 要求/レスポンスのデータ構造は[API Payload](api_payload.md)を参照する.
-- 騎士団戦中のDatabase送信失敗時は同一要求を1回だけ再試行する. 再試行も失敗した場合, GameServerはDB障害発生状態へ移行し, それ以降の騎士団戦中DB送信を行わず, 本来送信するデータをカレントディレクトリ直下のUTF-8 JSONファイルへ保存する. ファイルはGameServer再起動後も保持する. 騎士団戦終了時にローカル保存データを一括送信し, 成功時は対応ファイルを削除し, 失敗時は削除せず残す.
+- 騎士団戦中のDatabase送信失敗時は同一要求を1回だけ再試行する. 再試行も失敗した場合, GameServerはDB障害発生状態へ移行し, それ以降の騎士団戦中DB送信を行わず, 本来送信するデータを`/var/lib/game-server/recovery`配下のUTF-8 JSONファイルへ保存する. 本番Kubernetes環境では同PathをGameServer専用Persistent Volumeへmountし, GameServer実行Userだけが読み書き可能とする. Recovery保存領域には運用設定で容量上限およびファイル数上限を必須設定し, 無制限に増加させない. ファイルはGameServer再起動後も保持する. 騎士団戦終了時にローカル保存データを一括送信し, 成功時は対応ファイルを削除し, 失敗時は削除せず残す.
 - `SaveGuildBattleResult`は専用の失敗処理を使用し, 1回再試行しても失敗した場合はErrorLogを保存し, `DiscordNotificationEnabled=true`の場合はBot通知を行った後, 運営による手動復旧対象とする.
 
 ## 認証・アカウント関連
@@ -25,12 +26,14 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 #### 処理内容
 
 - LoginIDの重複をDatabaseで確認する.
-- LoginID重複時は作成しない.
-- PasswordをArgon2idでPasswordHashへ変換する.
+- LoginID重複時は作成せず, ClientへLoginID重複を区別して返さない.
+- `DiscordAuthorizationRequired=true`の場合は要求DiscordAuthorizationTokenIDが未使用であることを確認する.
+- Passwordごとに16byte以上の暗号学的乱数Saltを生成し, PasswordをArgon2idでPasswordHashへ変換する.
+- Argon2id処理は認証専用の同時実行制限対象とし, 設定済み最大同時実行数を超えて開始しない. 空きがない場合は待機キューを無制限に増加させず, `API_ERROR_RATE_LIMIT_EXCEEDED`として拒否する.
 - AccountIDおよびPlayerIDを生成する.
   - `0`と`u64::MAX`は予約済み無効値のため生成対象外.
   - Databaseの一意制約に衝突した場合は再生成する.
-- `ACCOUNT`と`PLAYER`を同一トランザクションで保存する.
+- `ACCOUNT`と`PLAYER`を同一トランザクションで保存する. `DiscordAuthorizationRequired=true`の場合はDiscordUserID BindingとDiscordAuthorizationTokenID使用済み記録も同一トランザクションで保存する.
 - `PLAYER.max_bp`は200, `guild_battle_win_count`と`guild_battle_lose_count`は0で初期化する.
 
 #### 要求・レスポンス
@@ -46,13 +49,16 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 #### 処理内容
 
 - LoginIDに対応する`ACCOUNT`および`PLAYER`を取得する.
+- `DiscordAuthorizationRequired=true`の場合は要求DiscordUserIDが`ACCOUNT.discord_user_id`と一致し, 要求DiscordAuthorizationTokenIDが未使用であることを確認する.
+- Argon2id処理は認証専用の同時実行制限対象とし, 設定済み最大同時実行数を超えて開始しない. 空きがない場合は待機キューを無制限に増加させず, `API_ERROR_RATE_LIMIT_EXCEEDED`として拒否する.
 - Argon2idでPasswordを検証する.
-- LoginID不存在とPassword不一致を呼び出し元へ区別して返さない.
+- LoginID不存在, Password不一致およびDiscordUserID Binding不一致を呼び出し元へ区別して返さない.
 - 認証成功時は既存`ACCOUNT_SESSION`を削除する.
 - 128bitのSessionIDを暗号学的乱数で生成する.
 - 32byteのRefreshTokenを暗号学的乱数で生成する.
-- `SHA-256(RefreshToken)`を`refresh_token_hash`として保存する.
-- `ACCOUNT_SESSION.expires_at`を認証成功時刻から72時間後として保存する.
+- `SHA-256(RefreshToken)`を`refresh_token_hash`として保存し, `previous_refresh_token_hash=NULL`で初期化する.
+- `ACCOUNT_SESSION.expires_at`を認証成功時刻から24時間後として保存する.
+- `DiscordAuthorizationRequired=true`の場合は認証成功と同一トランザクションでDiscordAuthorizationTokenIDを使用済みとして保存する.
 - AccessTokenを生成してEd25519で署名する. AccessTokenの有効期限は発行時刻から5分とする.
 
 #### 要求・レスポンス
@@ -68,11 +74,12 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 #### 処理内容
 
 - 受信したRefreshTokenをSHA-256でHash化する.
-- `ACCOUNT_SESSION.refresh_token_hash`が一致し, `expires_at`が有効期限内であることを確認する.
-- 新しいRefreshTokenを生成し, `refresh_token_hash`を新しいHashへ置換する.
+- `ACCOUNT_SESSION.refresh_token_hash`または`previous_refresh_token_hash`と照合し, `expires_at`が有効期限内であることを確認する.
+- `refresh_token_hash`と一致した場合は新しいRefreshTokenを生成し, 更新前`refresh_token_hash`を`previous_refresh_token_hash`へ移動してから`refresh_token_hash`を新しいHashへ置換する.
+- `previous_refresh_token_hash`と一致した場合はRefreshToken再利用として対象`ACCOUNT_SESSION`を削除し, Tokenを発行しない.
 - 新しいAccessTokenを生成してEd25519で署名する.
 - `ACCOUNT_SESSION.expires_at`は変更しない.
-- RefreshToken検証とHash置換は同一トランザクションで行い, 対象`ACCOUNT_SESSION`を排他的に更新する. 同一RefreshTokenによる同時要求では1要求だけを成功させる.
+- RefreshToken検証, Hash置換またはSession削除は同一トランザクションで行い, 対象`ACCOUNT_SESSION`を排他的に更新する. 同一RefreshTokenによる同時要求では1要求だけを成功させる.
 
 #### 要求・レスポンス
 
@@ -94,21 +101,39 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 
 [API Payload](api_payload.md)の「LogoutPrivateRequest」「LogoutPrivateResponse」を参照する.
 
-### Refresh Session期限更新
+### Refresh Session確認
 
 #### メソッド名
 
-`ExtendAccountSession`
+`ValidateAccountSession`
 
 #### 処理内容
 
 - 指定SessionIDに対応する`ACCOUNT_SESSION`が存在し, 現在時刻が`expires_at`未満であることを確認する.
-- 有効な場合は`expires_at`を現在時刻から72時間後へ更新し`IsValid=true`を返す.
-- 存在しない, または期限切れの場合は更新せず`IsValid=false`を返す.
+- 有効な場合は`IsValid=true`を返す.
+- 存在しない, または期限切れの場合は`IsValid=false`を返す.
+- 本処理では`expires_at`を変更しない.
 
 #### 要求・レスポンス
 
-[API Payload](api_payload.md)の「ExtendAccountSessionRequest」「ExtendAccountSessionResponse」を参照する.
+[API Payload](api_payload.md)の「ValidateAccountSessionRequest」「ValidateAccountSessionResponse」を参照する.
+
+### Discord Role喪失時Session失効
+
+#### メソッド名
+
+`RevokeDiscordSessions`
+
+#### 処理内容
+
+- `DiscordAuthorizationRequired=true`の場合にDiscord Botからだけ受け付ける.
+- mTLS証明書のService IdentityがDiscord Botであることを確認する.
+- 指定DiscordUserIDと一致する`ACCOUNT.discord_user_id`を持つAccountの`ACCOUNT_SESSION`をすべて削除する.
+- 既に発行済みのAccessTokenは個別失効させず, 自身の`exp`到達まで最大5分間有効とする.
+
+#### 要求・レスポンス
+
+[API Payload](api_payload.md)の「RevokeDiscordSessionsRequest」「RevokeDiscordSessionsResponse」を参照する.
 
 ## プレイヤー・騎士団関連
 

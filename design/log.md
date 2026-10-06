@@ -9,6 +9,9 @@
 
 * サーバーへのアクセスログ.
 * ログインログ.
+* `Password`, `AccessToken`, `RefreshToken`, `DiscordAuthorizationToken`, Cookie全体, Authorization相当Header, mTLS秘密鍵をログへ出力しない.
+* 上記Credentialを含むRequest/Responseを構造化ログへ保存する場合は, ログ出力前に対象フィールドを削除または固定文字列へ置換する.
+* 認証・Session単位の追跡が必要な場合はCredentialそのものではなく, Credentialから独立して生成したCorrelation IDを使用する.
 
 
 ## 騎士団戦リプレイログ

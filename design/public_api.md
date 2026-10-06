@@ -17,6 +17,11 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 - 個別に失敗レスポンスが定義されていないPublicAPIの失敗時は`ApiErrorResponse`を使用する.
 - PublicAPIは下記「レート制限」に従って要求数を制限する. 超過時は`ApiErrorResponse(API_ERROR_RATE_LIMIT_EXCEEDED)`を返し, 要求本体を処理しない.
 - 表に記載していないPublicAPIには個別のApplication Level Rate Limitを設定しない. Ingress等で行うNetwork LevelのDoS対策は本表とは別とする.
+- Public APIのRequest Bodyには有限の最大サイズを設定し, IngressおよびPublic API Serverの双方で上限を適用する. 上限超過要求はPayloadの完全なdeserializeおよび認証処理より前に拒否する.
+- Request Body最大サイズは各Public API Payloadについて仕様上取り得る最大serialization sizeを満たす値として設定し, 無制限にはしない.
+- `AccessToken`および`DiscordAuthorizationToken`にはwire上の有限の最大長を設定し, JWT構文解析および署名検証より前に上限超過を拒否する. 最大長は定義済みClaimと設定値から生成される正規Tokenを格納可能な値として設定し, 無制限にはしない.
+- `CreateAccount`および`Login`はLoginID単位のApplication Level Rate Limitに加えてSource IP単位のNetwork Level Rate Limitを必須とする. Source IP単位の閾値は運用設定とし, 無制限にはしない.
+- Source IPは信頼済みIngressが付与した値だけを使用し, Clientから直接送信されたForwarded/X-Forwarded-For相当HeaderをそのままRate Limit keyとして使用しない.
 - `GuildBattleID`を含む要求は`GuildBattleID -> GameServerInstanceID`を解決し, 当該騎士団戦を所有するGameServerへ中継する. 解決結果はPublic API Serverのメモリへキャッシュしてよいが正本とはしない.
   - 本番Kubernetes環境ではGameServer用EndpointSliceをwatchし, `GameServerInstanceID`に一致するPod UIDのEndpointへ直接中継する.
   - 割当済み`GameServerInstanceID`に対応するEndpointが存在しない場合は`ApiErrorResponse(API_ERROR_GAME_SERVER_UNAVAILABLE)`を返す.
@@ -52,8 +57,9 @@ API全体の分類は「[API仕様](api.md)」を参照する.
   - 10文字以下である.
   - 空文字ではない.
   - ユーザー名の重複は許可する.
-- Private API Serverの`CreateAccount`へ要求する.
-- Private API ServerはAccountIDおよびPlayerIDを生成し, `ACCOUNT`と`PLAYER`を同一トランザクションで保存する.
+- `DiscordAuthorizationRequired=true`の場合は検証済みTokenからDiscordUserIDとDiscordAuthorizationTokenIDを取得する.
+- Private API Serverの`CreateAccount`へLoginID, Password, UserNameと, 必要な場合DiscordUserID, DiscordAuthorizationTokenIDを要求する.
+- Private API ServerはAccountIDおよびPlayerIDを生成し, `ACCOUNT`と`PLAYER`を同一トランザクションで保存する. Discord追加認可を使用する場合はAccountへのDiscordUserID BindingおよびToken使用済み記録も同一トランザクションで保存する.
 - `PLAYER.max_bp`は200で初期化する.
 
 #### 要求データ
@@ -66,7 +72,7 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 
 #### 失敗時レスポンス
 
-[API Payload](api_payload.md)の「ApiErrorResponse」を参照する. Discord追加認可必須時のToken未指定は`API_ERROR_DISCORD_AUTHORIZATION_REQUIRED`, Token不正は`API_ERROR_INVALID_DISCORD_AUTHORIZATION_TOKEN`, LoginID不正は`API_ERROR_INVALID_LOGIN_ID`, Password不正は`API_ERROR_INVALID_PASSWORD`, LoginID重複は`API_ERROR_LOGIN_ID_ALREADY_EXISTS`, UserName不正は`API_ERROR_INVALID_USER_NAME`.
+[API Payload](api_payload.md)の「ApiErrorResponse」を参照する. Discord追加認可必須時のToken未指定は`API_ERROR_DISCORD_AUTHORIZATION_REQUIRED`, Token不正は`API_ERROR_INVALID_DISCORD_AUTHORIZATION_TOKEN`, LoginID不正は`API_ERROR_INVALID_LOGIN_ID`, Password不正は`API_ERROR_INVALID_PASSWORD`, UserName不正は`API_ERROR_INVALID_USER_NAME`. LoginID重複を含むDatabase上のAccount作成失敗は`API_ERROR_ACCOUNT_CREATION_FAILED`として返し, 既存LoginIDの存在をClientへ区別して返さない. Private API ServerのArgon2id同時実行上限到達時は`API_ERROR_RATE_LIMIT_EXCEEDED`を返す.
 
 ### ログイン要求
 
@@ -81,9 +87,12 @@ API全体の分類は「[API仕様](api.md)」を参照する.
   - Clientは本エラーを受け取った場合, ゲームデータおよびClientの更新をユーザーへ促す.
 - `DiscordAuthorizationRequired=true`の場合はDiscordAuthorizationTokenを検証する. 未指定の場合は`API_ERROR_DISCORD_AUTHORIZATION_REQUIRED`, 不正または期限切れの場合は`API_ERROR_INVALID_DISCORD_AUTHORIZATION_TOKEN`を返す.
 - `DiscordAuthorizationRequired=false`の場合はDiscordAuthorizationTokenを要求しない.
-- Private API Serverの`AuthenticateAccount`へLoginIDとPasswordを送信する.
+- `DiscordAuthorizationRequired=true`の場合は検証済みTokenからDiscordUserIDとDiscordAuthorizationTokenIDを取得する.
+- Private API Serverの`AuthenticateAccount`へLoginID, Passwordと, 必要な場合DiscordUserID, DiscordAuthorizationTokenIDを送信する.
+- Private API ServerはDiscord追加認可が有効な場合にAccountへBindingされたDiscordUserIDとの一致およびToken未使用を確認する.
 - Private API ServerはPassword検証成功時に既存Refresh Sessionを無効化し, 新しいSessionID, AccessToken, RefreshTokenを生成する.
-- LoginID不存在とPassword不一致は区別せず`API_ERROR_INVALID_CREDENTIALS`として返す.
+- Public API ServerはRefreshTokenをResponse Bodyへ含めず, 「[セッション仕様](session.md)」に従う`__Host-RefreshToken` HttpOnly Cookieとして設定する.
+- LoginID不存在, Password不一致およびDiscordUserID Binding不一致は区別せず`API_ERROR_INVALID_CREDENTIALS`として返す.
 
 #### 要求データ
 
@@ -95,7 +104,7 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 
 #### 失敗時レスポンス
 
-Discord追加認可必須時のToken未指定は`ApiErrorResponse(API_ERROR_DISCORD_AUTHORIZATION_REQUIRED)`, Token不正は`ApiErrorResponse(API_ERROR_INVALID_DISCORD_AUTHORIZATION_TOKEN)`を返す. Account認証失敗は`ApiErrorResponse(API_ERROR_INVALID_CREDENTIALS)`を返す. Version不一致は`LoginVersionErrorResponse`を返す.
+Discord追加認可必須時のToken未指定は`ApiErrorResponse(API_ERROR_DISCORD_AUTHORIZATION_REQUIRED)`, Token不正または使用済みは`ApiErrorResponse(API_ERROR_INVALID_DISCORD_AUTHORIZATION_TOKEN)`を返す. Account認証失敗は`ApiErrorResponse(API_ERROR_INVALID_CREDENTIALS)`を返す. Private API ServerのArgon2id同時実行上限到達時は`ApiErrorResponse(API_ERROR_RATE_LIMIT_EXCEEDED)`を返す. Version不一致は`LoginVersionErrorResponse`を返す.
 
 ### AccessToken更新
 
@@ -105,10 +114,15 @@ Discord追加認可必須時のToken未指定は`ApiErrorResponse(API_ERROR_DISC
 
 #### 処理内容
 
+- `__Host-RefreshToken` CookieからRefreshTokenを取得する. Request BodyからRefreshTokenを受け付けない.
+- 設定済みClient Originと`Origin` Headerが一致することを確認し, 不一致の場合は処理しない.
 - Private API Serverの`RefreshAccessToken`へRefreshTokenを送信する.
-- Private API ServerでRefreshTokenのHash, Session存在, 有効期限を検証する.
-- 検証成功時はRefreshTokenをRotationし, 新しいAccessTokenとRefreshTokenを返す.
-- Refresh Sessionの72時間期限は本処理では延長しない.
+- Private API ServerでRefreshTokenのcurrent/previous Hash, Session存在, 有効期限を検証する.
+- current Hash一致時はRefreshTokenをRotationし, 新しいAccessTokenとRefreshTokenを返す.
+- previous Hash一致時はRefreshToken再利用としてRefresh Sessionを無効化する.
+- RefreshTokenが無効, 期限切れまたは再利用検知となった場合は`__Host-RefreshToken` Cookieを削除する.
+- Public API ServerはRotation後RefreshTokenをResponse Bodyへ含めず, `__Host-RefreshToken` Cookieを更新する.
+- Refresh Sessionの24時間期限は本処理では延長しない.
 
 #### 要求データ
 
@@ -130,8 +144,11 @@ Discord追加認可必須時のToken未指定は`ApiErrorResponse(API_ERROR_DISC
 
 #### 処理内容
 
+- `__Host-RefreshToken` CookieからRefreshTokenを取得する. Request BodyからRefreshTokenを受け付けない.
+- 設定済みClient Originと`Origin` Headerが一致することを確認し, 不一致の場合は処理しない.
 - Private API Serverの`Logout`へRefreshTokenを送信する.
 - Private API ServerはRefreshTokenに対応する`ACCOUNT_SESSION`を削除する.
+- Public API Serverは`__Host-RefreshToken` Cookieを削除する.
 - 既に発行済みのAccessTokenは自身の`exp`到達まで最大5分間有効とする.
 
 #### 要求データ
@@ -421,7 +438,7 @@ GuildNameが制約を満たさない場合は`ApiErrorResponse(API_ERROR_INVALID
   - 要求`GuildBattleID`が騎士団戦中であることを確認する.
   - 要求`GuildID`が, その`GuildBattleID`で対戦中の騎士団のいずれかであることを確認する.
   - `PlayerID`の現在所属GuildIDが要求`GuildID`と一致することを確認する.
-- 参加可能時は`AuthenticatedContext.SessionID`に対応するRefresh Sessionの期限をPrivate API Server経由で72時間後へ更新する. Sessionが存在しない, または期限切れの場合は参加を拒否する.
+- 参加可能時は`AuthenticatedContext.SessionID`に対応するRefresh SessionがPrivate API Server上で有効であることを確認する. Sessionが存在しない, またはLogin成功時刻から24時間の期限を過ぎている場合は参加を拒否する. 本処理ではSession期限を延長しない.
 - PlayerIDが未Joinの場合だけ騎士団戦本体PRNGを消費して初期RequestSequenceを割り当てる. すでにJoin済みの場合はPRNGを消費せず現在保持しているRequestSequenceを返す.
 
 #### 要求データ

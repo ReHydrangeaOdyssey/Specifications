@@ -14,6 +14,7 @@ erDiagram
         AccountID id PK
         LoginID login_id UK
         PasswordHash password_hash
+        DiscordUserID discord_user_id
         DateTime created_at
     }
 
@@ -30,7 +31,14 @@ erDiagram
         AccountID account_id PK, FK
         SessionID session_id UK
         RefreshTokenHash refresh_token_hash UK
+        RefreshTokenHash previous_refresh_token_hash
         SessionExpiresAt expires_at
+    }
+
+    DISCORD_AUTHORIZATION_TOKEN_USAGE {
+        DiscordAuthorizationTokenID token_id PK
+        DiscordUserID discord_user_id
+        DateTime expires_at
     }
 
     GUILD {
@@ -77,14 +85,17 @@ erDiagram
     PLAYER ||--o| GUILD : leader
 ```
 
-`ACCOUNT.login_id`は一意制約を設定する. Passwordの平文は保存せず, Argon2idで生成した`password_hash`だけを保存する.
+`ACCOUNT.login_id`は一意制約を設定する. Passwordの平文は保存せず, Argon2idのパラメータ, Passwordごとの16byte以上の暗号学的乱数Salt, Hashを含む`password_hash`だけを保存する.
+`ACCOUNT.discord_user_id`はNULLを許可する. `DiscordAuthorizationRequired=true`でAccountを作成した場合は`DiscordAuthorizationToken.sub`のDiscordUserIDを保存し, Login時の追加認可Bindingに使用する. `DiscordAuthorizationRequired=false`で作成したAccountではNULLを許可する.
 `ACCOUNT`と`PLAYER`は1対1とし, Account作成時に同一トランザクションで作成する.
 `ACCOUNT_SESSION.account_id`を主キーとし, 1つのAccountが同時に複数のRefresh Sessionを保持できないようにする.
 `ACCOUNT_SESSION.refresh_token_hash`には`SHA-256(RefreshToken)`だけを保存し, RefreshTokenの平文を保存しない.
-Login成功時は既存`ACCOUNT_SESSION`を削除してから新しいSessionを保存する.
-RefreshToken更新時は対象`ACCOUNT_SESSION`を排他的に更新し, `refresh_token_hash`を新しいHashへ更新する. `expires_at`は変更しない. 同一RefreshTokenによる同時更新では1要求だけを成功させる.
+`ACCOUNT_SESSION.previous_refresh_token_hash`はNULLを許可する. RefreshToken Rotation成功時は更新前`refresh_token_hash`を`previous_refresh_token_hash`へ保存してから新しいHashを`refresh_token_hash`へ保存する.
+Login成功時は既存`ACCOUNT_SESSION`を削除してから新しいSessionを保存し, `expires_at`をLogin成功時刻から24時間後とする. 騎士団戦参加およびRefreshToken更新では`expires_at`を延長しない.
+RefreshToken更新時は対象`ACCOUNT_SESSION`を排他的に更新する. 受信TokenのHashが`previous_refresh_token_hash`と一致した場合は再利用として対象`ACCOUNT_SESSION`を削除する.
 Logout時は対象`ACCOUNT_SESSION`レコードを削除する.
-騎士団戦参加成功時は対象`ACCOUNT_SESSION.expires_at`を更新時刻から72時間後へ更新する.
+`DISCORD_AUTHORIZATION_TOKEN_USAGE.token_id`には成功したAccount新規作成またはLoginで使用した`DiscordAuthorizationToken.jti`を保存する. 同一`token_id`を複数回成功させない. `expires_at`経過後のレコードは削除してよい.
+Discord Botから`RevokeDiscordSessions`を受信した場合は, 指定DiscordUserIDと一致する`ACCOUNT.discord_user_id`を持つAccountの`ACCOUNT_SESSION`を削除する.
 
 `PLAYER.guild_battle_win_count`と`PLAYER.guild_battle_lose_count`の初期値はともに`0`とする.
 `PLAYER.max_bp`の新規プレイヤー作成時初期値は`200`とする.

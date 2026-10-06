@@ -22,6 +22,7 @@
 | `GuildID` | `u64` | `uint64` | `numeric(20,0)` | 騎士団ID |
 | `GuildBattleID` | `u64` | `uint64` | `numeric(20,0)` | 騎士団戦ID |
 | `SessionID` | `[u8; 16]` | `bytes` | `uuid` | Refresh Sessionを識別する128bitのセッションID |
+| `DiscordAuthorizationTokenID` | `[u8; 16]` | `bytes` | `uuid` | Discord追加認可Tokenの`jti`として使用する128bitの一意ID |
 | `RecordID` | `u64` | `uint64` | `numeric(20,0)` | DB内部レコードID |
 | `CharacterID` | `u32` | `uint32` | `bigint` | キャラクターID |
 | `SkillID` | `u32` | `uint32` | `bigint` | スキルID |
@@ -44,6 +45,8 @@
 ### ID予約値
 
 * `AccountID`および`PlayerID`は `0` と `u64::MAX` を予約済み無効値とし, 有効なIDとして使用しない.
+* `DiscordUserID`は`0`を予約済み無効値とし, Discord追加認可を使用しない内部Payloadで未指定を表す場合に使用する.
+* `DiscordAuthorizationTokenID`は全byteが`0`の値を予約済み無効値とする.
 * `PlayerID`について, ClientがPlayerIDを未取得の場合の初期値は`0`とする.
 * 固定長配列の空きを表現するため, `CharacterID`, `SkillID`, `AbilityID` はそれぞれの基底型の最大値`u32::MAX`を予約済み無効値とし, 有効IDとして使用しない.
 * `FormationSlotID` の予約済み無効値は既定どおり`255`とする.
@@ -52,12 +55,12 @@
 
 | 論理型 | Rust | Protocol Buffers | PostgreSQL | 内容 |
 |---|---|---|---|---|
-| `AccessToken` | `String` | `string` | - | Ed25519署名付きJWT Compact Serialization形式の短寿命アクセストークン |
-| `DiscordAuthorizationToken` | `String` | `string` | - | Discord Role保持確認後にBot経由で発行する5分有効のEd25519署名付きJWT. Discord追加認可が無効な構成では使用しない |
-| `RefreshToken` | `[u8; 32]` | `bytes` | - | AccessToken更新に使用する32byteの暗号学的乱数Token. 平文はDatabaseへ保存しない |
+| `AccessToken` | `String` | `string` | - | Ed25519署名付きJWT Compact Serialization形式の短寿命アクセストークン. wire上の有限の最大長を設定する |
+| `DiscordAuthorizationToken` | `String` | `string` | - | Discord Role保持確認後にBot経由で発行する5分有効のEd25519署名付きJWT. wire上の有限の最大長を設定する. Discord追加認可が無効な構成では使用しない |
+| `RefreshToken` | `[u8; 32]` | `bytes` | - | AccessToken更新に使用する32byteの暗号学的乱数Token. Public APIのCookieではBase64url without paddingで表現する. 平文はDatabaseへ保存しない |
 | `RefreshTokenHash` | `[u8; 32]` | `bytes` | `bytea` | `SHA-256(RefreshToken)` |
 | `Password` | `String` | `string` | - | Login時だけ送受信するPassword. Databaseへ平文保存しない |
-| `PasswordHash` | `String` | `string` | `text` | Argon2idのPasswordHash |
+| `PasswordHash` | `String` | `string` | `text` | Argon2idのパラメータ, Salt, Hashを含むPasswordHash |
 | `DateTime` | `u64` | `uint64` | `timestamp` | UNIX epochからの経過マイクロ秒で表す日時 |
 | `SessionExpiresAt` | `u64` | `uint64` | `timestamp` | UNIX epochからの経過マイクロ秒で表すRefresh Session有効期限 |
 
@@ -460,7 +463,7 @@ enum ApiErrorCode {
   API_ERROR_INVALID_CREDENTIALS = 26; // LoginID不存在またはPassword不一致.
   API_ERROR_INVALID_LOGIN_ID = 27; // LoginIDが不正.
   API_ERROR_INVALID_PASSWORD = 28; // Passwordが不正.
-  API_ERROR_LOGIN_ID_ALREADY_EXISTS = 29; // LoginIDが既に登録済み.
+  API_ERROR_LOGIN_ID_ALREADY_EXISTS = 29; // 旧仕様でLoginID重複をClientへ通知するために使用していた予約済みエラー. 現行仕様では使用しない.
   API_ERROR_INVALID_REFRESH_TOKEN = 30; // RefreshTokenが不正または期限切れ.
   API_ERROR_GAME_SERVER_UNAVAILABLE = 31; // 対象騎士団戦を所有するGameServerへ到達できない.
   API_ERROR_DISCORD_AUTHORIZATION_REQUIRED = 32; // 現在の構成でDiscord追加認可が必須だがDiscordAuthorizationTokenが指定されていない.
@@ -471,6 +474,7 @@ enum ApiErrorCode {
   API_ERROR_GUILD_INVITATION_NOT_FOUND = 37; // 指定Player向けの未承諾招待が存在しない.
   API_ERROR_INVALID_GUILD_LEADERSHIP_TARGET = 38; // 団長・副団長候補が対象Guild所属ではない, または団長と副団長が同一PlayerIDである.
   API_ERROR_GUILD_LEADER_MOVE_NOT_ALLOWED = 39; // 団長以外のメンバーが存在する騎士団の団長が加入申請または招待によって別Guildへ移動しようとした.
+  API_ERROR_ACCOUNT_CREATION_FAILED = 40; // Accountを作成できなかった. LoginID重複を含むDatabase上のAccount作成失敗理由はClientへ区別して返さない.
 }
 ```
 

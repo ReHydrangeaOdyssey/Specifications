@@ -155,10 +155,10 @@ sequenceDiagram
     GameServer ->> GameServer: PlayerIDの現在所属GuildIDと要求GuildIDが一致することを確認
 
     alt 両条件を満たし参加可能
-        GameServer ->> PrivateAPIServer: ExtendAccountSession(AuthenticatedContext.SessionID)
-        PrivateAPIServer ->> DB: ACCOUNT_SESSION期限を72時間後へ更新
-        DB -->> PrivateAPIServer: 更新結果
-        PrivateAPIServer -->> GameServer: ExtendAccountSession(IsValid)
+        GameServer ->> PrivateAPIServer: ValidateAccountSession(AuthenticatedContext.SessionID)
+        PrivateAPIServer ->> DB: ACCOUNT_SESSION存在・24時間期限確認
+        DB -->> PrivateAPIServer: 確認結果
+        PrivateAPIServer -->> GameServer: ValidateAccountSession(IsValid)
         GameServer->>GameServer: IsValid=trueを確認
         alt すでにJoin済み
             GameServer->>GameServer: 現在保持しているRequestSequenceを取得. 騎士団戦本体PRNGは消費しない

@@ -184,7 +184,8 @@ PublicAPIで失敗レスポンスが必要な場合は, 個別に別構造が定
 |---|---|---|
 | PlayerID | `PlayerID` | ログインしたAccountに結び付くPlayerID |
 | AccessToken | `AccessToken` | 通常PublicAPIの認証に使用する5分有効の署名付きToken |
-| RefreshToken | `RefreshToken` | AccessToken更新に使用するToken |
+
+RefreshTokenはResponse Bodyへ含めず, Public API Serverが`__Host-RefreshToken` HttpOnly Cookieとして設定する.
 
 ### LoginVersionErrorResponse
 
@@ -195,22 +196,21 @@ PublicAPIで失敗レスポンスが必要な場合は, 個別に別構造が定
 
 ### RefreshAccessTokenRequest
 
-| 項目 | 型 | 内容 |
-|---|---|---|
-| RefreshToken | `RefreshToken` | AccessToken更新に使用するRefreshToken |
+- Request Bodyは空とする.
+- RefreshTokenは`__Host-RefreshToken` HttpOnly Cookieから取得する.
 
 ### RefreshAccessTokenResponse
 
 | 項目 | 型 | 内容 |
 |---|---|---|
 | AccessToken | `AccessToken` | 新しく発行されたAccessToken |
-| RefreshToken | `RefreshToken` | Rotation後の新しいRefreshToken |
+
+Rotation後RefreshTokenはResponse Bodyへ含めず, Public API Serverが`__Host-RefreshToken` HttpOnly Cookieを更新する.
 
 ### LogoutRequest
 
-| 項目 | 型 | 内容 |
-|---|---|---|
-| RefreshToken | `RefreshToken` | 無効化するRefresh Sessionに対応するRefreshToken |
+- Request Bodyは空とする.
+- RefreshTokenは`__Host-RefreshToken` HttpOnly Cookieから取得する.
 
 ### LogoutResponse
 
@@ -601,6 +601,8 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 | LoginID | `LoginID` | 新規作成するLoginID |
 | Password | `Password` | Argon2idでHash化して保存するPassword |
 | UserName | `UserName` | 新規Playerのゲーム内表示名 |
+| DiscordUserID | `DiscordUserID` | `DiscordAuthorizationRequired=true`の場合は検証済みTokenの`sub`. 無効な構成では`0` |
+| DiscordAuthorizationTokenID | `DiscordAuthorizationTokenID` | `DiscordAuthorizationRequired=true`の場合は検証済みTokenの`jti`. 無効な構成では予約済み無効値 |
 
 ### CreateAccountPrivateResponse
 
@@ -614,6 +616,8 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 |---|---|---|
 | LoginID | `LoginID` | 認証対象LoginID |
 | Password | `Password` | 検証するPassword |
+| DiscordUserID | `DiscordUserID` | `DiscordAuthorizationRequired=true`の場合は検証済みTokenの`sub`. 無効な構成では`0` |
+| DiscordAuthorizationTokenID | `DiscordAuthorizationTokenID` | `DiscordAuthorizationRequired=true`の場合は検証済みTokenの`jti`. 無効な構成では予約済み無効値 |
 
 ### AuthenticateAccountResponse
 
@@ -646,17 +650,27 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 
 - Logout完了とする.
 
-### ExtendAccountSessionRequest
+### ValidateAccountSessionRequest
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| SessionID | `SessionID` | 期限を更新するRefresh Session ID |
+| SessionID | `SessionID` | 有効性を確認するRefresh Session ID |
 
-### ExtendAccountSessionResponse
+### ValidateAccountSessionResponse
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| IsValid | `Bool` | Sessionが存在し期限内で更新できた場合true |
+| IsValid | `Bool` | Sessionが存在し24時間の期限内である場合true |
+
+### RevokeDiscordSessionsRequest
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| DiscordUserID | `DiscordUserID` | 必要Roleを保持しなくなったDiscordUserID |
+
+### RevokeDiscordSessionsResponse
+
+- 対象DiscordUserIDにBindingされたAccountのRefresh Session失効完了とする.
 
 ### SaveGuildRequest
 
