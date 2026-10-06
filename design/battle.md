@@ -43,7 +43,32 @@ flowchart TD;
 
 ### TacticsBattleSpecialType適用
 
-騎士団戦の戦闘開始・行動・被弾・敵全滅処理では, 有効な`TACTICS_EFFECT_BATTLE_SPECIAL`を確認し, `special_type`ごとに「[タクティクス仕様](../specification/tactics.md#特殊効果系列)」の効果を適用する. 攻撃・防御・速度・スキル発動率・最大TP等の数値効果は`TacticsBattleSpecialParameters`の対応フィールドを使用する. 強襲無効, 最初の通常攻撃ダメージ0, 回避発動は`special_type`固有挙動として処理する.
+騎士団戦の戦闘開始・行動・被弾・敵全滅処理では, 有効な`TACTICS_EFFECT_BATTLE_SPECIAL`を確認し, `special_type`ごとに「[タクティクス仕様](../specification/tactics.md#特殊効果系列)」の効果を適用する. 攻撃・防御・速度・スキル発動率・最大TP等の数値効果は`TacticsBattleSpecialParameters`の対応フィールドを使用する. 強襲無効, 最初の通常攻撃ダメージ0, 回避発動は`special_type`固有挙動として処理する. `ERASE`は`TacticsActiveEffectState.erase_consumed`を参照し, 最初の通常攻撃ダメージを0にした直後に`true`へ更新する.
+
+### ダメージ計算フロー
+
+現時点で仕様上の適用位置が明確な処理だけを以下のフローへ反映する. `ABILITY_EFFECT_DAMAGE_INCREASE`, `ABILITY_EFFECT_FIXED_DAMAGE_INCREASE`, `ABILITY_EFFECT_HEAL`, `ABILITY_EFFECT_COVER`, `ABILITY_EFFECT_DRAW_AGGRO`は具体的な適用位置・対象処理が未確定のため, このフローにはまだ挿入しない.
+
+```mermaid
+flowchart TD;
+    Start[ダメージ計算開始];
+    Mode{騎士団戦?};
+    GuildAttack[騎士団戦の攻撃力を仕様式で算出];
+    GuildDefense[騎士団戦の防御力を仕様式で算出];
+    ArenaAttack[アリーナの攻撃力を仕様式で算出];
+    ArenaDefense[アリーナの防御力を仕様式で算出];
+    BaseDamage[基礎ダメージ = 攻撃力 - 防御力 / 3];
+    MinDamage[基礎ダメージ = max 基礎ダメージ, 250];
+    Random[対象・HITごとに1.0以上1.03以下のダメージ乱数を取得];
+    RandomDamage[ダメージ = 基礎ダメージ * ダメージ乱数];
+    MaxDamage[ダメージ = min ダメージ, 99999];
+    Apply[HP反映時に小数点以下を切り捨てて減算し, HPを0未満にしない];
+    End[ダメージ計算終了];
+    Start --> Mode;
+    Mode -- Yes --> GuildAttack --> GuildDefense --> BaseDamage;
+    Mode -- No --> ArenaAttack --> ArenaDefense --> BaseDamage;
+    BaseDamage --> MinDamage --> Random --> RandomDamage --> MaxDamage --> Apply --> End;
+```
 
 ### ダメージ乱数の消費規則
 

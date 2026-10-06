@@ -73,21 +73,23 @@
 
 ### 特殊効果系列
 
-`TacticsBattleSpecialType`は「[型定義](../design/types.md)」のEnumを使用する. アサルトオーダー, エースオーダー, シャドウオーダーを独立したTypeとして追加し, フォートレス系列はフォートレスオーダーを表す. 以下で効果が指定されたTypeは表の意味を正本とする. 表に記載していない既存Typeの具体効果は本変更では追加定義しない.
+`TacticsBattleSpecialType`は「[型定義](../design/types.md)」のEnumを使用する. 以下の表を各Typeの具体効果の正本とする.
 
 | TacticsBattleSpecialType | 名称 | 効果 |
 |---|---|---|
+| `TACTICS_BATTLE_SPECIAL_ACCELERATOR` | アクセラレーター | 戦闘時, 味方パーティ全体の速度を上昇させる. |
 | `TACTICS_BATTLE_SPECIAL_ASSAULT` | アサルト | 戦闘時, 味方パーティの攻撃力を上昇させる. |
-| `TACTICS_BATTLE_SPECIAL_ASSAULT_ORDER` | アサルトオーダー | 味方騎士団全体の攻撃力を上昇させる. |
-| `TACTICS_BATTLE_SPECIAL_ERASE` | イレイス | 敵から受ける最初の通常攻撃ダメージを0にする. |
+| `TACTICS_BATTLE_SPECIAL_ERASE` | イレイス | 敵から受ける最初の通常攻撃ダメージを0にする. 最初の通常攻撃へ適用した時点でERASE消費済み状態へ遷移する. |
 | `TACTICS_BATTLE_SPECIAL_ACE` | エース | 戦闘時, 味方パーティの攻撃力・防御力を上昇させる. |
-| `TACTICS_BATTLE_SPECIAL_ACE_ORDER` | エースオーダー | 味方騎士団全体の攻撃力・防御力を上昇させる. |
 | `TACTICS_BATTLE_SPECIAL_EXTERLIZE` | エクスターライズ | 攻撃回数が多いほどバトル獲得スコアを上昇させる. |
 | `TACTICS_BATTLE_SPECIAL_EX_DRIVE` | エクスドライブ | キリ番キャッスルブレイク時の獲得スコアを上昇させる. |
+| `TACTICS_BATTLE_SPECIAL_EDGE_NOTE` | エッジノート | キャッスルブレイク時の獲得スコアを上昇させ, BPを回復する. |
 | `TACTICS_BATTLE_SPECIAL_ELYSION` | エリュシオン | 強襲を無効化し, 戦闘時の攻撃力を上昇させ, 回避を発動させる. |
+| `TACTICS_BATTLE_SPECIAL_ENDER_BREAK` | エンダーブレイク | 騎士団戦スコアを上昇させ, キリ番キャッスルブレイクの最大値を上昇させる. |
 | `TACTICS_BATTLE_SPECIAL_ORACLE` | オラクル | 戦闘時, 味方パーティのスキル発動率を上昇させる. |
 | `TACTICS_BATTLE_SPECIAL_ORATORIO` | オラトリオ | 強襲を無効化し, 戦闘時の攻撃力・スキル発動率を上昇させる. |
 | `TACTICS_BATTLE_SPECIAL_CURSE` | カーズ | 対戦騎士団全体のスキル発動率を低下させる. |
+| `TACTICS_BATTLE_SPECIAL_COUNTER` | カウンター | 迎撃時, 味方パーティ全体の攻撃力・防御力を上昇させる. |
 | `TACTICS_BATTLE_SPECIAL_CASTLE_WEAKNESS` | キャッスルウィークネス | 対戦騎士団の城Lvを低下させる. |
 | `TACTICS_BATTLE_SPECIAL_CASTLE_VEIL` | キャッスルヴェール | 味方騎士団の城Lvを上昇させる. |
 | `TACTICS_BATTLE_SPECIAL_CLAUSTRUM` | クラウストルム | ヘイトを上昇させ, 迎撃時に攻撃力・防御力を上昇させる. |
@@ -95,23 +97,36 @@
 | `TACTICS_BATTLE_SPECIAL_CLEVER_NOTE` | クレバーノート | バトルで敵を全滅させた場合に獲得スコアを上昇させ, TPを回復する. |
 | `TACTICS_BATTLE_SPECIAL_JUGGERNAUT` | ジャガーノート/煌 | バトルで敵を全滅させた場合にBPを回復する. |
 | `TACTICS_BATTLE_SPECIAL_SHADOW` | シャドウ | バトル時の強襲CB率を上昇させる. |
-| `TACTICS_BATTLE_SPECIAL_SHADOW_ORDER` | シャドウオーダー | 味方騎士団全体の強襲CB率を上昇させる. |
+| `TACTICS_BATTLE_SPECIAL_STEALTH` | ステルス | 強襲CB発生率および強襲CB時の獲得スコアを上昇させる. |
 | `TACTICS_BATTLE_SPECIAL_STREAM` | ストリーム | 戦闘時, 味方パーティの攻撃力・速度を上昇させる. |
+| `TACTICS_BATTLE_SPECIAL_SLASHER` | スラッシャー | キリ番キャッスルブレイク時の獲得スコアを上昇させる. |
+| `TACTICS_BATTLE_SPECIAL_SLOW_RATE` | スロウレート | 対戦相手パーティのキャラクター速度を低下させる. |
 | `TACTICS_BATTLE_SPECIAL_TARANTELLA` | タランテラ | 戦闘時, 味方パーティのスキル発動率・速度を上昇させる. |
 | `TACTICS_BATTLE_SPECIAL_DIVINE_ACTIVE` | ディバインアクティブ | 戦闘時, 味方パーティのスキル発動率・最大TPを上昇させる. |
 | `TACTICS_BATTLE_SPECIAL_DIVINE_ETOILE` | ディバインエトワール | 戦闘時, 味方パーティの攻撃力・防御力・最大TPを上昇させる. |
 | `TACTICS_BATTLE_SPECIAL_DIVINE_THRUST` | ディバインスラスト | 戦闘時, 味方パーティの攻撃力・最大TPを上昇させる. |
 | `TACTICS_BATTLE_SPECIAL_DIVINE_RAPID` | ディバインラピッド | 戦闘時, 味方パーティの速度・最大TPを上昇させる. |
 | `TACTICS_BATTLE_SPECIAL_BERSERK` | バーサク | 強襲を無効化し, 戦闘時の攻撃力・防御力を上昇させる. |
+| `TACTICS_BATTLE_SPECIAL_HIDE` | ハイド | 攻撃対象として選択される確率を低下させる. |
 | `TACTICS_BATTLE_SPECIAL_PANZER` | パンツァー | 強襲を無効化し, 戦闘時の防御力・速度を上昇させる. |
+| `TACTICS_BATTLE_SPECIAL_HEAL` | ヒール | 生存している味方キャラクターのHPを回復する. |
+| `TACTICS_BATTLE_SPECIAL_PHALANX` | ファランクス | 味方騎士団全体の強襲CB率を低下させ, 防御力を上昇させる. |
+| `TACTICS_BATTLE_SPECIAL_FORCE_OF_WISH` | フォースオブウィッシュ | 味方騎士団員全員のBPを回復する. |
 | `TACTICS_BATTLE_SPECIAL_FORCE_OF_PLAY` | フォースオブプレイ | 使用者自身を除く味方騎士団員のTPを小アップとして回復する. 回復量はマスターデータで保持する. |
 | `TACTICS_BATTLE_SPECIAL_FORTRESS` | フォートレスオーダー | 味方騎士団全体の防御力を上昇させる. |
 | `TACTICS_BATTLE_SPECIAL_BLITZ` | ブリッツ | 強襲CB発生率および強襲CB時の獲得スコアを上昇させる. |
+| `TACTICS_BATTLE_SPECIAL_PROVOKE` | プロヴォーク | 攻撃対象として選択される確率を上昇させる. |
 | `TACTICS_BATTLE_SPECIAL_POINT_RISE` | ポイントライズ | 獲得する騎士団戦スコアを小アップさせる. 上昇量はマスターデータで保持する. |
 | `TACTICS_BATTLE_SPECIAL_MENACE` | メナス | 対戦騎士団全体の防御力を低下させる. |
 | `TACTICS_BATTLE_SPECIAL_RAMPAGE` | ランページ | バトルで獲得する騎士団戦スコアを小アップさせる. 上昇量はマスターデータで保持する. |
+| `TACTICS_BATTLE_SPECIAL_REVIVE` | リヴァイブ | `revive_rate`の確率で戦闘不能の味方キャラクターを復帰させる. |
 | `TACTICS_BATTLE_SPECIAL_RECONTRACT` | リコントラクト | バトルで敵を全滅させた場合にBP・TPを回復する. |
+| `TACTICS_BATTLE_SPECIAL_RESURRECTION` | リザレクション | 味方パーティが全滅している場合だけ使用でき, `revive_rate`の確率でパーティ全員を復帰させる. |
+| `TACTICS_BATTLE_SPECIAL_RECT_NOTE` | レクトノート | バトルで敵を全滅させた場合にBPを回復する. |
 | `TACTICS_BATTLE_SPECIAL_WISE_NOTE` | ワイズノート | バトルで敵を全滅させた場合に獲得スコアを上昇させ, BPを回復する. |
+| `TACTICS_BATTLE_SPECIAL_ASSAULT_ORDER` | アサルトオーダー | 味方騎士団全体の攻撃力を上昇させる. |
+| `TACTICS_BATTLE_SPECIAL_ACE_ORDER` | エースオーダー | 味方騎士団全体の攻撃力・防御力を上昇させる. |
+| `TACTICS_BATTLE_SPECIAL_SHADOW_ORDER` | シャドウオーダー | 味方騎士団全体の強襲CB率を上昇させる. |
 
 ### パラメータ
 
@@ -132,8 +147,14 @@
 * BP固定回復量.
 * TP固定回復量.
 * 攻撃回数連動スコア補正.
+* キリ番キャッスルブレイク最大値補正.
+* 生存キャラクターHP回復効果値. 具体的な回復式は別途仕様で定義する.
+* 攻撃対象選択確率補正.
+* 戦闘不能キャラクター復帰発動率.
 
 強襲無効, 最初の通常攻撃ダメージ0, 回避発動等の真偽型挙動は`special_type`自体の意味として判定し, 数値パラメータを使用しない.
+`ENDER_BREAK`のキリ番CB最大値補正は`castle_break_score_limit`, `HEAL`のHP回復効果値は`hp_recovery_value`, `REVIVE` / `RESURRECTION`の復帰判定は`revive_rate`, `HIDE` / `PROVOKE`の攻撃対象選択確率補正は`attack_target_rate`を使用する. `PHALANX`の強襲CB率低下は`assault_castle_break_rate`を低下方向へ適用する. `HEAL`の具体的なHP回復式および`REVIVE` / `RESURRECTION`の復帰時HP量は本項では定義しない.
+`ERASE`は`TacticsActiveEffectState.erase_consumed=false`で開始し, 敵から受ける最初の通常攻撃ダメージを0にした時点で`erase_consumed=true`へ更新する. `erase_consumed=true`の間は以後の通常攻撃ダメージを0にしない.
 
 ### 適用箇所
 

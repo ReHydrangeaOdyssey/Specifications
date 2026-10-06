@@ -470,6 +470,7 @@ enum ApiErrorCode {
   API_ERROR_GUILD_INVITATION_NOT_ALLOWED = 36; // 団長・副団長以外が招待を送信した.
   API_ERROR_GUILD_INVITATION_NOT_FOUND = 37; // 指定Player向けの未承諾招待が存在しない.
   API_ERROR_INVALID_GUILD_LEADERSHIP_TARGET = 38; // 団長・副団長候補が対象Guild所属ではない, または団長と副団長が同一PlayerIDである.
+  API_ERROR_GUILD_LEADER_MOVE_NOT_ALLOWED = 39; // 団長以外のメンバーが存在する騎士団の団長が加入申請または招待によって別Guildへ移動しようとした.
 }
 ```
 
@@ -686,6 +687,10 @@ message TacticsBattleSpecialParameters {
   uint32 bp_recovery = 13; // 敵全滅等の発動条件成立時に回復するBP固定値.
   uint32 tp_recovery = 14; // 発動条件成立時に回復するTP固定値.
   float attack_count_score = 15; // 攻撃回数に応じたバトル獲得スコア増加に使用する補正値. 論理型CorrectionValue.
+  float castle_break_score_limit = 16; // キリ番キャッスルブレイクのスコア上限増加値. 論理型CorrectionValue.
+  float hp_recovery_value = 17; // 生存キャラクターHP回復で使用する効果値. 具体的な回復式は別途仕様で定義する. 論理型CorrectionValue.
+  float revive_rate = 18; // 戦闘不能キャラクター復帰判定で使用する発動確率. 論理型Rate.
+  float attack_target_rate = 19; // 攻撃対象として選択される確率への補正値. HIDE / PROVOKEで使用する. 論理型CorrectionValue.
 }
 
 message TacticsBattleSpecialData {
@@ -709,6 +714,7 @@ message TacticsActiveEffectState {
   TacticsBattleSpecialData battle_special = 6; // effect_idがBATTLE_SPECIALの場合に保持する特殊効果データ.
   TacticsCountConsumeTrigger count_consume_trigger = 7; // COUNT型効果の残り回数を消費するイベント. COUNT以外では参照しない.
   TacticsEndType end_type = 8; // 継続中効果の終了方式.
+  bool erase_consumed = 9; // ERASEが最初の通常攻撃ダメージを0にする効果をすでに消費した場合true. ERASE以外ではfalse.
 }
 
 ```
@@ -755,6 +761,7 @@ enum GuildBattleStatus {
   GUILD_BATTLE_STATUS_IN_PROGRESS = 1; // 開戦中かつ新規処理受付中.
   GUILD_BATTLE_STATUS_RESOLVING = 2; // 30:00到達後, 新規受付停止済みで既存キュー解決中.
   GUILD_BATTLE_STATUS_COMPLETED = 3; // 騎士団戦終了.
+  GUILD_BATTLE_STATUS_PRELOAD_FAILED = 4; // 開戦前Preload失敗により当該対戦を取りやめ, 運営判断待ちとなっている.
 }
 ```
 

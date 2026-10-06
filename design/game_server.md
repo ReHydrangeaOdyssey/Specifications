@@ -61,6 +61,7 @@
 
 * `DiscordNotificationEnabled=true`の場合, GameServerからDiscord Botへ運営通知を送信する.
 * 容量上限到達時はDiscord Botへ処理容量上限到達メッセージを送信する.
+* 騎士団戦開戦前Preload失敗時は, 当該対戦を`GUILD_BATTLE_STATUS_PRELOAD_FAILED`へ遷移させた後, Discord BotへPreload失敗メッセージを送信する.
 * `DiscordNotificationEnabled=false`の場合はDiscord Botへの通知を行わない. 通知以外のErrorLog保存および処理結果には影響させない.
 
 * アリーナの`StartArenaBattle`ではAccessToken・PlayerID等の検証完了後に共通内部API`GenerateTimeBasedSeed`でSeedを生成し, そのSeedでランダム対戦相手を抽選する.

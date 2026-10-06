@@ -206,12 +206,18 @@ GuildNameが制約を満たさない場合は`ApiErrorResponse(API_ERROR_INVALID
 #### 処理内容
 
 - AccessTokenを検証する.
+- Private APIで申請Playerの現在所属Guildにおける役職と所属人数を確認する.
+- 申請Playerが現在所属Guildの団長で, 団長以外のメンバーが1人以上存在する場合は加入申請を受け付けない. 副団長にはこの制約を適用しない.
 - Private APIの`SaveGuildJoinApplication`で未承認加入申請を保存する.
 - 本APIでは所属GuildIDを変更しない.
 
 #### 要求・レスポンス
 
 [API Payload](api_payload.md)の「ApplyGuildJoinRequest」「ApplyGuildJoinResponse」を参照する.
+
+#### 失敗時レスポンス
+
+団長以外のメンバーが存在するGuildの団長が申請した場合は`API_ERROR_GUILD_LEADER_MOVE_NOT_ALLOWED`を返す.
 
 ### 騎士団加入申請承認
 
@@ -222,10 +228,9 @@ GuildNameが制約を満たさない場合は`ApiErrorResponse(API_ERROR_INVALID
 #### 処理内容
 
 - AccessTokenを検証する.
-- 承認要求Playerが加入申請の承認権限を持つことをPrivate APIで確認する. 承認可能な役職条件は現時点では未定義とする.
+- 承認要求Playerが加入先Guildの現在の団長または副団長であることをPrivate APIで確認する.
 - 未承認の加入申請が存在することを確認する.
-- 申請Playerの現在所属Guildと加入先Guildが所属変更禁止期間ではないことを確認する.
-- Databaseトランザクション内で加入先Guildの所属人数が20未満であることを再確認し, 条件を満たす場合だけ申請Playerの所属を加入先Guildへ変更して加入申請を削除する.
+- 加入成立判定はPrivate APIのDatabaseトランザクション内で行う. 申請Playerの加入元Guildと加入先Guildの`GUILD.membership_locked=false`, 加入先Guildの所属人数20未満, 団長移動制約をすべて再確認し, 条件を満たす場合だけ所属を変更して加入申請を削除する.
 
 #### 要求・レスポンス
 
@@ -233,7 +238,7 @@ GuildNameが制約を満たさない場合は`ApiErrorResponse(API_ERROR_INVALID
 
 #### 失敗時レスポンス
 
-所属人数が20人の場合は`API_ERROR_GUILD_FULL`, 承認権限がない場合は`API_ERROR_GUILD_JOIN_APPROVAL_NOT_ALLOWED`, 加入申請が存在しない場合は`API_ERROR_GUILD_JOIN_APPLICATION_NOT_FOUND`, 所属変更禁止期間の場合は`API_ERROR_GUILD_MEMBERSHIP_CHANGE_NOT_ALLOWED`を返す.
+所属人数が20人の場合は`API_ERROR_GUILD_FULL`, 承認権限がない場合は`API_ERROR_GUILD_JOIN_APPROVAL_NOT_ALLOWED`, 加入申請が存在しない場合は`API_ERROR_GUILD_JOIN_APPLICATION_NOT_FOUND`, 所属変更禁止期間の場合は`API_ERROR_GUILD_MEMBERSHIP_CHANGE_NOT_ALLOWED`, 申請Playerが団長移動制約に違反する場合は`API_ERROR_GUILD_LEADER_MOVE_NOT_ALLOWED`を返す.
 
 ### 騎士団招待送信
 
@@ -245,6 +250,7 @@ GuildNameが制約を満たさない場合は`ApiErrorResponse(API_ERROR_INVALID
 
 - AccessTokenを検証する.
 - 招待を送信できるのは対象Guildの団長または副団長だけとする.
+- 招待対象Playerが現在所属Guildの団長で, 団長以外のメンバーが1人以上存在する場合は招待を送信しない. 副団長にはこの制約を適用しない.
 - Private APIの`SaveGuildInvitation`で招待を保存する.
 - 本APIでは招待対象Playerの所属GuildIDを変更しない.
 
@@ -254,7 +260,7 @@ GuildNameが制約を満たさない場合は`ApiErrorResponse(API_ERROR_INVALID
 
 #### 失敗時レスポンス
 
-団長・副団長以外が要求した場合は`API_ERROR_GUILD_INVITATION_NOT_ALLOWED`を返す.
+団長・副団長以外が要求した場合は`API_ERROR_GUILD_INVITATION_NOT_ALLOWED`, 招待対象Playerが団長移動制約に違反する場合は`API_ERROR_GUILD_LEADER_MOVE_NOT_ALLOWED`を返す.
 
 ### 騎士団招待承諾
 
@@ -266,8 +272,7 @@ GuildNameが制約を満たさない場合は`ApiErrorResponse(API_ERROR_INVALID
 
 - AccessTokenを検証する.
 - 要求Player宛ての未承諾招待が存在することを確認する.
-- 要求Playerの現在所属Guildと招待元Guildが所属変更禁止期間ではないことを確認する.
-- Databaseトランザクション内で招待元Guildの所属人数が20未満であることを再確認し, 条件を満たす場合だけ要求Playerの所属を招待元Guildへ変更して招待を削除する.
+- 加入成立判定はPrivate APIのDatabaseトランザクション内で行う. 要求Playerの加入元Guildと招待元Guildの`GUILD.membership_locked=false`, 招待元Guildの所属人数20未満, 団長移動制約をすべて再確認し, 条件を満たす場合だけ所属を変更して招待を削除する.
 
 #### 要求・レスポンス
 
@@ -275,7 +280,7 @@ GuildNameが制約を満たさない場合は`ApiErrorResponse(API_ERROR_INVALID
 
 #### 失敗時レスポンス
 
-所属人数が20人の場合は`API_ERROR_GUILD_FULL`, 招待が存在しない場合は`API_ERROR_GUILD_INVITATION_NOT_FOUND`, 所属変更禁止期間の場合は`API_ERROR_GUILD_MEMBERSHIP_CHANGE_NOT_ALLOWED`を返す.
+所属人数が20人の場合は`API_ERROR_GUILD_FULL`, 招待が存在しない場合は`API_ERROR_GUILD_INVITATION_NOT_FOUND`, 所属変更禁止期間の場合は`API_ERROR_GUILD_MEMBERSHIP_CHANGE_NOT_ALLOWED`, 要求Playerが団長移動制約に違反する場合は`API_ERROR_GUILD_LEADER_MOVE_NOT_ALLOWED`を返す.
 
 ### 騎士団脱退
 
@@ -286,7 +291,7 @@ GuildNameが制約を満たさない場合は`ApiErrorResponse(API_ERROR_INVALID
 #### 処理内容
 
 - AccessTokenを検証する.
-- 現在所属している騎士団が騎士団戦開戦前処理開始後から終了までの所属変更禁止期間ではないことを確認する.
+- Private APIで脱退元Guildと`GuildID = PlayerID`の復帰先初期Guildの`GUILD.membership_locked`を確認する. いずれかが`true`の場合は脱退しない.
 - 新しい騎士団は生成しない.
 - Private APIの`LeaveGuildPrivate`を呼び出し, `GuildID = PlayerID`で既存の初期騎士団を特定して所属を戻す.
 - 初期騎士団の団長が脱退Player以外へ交代済みの場合は, 脱退Playerと初期騎士団の現在団長の所属GuildIDを同一トランザクションでスワップする. 脱退Playerは自身の初期騎士団へ戻し, 初期騎士団の現在団長は脱退Playerが直前まで所属していたGuildIDへ移動する.
@@ -369,7 +374,7 @@ GuildNameが制約を満たさない場合は`ApiErrorResponse(API_ERROR_INVALID
 騎士団戦参加後, GameServerは`GuildBattleID`ごとに`PlayerID -> RequestSequence`のマップを保持する.
 
 - 参加前の初期値は`0`とする.
-- `JoinGuildBattle`成功時に, 騎士団戦本体PRNGを1回消費して`next_bounded(1,000,000,000) + 1`を求め, プレイヤー固有の初期RequestSequenceとして割り当てる. 他プレイヤーとの重複は許可する.
+- 初回の`JoinGuildBattle`成功時に限り, 騎士団戦本体PRNGを1回消費して`next_bounded(1,000,000,000) + 1`を求め, プレイヤー固有の初期RequestSequenceとして割り当てる. 他プレイヤーとの重複は許可する. すでにJoin済みのPlayerが再実行した場合はPRNGを消費せず, 現在保持しているRequestSequenceを返す.
 - 参加後の騎士団戦PublicAPI要求は, 再接続用の`GetGuildBattleStatus`を除き`GuildBattleID`, `PlayerID`, `RequestSequence`を含む.
 - `GetGuildBattleStatus`はAccessToken・PlayerID・GuildBattleIDで本人性と参加状態を検証し, 現在のRequestSequenceを含む状態一式を返す. この要求ではRequestSequenceを加算しない.
 - 要求RequestSequenceがGameServer保持値と一致する場合のみ処理する.
@@ -417,7 +422,7 @@ GuildNameが制約を満たさない場合は`ApiErrorResponse(API_ERROR_INVALID
   - 要求`GuildID`が, その`GuildBattleID`で対戦中の騎士団のいずれかであることを確認する.
   - `PlayerID`の現在所属GuildIDが要求`GuildID`と一致することを確認する.
 - 参加可能時は`AuthenticatedContext.SessionID`に対応するRefresh Sessionの期限をPrivate API Server経由で72時間後へ更新する. Sessionが存在しない, または期限切れの場合は参加を拒否する.
-- PlayerIDへ初期RequestSequenceを割り当てる.
+- PlayerIDが未Joinの場合だけ騎士団戦本体PRNGを消費して初期RequestSequenceを割り当てる. すでにJoin済みの場合はPRNGを消費せず現在保持しているRequestSequenceを返す.
 
 #### 要求データ
 

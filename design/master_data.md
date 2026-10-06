@@ -15,9 +15,6 @@ message ProcessedMasterData {
   repeated SkillMasterData skills = 2; // 加工済みスキルマスターデータ一覧.
   repeated AbilityMasterData abilities = 3; // 加工済みアビリティマスターデータ一覧.
   repeated TacticsMasterData tactics = 4; // 加工済みタクティクスマスターデータ一覧.
-  repeated FormationMasterData formations = 5; // 加工済みフォーメーションマスターデータ一覧.
-  repeated ItemMasterData items = 6; // 加工済みアイテムマスターデータ一覧.
-  repeated GuildMasterData guilds = 7; // 加工済み騎士団データ一覧.
 }
 
 message CharacterMasterData {
@@ -176,46 +173,11 @@ message TacticsMasterData {
   repeated TacticsEffectData effects = 11; // タクティクスが持つ基本効果一覧.
 }
 
-message FormationPositionMasterData {
-  uint32 position_no = 1; // フォーメーション内の位置番号.wire上はuint32, 論理型FormationSlotID.
-  FormationConditionID condition_id = 2; // この位置の補正を適用する属性条件.
-  float attack_correction = 3; // 攻撃力補正値. 論理型CorrectionValue.
-  float defense_correction = 4; // 防御力補正値. 論理型CorrectionValue.
-  float speed_correction = 5; // 速度補正値. 論理型CorrectionValue.
-  float skill_correction = 6; // スキル発動率補正値. 論理型CorrectionValue.
-}
-
-message FormationMasterData {
-  uint32 id = 1; // フォーメーションID. 論理型FormationID.
-  string name = 2; // フォーメーション名. 論理型Name.
-  string description = 3; // フォーメーション効果説明文. 論理型Description.
-  repeated FormationPositionMasterData positions = 4; // 使用マスと各位置の条件・補正値一覧.
-}
-
-message ItemMasterData {
-  uint32 id = 1; // アイテムID. 論理型ItemID.
-  string name = 2; // アイテム名. 論理型Name.
-  string description = 3; // アイテム効果説明文. 論理型Description.
-  ItemType type = 4; // アイテム種別.
-  float effect_value = 5; // アイテム効果値. 論理型CorrectionValue.
-}
-message GuildMasterData {
-  uint64 id = 1; // 騎士団ID. 論理型GuildID.
-  string name = 2; // 騎士団名. 論理型Name.
-  repeated uint64 member_player_ids = 3; // 所属メンバーのPlayerID一覧. 各要素は論理型PlayerID.
-  uint32 castle_level = 4; // 城レベル.
-  uint32 armory_level = 5; // 武器庫レベル.
-  uint32 food_storage_level = 6; // 食糧庫レベル.
-  uint32 blacksmith_level = 7; // 鍛冶屋レベル.
-  uint32 tactics_room_level = 8; // 兵法所レベル.
-  uint32 tavern_level = 9; // 酒場レベル.
-  GuildBattleStartTime daytime_start_time = 10; // 昼時間帯の騎士団戦開始時刻.11:30 / 12:15 / 13:00のいずれか.
-  GuildBattleStartTime nighttime_start_time = 11; // 夜時間帯の騎士団戦開始時刻.21:00 / 22:00 / 23:00のいずれか.
-}
-
 ```
 
-`GuildMasterData`は団長・副団長を保持しない. 団長・副団長はプレイヤー操作によって決定される実行時データであり, Databaseの`GUILD.leader_player_id`および`GUILD.subleader_player_id`だけを正本とする.
+加工済み`ProcessedMasterData`に含めるのは`CharacterMasterData`, `SkillMasterData`, `AbilityMasterData`, `TacticsMasterData`の4系統だけとする.
+Player, Guild, 所属, 役職等の実行時可変データは加工済みマスターデータへ保持しない.
+`FORMATION` / `FORMATION_POSITION`および`ITEM`はDatabase上の固定参照データとして保持し, `ProcessedMasterData`には含めない.
 
 ## スキル固有データの共有体
 
@@ -244,7 +206,7 @@ message GuildMasterData {
 
 ## 効果値の合算規則
 
-* スキル, アビリティ, タクティクス, フォーメーションの効果値は加工済みマスターデータに保持する.
+* スキル, アビリティ, タクティクスの効果値は加工済みマスターデータに保持する. フォーメーション補正はDatabaseの`FORMATION_POSITION`を固定参照データとして使用する.
 * 同一系列の効果値はすべて加算する.
 * スキルは同じ`SkillEffectID`系列, アビリティは同じ`AbilityEffectID`系列, タクティクスは同じ`TacticsEffectID`系列として扱う.
 * `SkillEffectID`, `AbilityEffectID`, `TacticsEffectID`は相互に別の列挙型であり, 異なる種別間で列挙値を共有しない.

@@ -37,7 +37,8 @@ erDiagram
         GuildID id PK
         Name name
         PlayerID leader_player_id FK
-        PlayerID subleader_player_id FK
+        PlayerID subleader_player_id
+        Bool membership_locked
         Count castle_level
         Count armory_level
         Count food_storage_level
@@ -74,7 +75,6 @@ erDiagram
     PLAYER ||--o{ GUILD_INVITATION : receives
 
     PLAYER ||--o| GUILD : leader
-    PLAYER ||--o| GUILD : subleader
 ```
 
 `ACCOUNT.login_id`は一意制約を設定する. Passwordの平文は保存せず, Argon2idで生成した`password_hash`だけを保存する.
@@ -93,18 +93,21 @@ Logout時は対象`ACCOUNT_SESSION`レコードを削除する.
 ## GUILD / GUILD_MEMBER 制約
 
 * `GUILD.name`はUTF-8, 最大10文字, 空文字不可とし, 騎士団間の重複を許可する.
+* 所属変更禁止状態の正本は`GUILD.membership_locked`とする. GameServer上の一時状態だけを正本として使用しない.
 * プレイヤーの初期騎士団は`GUILD.id = PLAYER.id`となるように作成する.
 * 初期騎士団作成時は`castle_level`, `armory_level`, `food_storage_level`, `smithy_level`, `strategy_office_level`, `tavern_level`をすべて1で保存する.
 * 初期騎士団は, その所有プレイヤーが別の騎士団へ所属している間も`GUILD`レコードを削除しない.
-* 初期騎士団作成時の`leader_player_id`は所有プレイヤーとする. 作成後は通常の騎士団と同様に役職変更できる.
+* 初期騎士団作成時の`leader_player_id`は所有プレイヤー, `subleader_player_id`は`0`, `membership_locked`は`false`とする. `subleader_player_id=0`は副団長未設定を表し, 0以外の場合だけ実在するPlayerIDを指定する. 作成後は通常の騎士団と同様に役職変更できる.
 * 初期騎士団については, 所有プレイヤーが別の騎士団へ所属している間に限り`GUILD_MEMBER`が0件となる状態を許可する.
 * `player_id`には一意制約を設定し, 1つのPlayerIDが同時に複数騎士団へ所属できないようにする.
 * 所属変更時は, 対象PlayerIDの既存`GUILD_MEMBER`行を削除してから新しいGuildIDの行を挿入する処理を同一トランザクションで行う.
 * `LeaveGuild`では新しい`GUILD`レコードを作成せず, `guild_id = player_id`の既存初期騎士団へ`GUILD_MEMBER`を戻す. 初期騎士団の団長を別Playerへ交代済みの場合は, 脱退Playerと当該初期騎士団の現在団長の所属GuildIDをスワップし, 初期騎士団の団長を戻った所有Playerへ変更する. これらは同一トランザクションで行う.
 * 団長・副団長変更時は`GUILD.leader_player_id`および`GUILD.subleader_player_id`を更新し, 加工済みマスターデータへは保存しない. 変更後の団長・副団長は対象Guildの`GUILD_MEMBER`に存在するPlayerだけを許可し, 両PlayerIDは同一値を禁止する.
-* `GUILD_JOIN_APPLICATION`は未承認の加入申請だけを保持する. 申請承認で加入が成立した場合は対応行を削除する. 加入申請を承認できる役職条件は現時点では未定義とする.
+* `GUILD_JOIN_APPLICATION`は未承認の加入申請だけを保持する. 申請承認で加入が成立した場合は対応行を削除する. 加入申請を承認できるのは対象Guildの現在の団長または副団長だけとする.
 * `GUILD_INVITATION`は未承諾の招待だけを保持する. 招待承諾で加入が成立した場合は対応行を削除する. `inviter_player_id`は招待送信時点の団長または副団長PlayerIDを保持する.
-* 加入申請承認および招待承諾では, 対象Guildの所属人数が20未満であることをDatabaseトランザクション内で再確認してから`GUILD_MEMBER`を更新する. 20人の場合は更新しない.
+* 加入申請作成時および招待作成時は, 移動対象Playerが現在所属Guildの団長かつ当該Guildに団長以外のメンバーが存在する場合は作成しない. 副団長にはこの移動制約を適用しない. 加入承認・招待承諾時にも同条件を再確認する.
+* 加入申請承認および招待承諾では, 対象Guildの所属人数が20未満であること, 加入元Guildと加入先Guildの`membership_locked=false`であることをDatabaseトランザクション内で再確認してから`GUILD_MEMBER`を更新する. 20人の場合またはいずれかのGuildがロック中の場合は更新しない.
+* `LeaveGuild`では脱退元Guildおよび復帰先の初期Guildの`membership_locked=false`を同一トランザクション内で確認する. いずれかがロック中の場合は所属変更・所属スワップを行わない.
 * `GUILD.daytime_start_time`は`GUILD_BATTLE_START_1130`, `GUILD_BATTLE_START_1215`, `GUILD_BATTLE_START_1300`のいずれか1つとする.
 * `GUILD.nighttime_start_time`は`GUILD_BATTLE_START_2100`, `GUILD_BATTLE_START_2200`, `GUILD_BATTLE_START_2300`のいずれか1つとする.
 
@@ -217,6 +220,10 @@ erDiagram
         Count bp_recovery
         Count tp_recovery
         CorrectionValue attack_count_score
+        CorrectionValue castle_break_score_limit
+        CorrectionValue hp_recovery_value
+        Rate revive_rate
+        CorrectionValue attack_target_rate
     }
 
     TACTICS_EFFECT {
@@ -254,6 +261,10 @@ erDiagram
         Count bp_recovery
         Count tp_recovery
         CorrectionValue attack_count_score
+        CorrectionValue castle_break_score_limit
+        CorrectionValue hp_recovery_value
+        Rate revive_rate
+        CorrectionValue attack_target_rate
     }
 
     CHARACTER_SKILL {
@@ -300,6 +311,8 @@ erDiagram
 `SKILL.effect_id`は「[型定義](types.md)」の`SkillEffectID`, `ABILITY.effect_id`は`AbilityEffectID`, `TACTICS_EFFECT.effect_id`は`TacticsEffectID`を使用する. これら3つは相互に別の列挙型とする. `ABILITY.condition_id`は発動条件を保持し, 具体値が必要な場合だけ`ABILITY_CONDITION_VALUE.condition_value`を使用する. `ABILITY`の効果固有値は加工済み`AbilityMasterData.effect_data`の`oneof`に対応する詳細テーブルへ格納する. `no_parameter`を使用するAbilityEffectIDでは効果詳細テーブルを使用しない. `ABILITY_EFFECT_STATUS.status`は`ABILITY_EFFECT_AVOIDANCE`で攻撃回避を表す場合にNULLを許可し, 状態異常回避および`ABILITY_EFFECT_STATUS_ABNORMALITY_ATTACK`では対象または付与する`StatusAbnormalityID`を保持する. 発動条件値と効果詳細は独立して保持するため同時に存在できる.
 同一`TacticsEffectID`系列の効果値はすべて加算する. 段階レベル`n`の最終効果値は`基本効果値 + (n - 1) * 増加値`で算出する. `TACTICS_STAGE_EFFECT.increase_value`は浮動小数点効果, `increase_uint_value`はBP固定回復等の整数効果に使用する. `TACTICS_EFFECT_BATTLE_SPECIAL`の段階上昇量は`TACTICS_STAGE_BATTLE_SPECIAL_EFFECT`へ`TacticsBattleSpecialParameters`に対応する各数値として保持する. `TACTICS_EFFECT.correction_value`は浮動小数点効果, `TACTICS_EFFECT.uint_value`はBP固定回復等の整数効果に使用する. `TACTICS_EFFECT_HP_RECOVERY`は`TACTICS_HP_RECOVERY_EFFECT`, `TACTICS_EFFECT_BATTLE_SPECIAL`は`TACTICS_BATTLE_SPECIAL_EFFECT`へ効果固有値を保持する. 使用しない値列はNULLとする. `TACTICS.end_type=TACTICS_END_TYPE_COUNT`の場合は`TACTICS.count_consume_trigger`で残り回数を消費するイベントを指定する.
 
+
+`FORMATION` / `FORMATION_POSITION`および`ITEM`はDatabase上の固定参照データとして保持するが, `ProcessedMasterData`には含めない. 騎士団・Player・所属・役職などの実行時可変データも`ProcessedMasterData`には含めない.
 
 ```mermaid
 erDiagram

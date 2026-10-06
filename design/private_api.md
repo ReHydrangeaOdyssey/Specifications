@@ -121,6 +121,7 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 #### 処理内容
 
 - 新規騎士団をDatabaseへ保存する.
+- 初期騎士団作成時は`subleader_player_id=0`, `membership_locked=false`で初期化する.
 
 #### 要求データ
 
@@ -144,6 +145,22 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 
 [API Payload](api_payload.md)の「SaveGuildLeadershipRequest」を参照する.
 
+### 騎士団所属変更ロック更新
+
+#### メソッド名
+
+`SetGuildMembershipLock`
+
+#### 処理内容
+
+- 指定されたすべてのGuildIDについて`GUILD.membership_locked`を要求値へ更新する.
+- 騎士団戦開戦前処理開始時は`true`, 騎士団戦終了または運営判断による中止時は`false`へ更新する.
+- 所属変更禁止状態の正本はDatabaseの`GUILD.membership_locked`とする.
+
+#### 要求・レスポンス
+
+[API Payload](api_payload.md)の「SetGuildMembershipLockRequest」「SetGuildMembershipLockResponse」を参照する.
+
 ### 騎士団加入申請保存
 
 #### メソッド名
@@ -152,6 +169,8 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 
 #### 処理内容
 
+- 申請Playerの現在所属Guildにおける役職と所属人数をDatabaseから取得する.
+- 申請Playerが現在所属Guildの団長で, 団長以外のメンバーが1人以上存在する場合は`API_ERROR_GUILD_LEADER_MOVE_NOT_ALLOWED`として申請を保存しない. 副団長にはこの制約を適用しない.
 - `GUILD_JOIN_APPLICATION`へ未承認加入申請を保存する.
 - 本処理では`GUILD_MEMBER`を変更しない.
 
@@ -167,10 +186,12 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 
 #### 処理内容
 
-- RequesterPlayerIDが対象Guildの加入申請を承認できる権限を持つことをDatabase上で確認する. 承認可能な役職条件は現時点では未定義とする.
+- RequesterPlayerIDが対象Guildの現在の`leader_player_id`または`subleader_player_id`と一致することをDatabase上で確認する.
 - `GUILD_JOIN_APPLICATION`に対象申請が存在することを確認する.
+- 同一Databaseトランザクション内でApplicantPlayerIDの現在所属Guildと加入先Guildを取得し, 両Guildの`membership_locked=false`を再確認する.
+- ApplicantPlayerIDが現在所属Guildの団長で, 団長以外のメンバーが1人以上存在する場合は加入を成立させない. 副団長にはこの制約を適用しない.
 - 対象Guildの`GUILD_MEMBER`件数を同一トランザクション内で確認し, 20人以上の場合は加入を成立させない.
-- 条件を満たす場合だけApplicantPlayerIDの既存`GUILD_MEMBER`を加入先Guildへ更新し, 対応する加入申請を削除する.
+- すべての条件を満たす場合だけApplicantPlayerIDの既存`GUILD_MEMBER`を加入先Guildへ更新し, 対応する加入申請を削除する.
 
 #### 要求データ
 
@@ -185,6 +206,7 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 #### 処理内容
 
 - RequesterPlayerIDが対象Guildの現在の団長または副団長であることをDatabase上で確認する.
+- InviteePlayerIDが現在所属Guildの団長で, 団長以外のメンバーが1人以上存在する場合は`API_ERROR_GUILD_LEADER_MOVE_NOT_ALLOWED`として招待を保存しない. 副団長にはこの制約を適用しない.
 - 権限を満たす場合だけ`GUILD_INVITATION`へ招待を保存する.
 - 本処理では`GUILD_MEMBER`を変更しない.
 
@@ -201,8 +223,10 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 #### 処理内容
 
 - 指定PlayerID宛ての`GUILD_INVITATION`が存在することを確認する.
+- 同一Databaseトランザクション内でPlayerIDの現在所属Guildと招待元Guildを取得し, 両Guildの`membership_locked=false`を再確認する.
+- PlayerIDが現在所属Guildの団長で, 団長以外のメンバーが1人以上存在する場合は加入を成立させない. 副団長にはこの制約を適用しない.
 - 対象Guildの`GUILD_MEMBER`件数を同一トランザクション内で確認し, 20人以上の場合は加入を成立させない.
-- 条件を満たす場合だけPlayerIDの既存`GUILD_MEMBER`を招待元Guildへ更新し, 対応する招待を削除する.
+- すべての条件を満たす場合だけPlayerIDの既存`GUILD_MEMBER`を招待元Guildへ更新し, 対応する招待を削除する.
 
 #### 要求データ
 
@@ -217,6 +241,7 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 #### 処理内容
 
 - PlayerIDの現在所属GuildIDと`GuildID = PlayerID`の初期騎士団を取得する.
+- 同一Databaseトランザクション内で脱退元Guildと復帰先初期Guildの`membership_locked=false`を再確認する. いずれかが`true`の場合は所属変更・所属スワップを行わない.
 - 初期騎士団の現在団長がPlayerID自身の場合は, PlayerIDだけを初期騎士団へ戻す.
 - 初期騎士団の現在団長が別Playerの場合は, PlayerIDを初期騎士団へ戻し, その現在団長PlayerをPlayerIDが直前まで所属していたGuildIDへ移動し, 初期騎士団の団長をPlayerIDへ変更する.
 - 所属スワップと団長更新は同一トランザクションで行う.
@@ -462,22 +487,23 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 
 [API Payload](api_payload.md)の「UpdateGuildBattleStatusRequest」を参照する.
 
-### 開戦前データ再取得
+### Preload失敗対戦の再抽籤結果保存
 
 #### メソッド名
 
-`RetryGuildBattlePreload`
+`RematchPreloadFailedGuildBattles`
 
 #### 処理内容
 
-- 開戦前データ処理終了後かつ当該騎士団戦の開戦前に限り使用可能とする.
-- 指定GuildBattleIDについて, 要求に含まれる前回取得失敗PlayerIDの編成情報およびPLAYER_ITEM取得を再実行する.
-- 再取得に成功したプレイヤーは当該騎士団戦のGameServer保持データへ復帰させる.
-- 再取得に失敗したプレイヤーは当該騎士団戦のGameServer保持データから除外した状態を維持する.
+- 本APIは抽籤を行わない. 抽籤ロジックと疑似乱数消費はGameServer側で行う.
+- 要求されたGuildBattleIDがすべて`GUILD_BATTLE_STATUS_PRELOAD_FAILED`であることを確認する.
+- 要求のGuildBattleID集合と`Battles[]`のGuildBattleID集合が一致することを確認する.
+- 同一トランザクションで各対象`GUILD_BATTLE.guild_a_id` / `guild_b_id`をGameServer生成済みペアへ更新し, `status=scheduled`, `game_server_instance_id=NULL`へ戻す.
+- 問題解決後に運営が再抽籤を選択した場合だけGameServerから呼び出す.
 
 #### 要求・レスポンス
 
-[API Payload](api_payload.md)の「RetryGuildBattlePreloadRequest」「RetryGuildBattlePreloadResponse」を参照する.
+[API Payload](api_payload.md)の「RematchPreloadFailedGuildBattlesRequest」「RematchPreloadFailedGuildBattlesResponse」を参照する.
 
 ### 騎士団戦ログ送信
 

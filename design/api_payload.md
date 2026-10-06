@@ -473,8 +473,7 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 |---|---|---|
 | TP | `TP` | 使用後の現在TP |
 | RemainingCount | `Count` | 使用後の残り使用可能回数 |
-| EffectCount | `Count` | 発生した効果数 |
-| Effects | `TacticsEffectResult[]` | 発生した効果一覧 |
+| Effects | `TacticsEffectResult[]` | 発生した効果一覧. 効果数はこの配列長から判定する |
 | NextRequestSequence | `RequestSequence` | 要求成功後の次要求シーケンス番号 |
 
 ### UseItemRequest
@@ -665,7 +664,7 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 |---|---|---|
 | GuildID | `GuildID` | 保存する騎士団ID |
 | GuildName | `Name` | 騎士団名. UTF-8, 最大10文字, 空文字不可, 重複可 |
-| LeaderPlayerID | `PlayerID` | 団長PlayerID |
+| LeaderPlayerID | `PlayerID` | 団長PlayerID. 初期騎士団作成時はDatabase側で副団長PlayerIDを0へ初期化する |
 | DaytimeStartTime | `GuildBattleStartTime` | 昼開始時刻.11:30 / 12:15 / 13:00のいずれか |
 | NighttimeStartTime | `GuildBattleStartTime` | 夜開始時刻.21:00 / 22:00 / 23:00のいずれか |
 
@@ -721,6 +720,17 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 | GuildID | `GuildID` | 更新対象の騎士団ID |
 | LeaderPlayerID | `PlayerID` | 保存する団長PlayerID. 対象Guild所属Playerのみ指定可能 |
 | SubleaderPlayerID | `PlayerID` | 保存する副団長PlayerID. 対象Guild所属Playerのみ指定可能かつLeaderPlayerIDと同一値不可 |
+
+### SetGuildMembershipLockRequest
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| GuildID | `GuildID[]` | 所属変更禁止状態を更新する騎士団ID一覧 |
+| Locked | `Bool` | `true`で所属変更禁止, `false`で解除 |
+
+### SetGuildMembershipLockResponse
+
+- 指定Guildの`GUILD.membership_locked`更新完了とする.
 
 ### SaveArenaPartyRequest
 
@@ -925,31 +935,20 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 | GuildBattleID | `GuildBattleID` | 対象騎士団戦ID |
 | Status | `GuildBattleStatus` | 更新後の状態 |
 
-### GuildBattlePreloadPlayerData
+### RematchPreloadFailedGuildBattlesRequest
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| PlayerID | `PlayerID` | プレイヤーID |
-| MaxBP | `BP` | 最大BP |
-| FormationID | `FormationID` | 騎士団戦フォーメーションID |
-| Characters | `GuildBattlePartyCharacter[10]` | 騎士団戦編成 |
-| Items | `PlayerItemData[]` | 所持アイテム一覧 |
+| GuildBattleID | `GuildBattleID[]` | 再抽籤対象の`PRELOAD_FAILED`騎士団戦ID一覧. GuildBattleID昇順 |
+| Battles | `ScheduledGuildBattle[]` | GameServerが再抽籤したペア一覧. GuildBattleIDは対象IDを再利用する |
 
-### RetryGuildBattlePreloadRequest
+### RematchPreloadFailedGuildBattlesResponse
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| GuildBattleID | `GuildBattleID` | 再取得対象の騎士団戦ID |
-| PlayerID | `PlayerID[]` | GameServerが前回取得失敗として保持しているPlayerID一覧 |
+| Battles | `ScheduledGuildBattle[]` | 保存後の再抽籤済み騎士団戦一覧 |
 
-### RetryGuildBattlePreloadResponse
-
-| 項目 | 型 | 内容 |
-|---|---|---|
-| GuildBattleID | `GuildBattleID` | 対象騎士団戦ID |
-| Players | `GuildBattlePreloadPlayerData[]` | 再取得に成功したプレイヤーのデータ. 再取得に失敗したPlayerIDは含めない |
-
-このAPIはGameServerが保持する「開戦前データ取得失敗プレイヤー」の再取得に使用する. 利用可能期間は開戦前データ処理終了後から当該騎士団戦の開戦前までに限定する.
+Private APIは再抽籤を行わない. `GuildBattleID[]`と`Battles[]`のID集合が一致すること, 対象がすべて`GUILD_BATTLE_STATUS_PRELOAD_FAILED`であることを確認し, `guild_a_id` / `guild_b_id`を更新して`status=scheduled`, `game_server_instance_id=NULL`へ戻す.
 
 ### SaveErrorLogRequest
 
