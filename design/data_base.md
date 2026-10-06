@@ -393,14 +393,24 @@ erDiagram
         GuildBattleResult result
     }
 
+    GUILD_BATTLE_DB_OPERATION {
+        OperationID operation_id PK
+        GuildBattleID guild_battle_id FK
+        Name api_name
+        JsonData response_json
+        DateTime completed_at
+    }
+
     GUILD ||--o{ GUILD_BATTLE : guild_a
     GUILD ||--o{ GUILD_BATTLE : guild_b
     GUILD_BATTLE ||--|{ GUILD_BATTLE_RESULT : has
     GUILD ||--o{ GUILD_BATTLE_RESULT : receives
+    GUILD_BATTLE ||--o{ GUILD_BATTLE_DB_OPERATION : idempotency
 ```
 
 
 `GUILD_BATTLE.game_server_instance_id`は未割当時NULLを許可する. 騎士団戦処理を開始するGameServerはPrivate API経由で未割当の騎士団戦を原子的にClaimし, Claim成功時に自身の`GameServerInstanceID`を保存する. 既に他GameServerへ割当済みの場合は上書きしない. `status`, `start_at`, `game_server_instance_id`を使用するClaim・割当検索にIndexを設定する.
+`SaveScheduledGuildBattles`保存時に`start_at`を`TargetDate`と`GuildBattleStartTime`からJSTで生成し, `end_at = start_at + 30分`として保存する. `initial_seed`は開戦前Preload完了まではNULLを許可し, Preload成功後にGameServerが生成したSeedを`SaveGuildBattleInitialSeed`で保存する.
 Public API Serverは騎士団戦要求を中継する際に`GuildBattleID`から`game_server_instance_id`を取得できる. Public API Serverは取得結果をローカルキャッシュしてよいが, キャッシュは正本として扱わない.
 
 ## アリーナ
@@ -510,11 +520,18 @@ erDiagram
 ## 騎士団戦DB送信失敗時
 
 騎士団戦中のDatabase更新・ログ保存要求が失敗した場合は, 同一要求を1回だけ再試行する. 再試行も失敗した場合, GameServerはDB障害発生状態へ移行し, それ以降の騎士団戦中DB送信を停止して送信予定データをローカル保存する.
-ローカル保存はGameServerプロセスのカレントディレクトリ直下にUTF-8 JSONファイルとして行い, GameServer再起動後も保持する.
-騎士団戦終了時にローカル保存データをDatabaseへ一括送信する. 一括送信に失敗した場合はローカルファイルを残し, 成功した場合は対応するローカルファイルを削除する.
+ローカル保存は`/var/lib/game-server/recovery`配下のUTF-8 JSONファイルとして行う. 本番Kubernetes環境では同PathをGameServer専用Persistent Volumeへmountし, GameServer再起動後も保持する.
+Recoveryファイル名は`guild_battle_<GuildBattleID>_<GameServerInstanceID>.json`とする. ファイル内には元のPrivate API名, Operation ID, 要求Payload, 保存順序を保持する.
+騎士団戦終了時にローカル保存データを保存順にDatabaseへ再送する. GameServer起動時にもRecoveryディレクトリを走査し, 残存ファイルを保存順に再送する. 再送中に1件でも失敗した場合はファイルを残し, 全件成功した場合だけ対応ファイルを削除する.
 
 `SaveGuildBattleResult`はこの一般規則とは別に, 初回失敗後1回だけ再試行し, 再試行も失敗した場合はErrorLogを保存し, `DiscordNotificationEnabled=true`の場合はDiscord Botへ通知する. その後の原因調査・復旧は運営が手動で行う. `GUILD_BATTLE.status`の`completed`更新は最終結果保存が完了した場合に行う.
 
+
+### 騎士団戦Database更新の冪等性
+
+騎士団戦中にDatabase状態を変更するPrivate API要求は`Operation ID`を必須とする. `Operation ID`は同一論理操作について初回送信, 1回再試行, Recoveryファイルからの再送で同じ値を使用する.
+
+Private API Serverは更新対象Databaseトランザクション内で`GUILD_BATTLE_DB_OPERATION.operation_id`の存在を確認する. 未処理の場合だけ本来の更新と`GUILD_BATTLE_DB_OPERATION`追加を同一トランザクションでCOMMITする. 処理済みOperation IDを受信した場合は更新を再適用せず, `response_json`に保存した初回成功時レスポンスを返す. これによりResponse消失後の再試行でも加算・ログ追加・状態更新を二重適用しない.
 
 ## GUILD_BATTLE生成規則
 

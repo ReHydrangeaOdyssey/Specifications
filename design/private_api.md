@@ -12,7 +12,8 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 - AccessToken署名用秘密鍵はPrivate API Serverだけが保持する.
 - Databaseとのデータ保存・取得を仲介する. ゲームロジック上の抽選・マッチング生成はGameServerが行う.
 - 要求/レスポンスのデータ構造は[API Payload](api_payload.md)を参照する.
-- 騎士団戦中のDatabase送信失敗時は同一要求を1回だけ再試行する. 再試行も失敗した場合, GameServerはDB障害発生状態へ移行し, それ以降の騎士団戦中DB送信を行わず, 本来送信するデータを`/var/lib/game-server/recovery`配下のUTF-8 JSONファイルへ保存する. 本番Kubernetes環境では同PathをGameServer専用Persistent Volumeへmountし, GameServer実行Userだけが読み書き可能とする. Recovery保存領域には運用設定で容量上限およびファイル数上限を必須設定し, 無制限に増加させない. ファイルはGameServer再起動後も保持する. 騎士団戦終了時にローカル保存データを一括送信し, 成功時は対応ファイルを削除し, 失敗時は削除せず残す.
+- 騎士団戦中のDatabase送信失敗時は同一要求を1回だけ再試行する. 再試行も失敗した場合, GameServerはDB障害発生状態へ移行し, それ以降の騎士団戦中DB送信を行わず, 本来送信するデータを`/var/lib/game-server/recovery`配下のUTF-8 JSONファイルへ保存する. 本番Kubernetes環境では同PathをGameServer専用Persistent Volumeへmountし, GameServer実行Userだけが読み書き可能とする. Recovery保存領域には運用設定で容量上限およびファイル数上限を必須設定し, 無制限に増加させない. ファイルはGameServer再起動後も保持する. 騎士団戦終了時およびGameServer起動時に残存Recoveryファイルを保存順に再送し, 全件成功時だけ対応ファイルを削除し, 途中失敗時は削除せず残す.
+- 騎士団戦中にDatabase状態を変更する要求は共通HTTP Header `X-Operation-ID`を必須とする. 値は128bit UUIDとし, 同一論理操作の初回送信, 1回再試行, Recovery再送で同じ値を使用する. Private API ServerはDatabaseトランザクション内でOperation IDの重複を検査し, 処理済みの場合は更新を再適用せず初回成功時レスポンスを返す.
 - `SaveGuildBattleResult`は専用の失敗処理を使用し, 1回再試行しても失敗した場合はErrorLogを保存し, `DiscordNotificationEnabled=true`の場合はBot通知を行った後, 運営による手動復旧対象とする.
 
 ## 認証・アカウント関連
@@ -357,6 +358,9 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 #### 処理内容
 
 - GameServerが生成した`ScheduledGuildBattle[]`を`GUILD_BATTLE`へ`scheduled`として保存する.
+- `start_at`は`TargetDate`と`StartTime`をJSTとして結合した時刻を保存する.
+- `end_at`は`start_at + 30分`を保存する.
+- `initial_seed`はこの時点では未生成のためNULLとする.
 - 同一`TargetDate`・`StartTime`の開戦予定データが既に存在する場合は新規保存せず, 既存データを返す.
 - 本APIでは抽選・ペア生成・GuildBattleID生成を行わない.
 
@@ -497,6 +501,22 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 #### 要求データ
 
 [API Payload](api_payload.md)の「UpdatePlayerItemRequest」を参照する.
+
+### 騎士団戦初期Seed保存
+
+#### メソッド名
+
+`SaveGuildBattleInitialSeed`
+
+#### 処理内容
+
+- 開戦前Preload成功後にGameServerが生成した`InitialSeed`を`GUILD_BATTLE.initial_seed`へ保存する.
+- 対象`GuildBattleID`の`initial_seed`が既に同じ値で保存済みの場合は成功として返す.
+- 異なる値が既に保存済みの場合は更新せずエラーとする.
+
+#### 要求データ
+
+[API Payload](api_payload.md)の「SaveGuildBattleInitialSeedRequest」を参照する.
 
 ### 騎士団戦状態更新
 

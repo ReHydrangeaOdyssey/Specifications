@@ -942,6 +942,13 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 |---|---|---|
 | Guild | `GuildLevelData` | 騎士団レベル情報 |
 
+### SaveGuildBattleInitialSeedRequest
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| GuildBattleID | `GuildBattleID` | 対象騎士団戦ID |
+| InitialSeed | `Seed` | 開戦前Preload成功後に生成した初期Seed |
+
 ### UpdateGuildBattleStatusRequest
 
 | 項目 | 型 | 内容 |

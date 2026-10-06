@@ -278,6 +278,8 @@ sequenceDiagram
                 Note over GameServer: 開戦前データ処理終了. 所属変更禁止は開戦前処理開始時点から継続中
                 Note over GameServer: 開戦時刻到達
                 GameServer->>GameServer: 開戦時に保持する騎士団戦データを確定しGuildBattleInitialSnapshotを生成
+                GameServer->>PrivateAPIServer: SaveGuildBattleInitialSeed(GuildBattleID, InitialSeed)
+                PrivateAPIServer->>DB: GUILD_BATTLE.initial_seed = InitialSeed
                 GameServer->>PrivateAPIServer: SaveGuildBattleCreateLog(GuildBattleID, InitialSeed, GuildID[2], InitialSnapshot, Version)
                 PrivateAPIServer->>DB: リプレイ作成ログ・開戦時スナップショット保存
                 GameServer->>PrivateAPIServer: UpdateGuildBattleStatus(GuildBattleID, in_progress)
@@ -650,10 +652,11 @@ sequenceDiagram
 騎士団戦中にDatabaseへの送信が失敗した場合は, 同一送信を1回だけ再試行する. 再試行も失敗した場合, GameServerは当該騎士団戦についてDB障害発生状態へ移行する.
 
 DB障害発生状態では, それ以降の騎士団戦中Database送信を行わず, 本来送信するデータをGameServerローカルのファイルへ保存する.
-保存形式はUTF-8 JSONとし, 保存先はGameServerプロセスのカレントディレクトリ直下とする.
+保存形式はUTF-8 JSONとし, 保存先は`/var/lib/game-server/recovery`とする. 本番Kubernetes環境では同PathをGameServer専用Persistent Volumeへmountする.
+ファイル名は`guild_battle_<GuildBattleID>_<GameServerInstanceID>.json`とし, 各送信予定データについてPrivate API名, `X-Operation-ID`, 要求Payload, 保存順序を保持する.
 ローカルファイルはGameServer再起動後も保持する.
-騎士団戦終了時にローカル保存したデータをDatabaseへ一括送信する.
-一括送信に失敗した場合はローカルファイルを残し, 一括送信に成功した場合は対応するローカルファイルを削除する.
+騎士団戦終了時およびGameServer起動時にローカル保存データを保存順にDatabaseへ再送する.
+再送中に1件でも失敗した場合はローカルファイルを残し, 全件の再送に成功した場合だけ対応するローカルファイルを削除する.
 
 騎士団戦最終結果の保存は下記終了シーケンスの専用規則を使用する.
 
@@ -680,6 +683,20 @@ sequenceDiagram
 
     GameServer->>GameServer: 最終合計pt算出
     GameServer->>GameServer: 勝敗判定
+
+    opt 当該騎士団戦のRecoveryファイルが存在
+        GameServer->>GameServer: Recoveryファイルを保存順に読込
+        loop Recoveryレコード
+            GameServer->>PrivateAPIServer: 元のPrivate API要求を同じX-Operation-IDで再送
+            PrivateAPIServer->>DB: Operation ID重複確認後, 未処理時のみ更新
+            PrivateAPIServer-->>GameServer: 再送結果
+        end
+        alt 全Recoveryレコード再送成功
+            GameServer->>GameServer: Recoveryファイル削除
+        else 1件以上再送失敗
+            Note over GameServer: Recoveryファイルを保持したまま終了処理を継続
+        end
+    end
 
     loop 対象騎士団
         GameServer->>PrivateAPIServer: SaveGuildBattleResult

@@ -24,6 +24,14 @@
 * GameServerは自身が使用する`Version`を保持し, 戦闘計算およびリプレイログへ使用する. Login時のClientVersion検証はPublic API Serverが行う.
 
 
+## Database Recoveryファイルの起動時処理
+
+* GameServerは起動時に`/var/lib/game-server/recovery`を走査する.
+* `guild_battle_<GuildBattleID>_<GameServerInstanceID>.json`形式のRecoveryファイルを検出した場合, ファイル内の保存順序に従って元のPrivate API要求を再送する.
+* 再送時は各レコードへ保存済みの`X-Operation-ID`をそのまま使用し, 同一Database更新を二重適用しない.
+* 1ファイル内の全レコード再送に成功した場合だけそのファイルを削除する. 1件でも失敗した場合は削除せず, 次回起動時または当該騎士団戦終了時の再送対象として残す.
+
+
 ## 複数GameServer構成
 
 * Kubernetes上で複数GameServer Instanceを稼働可能とする.

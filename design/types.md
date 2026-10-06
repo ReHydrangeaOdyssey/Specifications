@@ -100,6 +100,7 @@
 | `Description` | `String` | `string` | `text` | 説明文 |
 | `Version` | `String` | `string` | `varchar` | 対象リプレイで使用したマスターデータとゲームロジックの組み合わせを一意に識別するセマンティックバージョニング形式のバージョン文字列 |
 | `GameServerInstanceID` | `String` | `string` | `varchar` | 稼働中GameServer Instanceを一意に識別するID |
+| `OperationID` | `String` | `string` | `uuid` | Database更新系Private APIの冪等性を保証する128bit UUID |
 | `ErrorLogMessage` | `String` | `string` | `text` | エラーログ文字列 |
 | `Bool` | `bool` | `bool` | `boolean` | 真偽値 |
 
