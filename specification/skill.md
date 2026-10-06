@@ -32,7 +32,7 @@
 * 状態異常付与スキルは`StatusAbnormalityID`と状態異常付与率を保持する.
 * バフ・デバフは`SkillStatTarget`で攻撃または防御のどちらへ作用するかを保持する.
 * 回復スキルは回復割合とHP0回復可否を保持する. 回復割合は対象の最大HPに対する割合とする.
-* 1戦闘中の最大発動回数は`SkillMasterData.max_activation_count`で保持する. `Count`型の最大値`u32::MAX`は回数無制限を表す.
+* 1戦闘中の最大発動回数は`SkillMasterData.max_activation_count`で保持する. `Count`型の最大値`u32::MAX`は回数無制限を表す. 戦闘中の累計発動回数は`SkillBattleState.activation_count`として保持する.
 
 ## バフ・デバフ状態
 

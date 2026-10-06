@@ -175,12 +175,20 @@ PublicAPIで失敗レスポンスが必要な場合は, 個別に別構造が定
 |---|---|---|
 | PlayerID | `PlayerID` | ログイン対象PlayerID |
 | AccessToken | `AccessToken` | ログインに使用するアクセストークン |
+| ClientVersion | `Version` | Clientが使用しているゲームロジックおよびマスターデータのVersion |
 
 ### LoginResponse
 
 | 項目 | 型 | 内容 |
 |---|---|---|
 | SessionID | `SessionID` | 生成されたセッションID |
+
+### LoginVersionErrorResponse
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| ErrorCode | `ApiErrorCode` | `API_ERROR_CLIENT_VERSION_MISMATCH` |
+| RequiredVersion | `Version` | GameServerが要求するVersion. ClientはこのVersionへの更新をユーザーへ促す |
 
 ### ValidateSessionPublicRequest
 
@@ -577,6 +585,7 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 
 | 項目 | 型 | 内容 |
 |---|---|---|
+| RequesterPlayerID | `PlayerID` | 役職変更を要求したPlayerID. 現在の団長であることをPrivate APIで検証する |
 | GuildID | `GuildID` | 更新対象の騎士団ID |
 | LeaderPlayerID | `PlayerID` | 保存する団長PlayerID |
 | SubleaderPlayerID | `PlayerID` | 保存する副団長PlayerID |
@@ -652,14 +661,16 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| OpponentPlayerID | `PlayerID` | 対戦相手のPlayerID |
+| PlayerID | `PlayerID` | アリーナ戦闘用データを取得するPlayerID |
 
 ### GetArenaBattleDataResponse
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| FormationID | `FormationID` | 対戦相手が使用するフォーメーションID |
-| Characters | `ArenaPartyCharacter[]` | 対戦相手のキャラクター情報.1～5件 |
+| PlayerExists | `Bool` | 対象PlayerIDがDatabaseに存在する場合true |
+| ArenaPartyRegistered | `Bool` | 対象PlayerIDにArenaPartyが登録されている場合true |
+| FormationID | `FormationID` | `PlayerExists=true`かつ`ArenaPartyRegistered=true`の場合のフォーメーションID |
+| Characters | `ArenaPartyCharacter[]` | `PlayerExists=true`かつ`ArenaPartyRegistered=true`の場合のキャラクター情報.1～5件 |
 
 ### SaveGuildBattlePartyRequest
 
@@ -669,18 +680,39 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 | FormationID | `FormationID` | 使用するフォーメーションID |
 | Characters | `GuildBattlePartyCharacter[10]` | 編成キャラクター情報 |
 
-### CreateScheduledGuildBattlesRequest
+### GetGuildsForBattleMatchingRequest
 
 | 項目 | 型 | 内容 |
 |---|---|---|
 | TargetDate | `DateTime` | 対象日. JSTの日付部分を使用する |
-| StartTime | `GuildBattleStartTime` | 組み合わせを生成する固定開戦時刻 |
+| StartTime | `GuildBattleStartTime` | 対象となる固定開戦時刻 |
 
-### CreateScheduledGuildBattlesResponse
+### GetGuildsForBattleMatchingResponse
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| Battles | `ScheduledGuildBattle[]` | 生成・保存した騎士団戦一覧 |
+| Candidates | `GuildBattleMatchCandidate[]` | 対象開始時刻を設定している騎士団と現在所属人数の一覧 |
+
+### GuildBattleMatchCandidate
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| GuildID | `GuildID` | 対象騎士団ID |
+| MemberCount | `Count` | 現在の所属プレイヤー数 |
+
+### SaveScheduledGuildBattlesRequest
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| TargetDate | `DateTime` | 対象日. JSTの日付部分を使用する |
+| StartTime | `GuildBattleStartTime` | 固定開戦時刻 |
+| Battles | `ScheduledGuildBattle[]` | GameServerが生成した保存対象の騎士団戦一覧 |
+
+### SaveScheduledGuildBattlesResponse
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| Battles | `ScheduledGuildBattle[]` | 保存済み騎士団戦一覧. 同一TargetDate・StartTimeの既存データがある場合は既存データを返す |
 
 ### ScheduledGuildBattle
 
@@ -747,7 +779,7 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| PlayerID | `PlayerID[]` | Databaseに存在する全PlayerID. PlayerID昇順で返す |
+| PlayerID | `PlayerID[]` | Database上でArenaParty登録済みのPlayerID一覧. ArenaParty未登録Playerは含めず, PlayerID昇順で返す |
 
 ### GetGuildMembersRequest
 

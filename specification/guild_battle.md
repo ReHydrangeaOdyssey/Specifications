@@ -70,11 +70,15 @@
 * 所属固定後に対戦組み合わせを生成する.
 * 対戦組み合わせ生成時は, 対象日・開始時刻ごとに, その開始時刻を設定している騎士団を抽出する.
 * 所属プレイヤーが0人の騎士団は対戦組み合わせ生成対象から除外する.
-* 抽出した騎士団一覧に「[疑似乱数](../design/pseudorandom.md)」の「[抽選](../design/pseudorandom.md#抽選)」を適用し, シャッフル後の先頭から2騎士団ずつ順にペアを作成する.
+  - 除外した騎士団も同じ開始時刻の騎士団戦終了処理時に加入・脱退禁止を解除する.
+* 抽出した騎士団一覧をGuildID昇順に並べる.
+* GameServer共通の時刻ベースSeed生成処理でマッチング用Seedを生成する.
+* GuildID昇順の騎士団一覧に, マッチング用Seedを使用して「[疑似乱数](../design/pseudorandom.md)」の「[抽選](../design/pseudorandom.md#抽選)」を適用し, シャッフル後の先頭から2騎士団ずつ順にペアを作成する.
 * 抽出数が奇数の場合, 最後の1騎士団は事前に作成したダミープレイヤーの初期騎士団を対戦相手とする.
 * `GuildBattleID`は`u64`で, `<日付(YYYYMMDD)8桁><開始時刻(GuildBattleStartTimeのEnum値)3桁><作成したペアの要素番号8桁>`を10進数として連結した値とする.
   - 数式では`GuildBattleID = YYYYMMDD * 10^11 + GuildBattleStartTimeEnumValue * 10^8 + PairIndex`とする.
   - `GuildBattleStartTimeEnumValue`は3桁, `PairIndex`は8桁として0埋めした表現に相当する.
+  - `PairIndex`は0から開始し, ペア生成順に1ずつ増加する.
 
 ## 勝敗条件
 タイムアップ時に最も合計「[pt](guild_battle.md#事前用語説明)」が高いほうが勝ちとなる.
@@ -207,8 +211,10 @@
 タクティクス補正 = マスターデータに定義された`TACTICS_EFFECT_OPPONENT_SORTIE_SELECTION_RATE_CORRECTION`系列のタクティクス効果値合計
 補正計算値 = 100 * タクティクス補正
 補正計算値がNaNの場合は0とする
-補正計算値がInfinityの場合は99,999とする
-被弾重み = (100 + 補正計算値 as i32) as u32
+補正計算値がInfinityまたは-Infinityの場合は99,999とする
+符号付き被弾重み = 100 + 補正計算値 as i32
+符号付き被弾重みが0以下の場合は1にクランプする
+被弾重み = 符号付き被弾重み as u32
 被弾重み = clamp(被弾重み, 1, 1,000,000)
 ```
 

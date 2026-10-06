@@ -61,17 +61,18 @@ sequenceDiagram
             GameServer->>GameServer: ユーザー名チェック
             GameServer->>GameServer: PlayerID生成
             GameServer->>PrivateAPIServer: SavePlayerID(PlayerID, DiscordUserID, UserName)
-            PrivateAPIServer->DB: 保存(PlayerID, DiscordUserID, ユーザー名)
+            PrivateAPIServer->DB: 保存(PlayerID, DiscordUserID, ユーザー名, MaxBP初期値200)
             GameServer->>GameServer: AccessToken.bound_player_idへPlayerIDをBinding
             GameServer-->>PublicAPIServer: CreatePlayer
             PublicAPIServer-->>Client: CreatePlayer
             Client->>Client: PlayerID保存・新規プレイヤーフラグ保持
         end
 
-        Client->>PublicAPIServer: Login(PlayerID, AccessToken) 
-        PublicAPIServer->>GameServer: Login(PlayerID, AccessToken) 
+        Client->>PublicAPIServer: Login(PlayerID, AccessToken, ClientVersion) 
+        PublicAPIServer->>GameServer: Login(PlayerID, AccessToken, ClientVersion) 
         GameServer->>GameServer: AccessToken検証・使用回数加算（最大3回）
         GameServer->>GameServer: AccessToken.bound_player_id == PlayerIDを確認
+        GameServer->>GameServer: ClientVersion == RequiredVersionを確認
         GameServer->>GameServer: Login成功時にAccessToken無効化
         GameServer->>GameServer: 暗号学的乱数でセッションID生成
         GameServer->>PrivateAPIServer: SaveSessionID
@@ -111,10 +112,11 @@ sequenceDiagram
     participant Database
 
     User->>ClientB: ログイン操作
-    ClientB->>PublicAPI: Login(PlayerID, AccessToken)
-    PublicAPI->>GameServer: Login(PlayerID, AccessToken)
+    ClientB->>PublicAPI: Login(PlayerID, AccessToken, ClientVersion)
+    PublicAPI->>GameServer: Login(PlayerID, AccessToken, ClientVersion)
     GameServer->>GameServer: AccessToken検証・使用回数加算（最大3回）
     GameServer->>GameServer: AccessToken.bound_player_id == PlayerIDを確認
+    GameServer->>GameServer: ClientVersion == RequiredVersionを確認
 
     GameServer->>PrivateAPIServer: GetActiveSession
     PrivateAPIServer->>Database: PlayerIDの有効Session検索
@@ -165,6 +167,13 @@ sequenceDiagram
 * AccessToken検証前に使用回数が3以上なら拒否し, 検証成功時に使用回数を1加算する. Login成功前に検証成功できる回数は最大3回とする.
 * Loginでは要求PlayerIDとBinding済みPlayerIDが一致しなければ拒否する.
 * Login成功時はAccessTokenを無効化する.
+
+## Login時Version検証
+
+* Clientは`LoginRequest.ClientVersion`へ現在使用している`Version`を設定する.
+* GameServerはLogin時にClientVersionと要求Versionを比較する.
+* 不一致の場合はSessionを発行せず, `LoginVersionErrorResponse`で`API_ERROR_CLIENT_VERSION_MISMATCH`と`RequiredVersion`を返す.
+* ClientはVersion不一致レスポンスを受け取った場合, 必要Versionへの更新をユーザーへ促す.
 
 ## SessionID生成規則
 

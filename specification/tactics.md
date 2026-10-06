@@ -62,6 +62,10 @@
 
 どちらの回復方式も最大値を超えて回復しない.
 
+### 即時回復効果の終了方式
+
+`TACTICS_EFFECT_BP_RECOVERY`および`TACTICS_EFFECT_HP_RECOVERY`を含む即時回復タクティクスは`TACTICS_END_TYPE_ON_ACTIVATION`だけを使用する. `TACTICS_END_TYPE_DURATION`および`TACTICS_END_TYPE_COUNT`は設定しない.
+
 ## 戦闘時特殊効果
 
 `TACTICS_EFFECT_BATTLE_SPECIAL`は`TacticsBattleSpecialData`で具体的な特殊効果を保持する.
@@ -106,6 +110,7 @@
 * 自分パーティ.
 * 相手パーティ.
   - `TACTICS_TARGET_OPPONENT_PARTY`は「出撃」後に戦闘へ入った時点の対戦相手パーティを表す.
+  - 継続効果では出撃するたびにその時点の対戦相手パーティへ再Bindして適用する.
   - タクティクス使用時に特定の相手PlayerIDを固定する意味ではない.
 * 味方騎士団.
 * 敵騎士団.
@@ -116,7 +121,7 @@
 
 終了方式は`TacticsEndType`で識別する.
 
-* `TACTICS_END_TYPE_DURATION`: 特定の時間.
+* `TACTICS_END_TYPE_DURATION`: 特定の時間. 発動時にGameServer時刻から終了時刻を算出して保持し, 現在時刻が終了時刻以上になった時点で無効化して継続状態から削除する. 残り秒数を定期的に減算する方式は使用しない.
 * `TACTICS_END_TYPE_COUNT`: 時間制限なしの回数制限. 残り回数の消費イベントは`TacticsCountConsumeTrigger`で識別する.
 * `TACTICS_END_TYPE_ON_ACTIVATION`: 発動時の1回に限る.
 
@@ -138,4 +143,9 @@
 
 ## 騎士団戦中の継続効果状態
 
-継続中のタクティクス効果はGameServerが「[型定義](../design/types.md)」の`TacticsActiveEffectState`として保持する.
+継続中のタクティクス効果はGameServerが「[型定義](../design/types.md)」の`TacticsActiveEffectState`として保持する. COUNT型では`count_consume_trigger`を保持し, 指定イベント発生時に残り回数を消費する. DURATION/COUNT/ON_ACTIVATIONの識別には`end_type`を保持する. DURATION型は`expires_at`へ絶対終了時刻を保持し, 残り秒数の減算管理は行わない.
+
+
+## COUNT型効果の適用順
+
+`TACTICS_END_TYPE_COUNT`は消費イベント発生時に当該回の効果を適用した後, `remaining_count`を1減算する. 減算後に0となった場合はその時点で効果を終了する. したがって効果回数が3回の場合は3回すべて効果を適用する.

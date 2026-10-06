@@ -104,11 +104,13 @@ enum ArenaMode {
 
 ### ArenaBattleErrorCode
 
-アリーナ戦闘開始時のエラーを表す列挙型. PublicAPI共通の`ApiErrorCode`では`API_ERROR_NO_OPPONENT_AVAILABLE`に対応する.
+アリーナ戦闘開始時の個別エラーを表す列挙型. ランダム対戦の候補なし, フレンド対戦のPlayer不存在, ArenaParty未登録を区別する.
 
 ```proto
 enum ArenaBattleErrorCode {
-  ARENA_BATTLE_ERROR_NO_OPPONENT_AVAILABLE = 0; // 対戦可能な相手プレイヤーが存在しない.
+  ARENA_BATTLE_ERROR_NO_OPPONENT_AVAILABLE = 0; // ランダム対戦で対戦可能な相手プレイヤーが存在しない.
+  ARENA_BATTLE_ERROR_PLAYER_NOT_FOUND = 1; // フレンド対戦で指定したPlayerIDが存在しない.
+  ARENA_BATTLE_ERROR_ARENA_PARTY_NOT_REGISTERED = 2; // 指定PlayerIDは存在するがArenaPartyが未登録である.
 }
 ```
 
@@ -440,6 +442,8 @@ enum ApiErrorCode {
   API_ERROR_INVALID_PARTY = 21; // 編成制約を満たしていない.
   API_ERROR_RATE_LIMIT_EXCEEDED = 22; // PublicAPIのレート制限を超過した.
   API_ERROR_INVALID_GUILD_NAME = 23; // GuildNameがUTF-8・最大10文字・空文字不可の制約を満たさない.
+  API_ERROR_CLIENT_VERSION_MISMATCH = 24; // ClientVersionがGameServerの要求Versionと一致しない.
+  API_ERROR_GUILD_LEADERSHIP_CHANGE_NOT_ALLOWED = 25; // 団長以外が団長・副団長変更を要求した.
 }
 ```
 
@@ -591,7 +595,31 @@ message PartyCharacterStatus {
   float max_hp = 2; // 従者補正適用後の編成時最大HP. 現在HPは保持しない. 論理型Float32.
   float attack = 3; // 従者補正適用後の編成時攻撃力. 論理型Float32.
   float defense = 4; // 従者補正適用後の編成時防御力. 論理型Float32.
-  SpeedRank speed = 5; // 編成時の速度ランク. 従者による速度補正は存在しない.
+  SpeedRank speed = 5; // 編成時の速度ランク. Enum数値を速度レベルとして平均計算に使用する. 従者による速度補正は存在しない.
+}
+
+message BuffDebuffEffectState {
+  float attack_buff = 1; // スキル・アビリティによる攻撃バフ補正値の合計. 論理型CorrectionValue.
+  float attack_debuff = 2; // スキル・アビリティによる攻撃デバフ補正値の合計. 論理型CorrectionValue.
+  float defense_buff = 3; // スキル・アビリティによる防御バフ補正値の合計. 論理型CorrectionValue.
+  float defense_debuff = 4; // スキル・アビリティによる防御デバフ補正値の合計. 論理型CorrectionValue.
+}
+
+message StatusAbnormalityState {
+  StatusAbnormalityID status_id = 1; // 現在付与されている状態異常ID.
+  uint32 elapsed_turns = 2; // 状態異常付与ターンを1として数える経過ターン数. 同一状態異常の再付与時は1へ戻す.
+  uint32 poison_cycle_turns = 3; // 毒ダメージの3ターン周期を管理する経過カウント. 毒以外では0. 毒再付与時はリセットしない.
+}
+
+message SkillBattleState {
+  uint32 skill_id = 1; // 戦闘で使用するメインスキルID. 論理型SkillID.
+  uint32 activation_count = 2; // 当該戦闘中にこのSkillIDが発動した累計回数. 論理型Count.
+}
+
+message AbilityBattleState {
+  uint32 ability_id = 1; // Abilityスロットに設定されたアビリティID. 論理型AbilityID.
+  uint32 activation_count = 2; // 当該戦闘中にこのAbilityIDが発動した累計回数. 論理型Count.
+  bool activated_this_turn = 3; // 現在ターン内でこのAbilityIDがすでに発動済みの場合true. ターン開始時にfalseへ戻す.
 }
 
 message CharacterBattle {
@@ -602,11 +630,13 @@ message CharacterBattle {
   float defense = 5; // 従者等の補正適用後の戦闘計算用防御力. 論理型Float32.
   SpeedRank speed = 6; // 戦闘で使用する速度ランク.
   uint32 bp = 7; // キャラクターBP.wire上はuint32, 論理型BP.
-  uint32 main_skill_id = 8; // 戦闘で使用するメインスキルID. 論理型SkillID.
+  SkillBattleState skill_state = 8; // 戦闘中のメインスキルIDと累計発動回数.
   repeated uint32 tactics_ids = 9; // 戦闘で使用可能なタクティクスID一覧. 各要素は論理型TacticsID.
-  repeated uint32 ability_ids = 10; // Abilityスロット順のアビリティID一覧. 各要素は論理型AbilityID.
+  repeated AbilityBattleState ability_states = 10; // Abilityスロット順の戦闘中アビリティ状態一覧. AbilityIDごとに累計発動回数とターン内発動済み状態を保持する.
   uint64 owner_player_id = 11; // このキャラクターを編成しているプレイヤーID. 同順位抽選の初期順序決定に使用する. 論理型PlayerID.
   BuffDebuffState buff_debuff_state = 12; // スキル・アビリティによる現在のバフ・デバフ付与状態.
+  BuffDebuffEffectState buff_debuff_effect = 13; // スキル・アビリティによる現在の攻撃・防御バフ/デバフ実値.
+  repeated StatusAbnormalityState status_abnormalities = 14; // 現在付与されている状態異常の実行時状態一覧. 複数状態異常を同時に保持できる.
 }
 
 message HitPoints {
@@ -644,11 +674,13 @@ message TacticsHpRecoveryData {
 
 message TacticsActiveEffectState {
   TacticsEffectID effect_id = 1; // 継続中の効果種別.
-  TacticsTarget target = 2; // 継続中の効果対象.
+  TacticsTarget target = 2; // 継続中の効果対象. OPPONENT_PARTYは出撃ごとにその時点の対戦相手パーティへ再Bindする.
   float effect_value = 3; // スカラー値で表現する効果の現在値. 論理型CorrectionValue.
-  uint32 remaining_duration_seconds = 4; // 残り効果時間（秒）. 論理型DurationSeconds.
+  uint64 expires_at = 4; // DURATION型の絶対終了時刻. UNIX epochからの経過マイクロ秒. 論理型GameServerTime. DURATION以外では0.
   uint32 remaining_count = 5; // 残り効果回数. 論理型Count.
   TacticsBattleSpecialData battle_special = 6; // effect_idがBATTLE_SPECIALの場合に保持する特殊効果データ.
+  TacticsCountConsumeTrigger count_consume_trigger = 7; // COUNT型効果の残り回数を消費するイベント. COUNT以外では参照しない.
+  TacticsEndType end_type = 8; // 継続中効果の終了方式.
 }
 
 message AccessTokenState {
@@ -661,8 +693,9 @@ message AccessTokenState {
 ```
 
 `PartyCharacterStatus`は編成時専用の状態とし, 現在HPを保持しない. `max_hp` / `attack` / `defense`には従者補正だけを適用した値を保持する. パーティランク算出ではこの構造を使用する.
-`CharacterBattle` の `hp` / `attack` / `defense` は従者等の補正適用後に戦闘計算で使用する値であるため, 戦闘仕様に従い `Float32` とする. プレイヤーへ表示する際の丸めは各仕様書の表示規則に従う. `buff_debuff_state`はスキル・アビリティによるバフ・デバフの有無から更新する.
-`TacticsActiveEffectState`は騎士団戦中にGameServerが保持する継続中タクティクス効果の状態とする. `TacticsBattleSpecialData`は`TACTICS_EFFECT_BATTLE_SPECIAL`の具体的な特殊効果を表す. `AccessTokenState`はGameServerメモリ上だけで保持し, Databaseへ永続化しない.
+`SkillBattleState`および`AbilityBattleState`は戦闘中だけ使用する実行時状態とし, Databaseへ永続化しない. `AbilityBattleState`の発動済み管理はAbilityID単位で行い, Effect単位では共有しない.
+`CharacterBattle` の `hp` / `attack` / `defense` は従者等の補正適用後に戦闘計算で使用する値であるため, 戦闘仕様に従い `Float32` とする. プレイヤーへ表示する際の丸めは各仕様書の表示規則に従う. `buff_debuff_state`は`buff_debuff_effect`に含まれるスキル・アビリティ由来のバフ・デバフ有無から更新する. `status_abnormalities`は状態異常ごとの経過ターンおよび毒周期カウントを保持する.
+`TacticsActiveEffectState`は騎士団戦中にGameServerが保持する継続中タクティクス効果の状態とする. DURATION型は`expires_at`へ絶対終了時刻を保持し, 現在時刻が`expires_at`以上の場合に無効化して削除する. 残り秒数を定期減算しない. COUNT型では`count_consume_trigger`を使用し, `end_type`に従って終了判定する. `TacticsBattleSpecialData`は`TACTICS_EFFECT_BATTLE_SPECIAL`の具体的な特殊効果を表す. `AccessTokenState`はGameServerメモリ上だけで保持し, Databaseへ永続化しない.
 
 ## 疑似乱数内部型
 

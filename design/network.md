@@ -59,5 +59,6 @@ architecture-beta
 * `SessionID`を送受信するPublicAPI通信についてTLSを必須とするかは未確定とする. 性能要件を含めて別途決定するまで, 平文送信を許可する仕様とはしない.
 * TLSは接続単位の暗号化であり, AccessTokenフィールドだけを個別に暗号化する方式とはしない.
 * Botから`IssueAccessToken`を許可する認証方式はStartup Token廃止後の方式が未確定である.
+* GameServerとPrivate API Server間の通信はmTLSを必須とする. 双方は信頼済みCAによる相手証明書を検証し, 証明書検証に失敗した接続を受け付けない.
 
 ### 本番環境

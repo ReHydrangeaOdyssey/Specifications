@@ -34,8 +34,10 @@ flowchart TD;
 
 `状態異常更新`で毒ダメージによりHPが0になった場合は, 戦闘不能時アビリティを発動せず, そのままターン終了時処理へ進む.
 同一キャラクターで同一タイミングに複数アビリティの発動条件が成立した場合は, Abilityスロット番号の小さい順に判定・処理する. 複数キャラクターで同一タイミングに成立した場合は, 戦闘計算上の速度が速い順, 同一速度ならフォーメーション内部値が小さい順, 速度・内部値とも同一ならPlayerIDの小さい順で抽選対象リストを作成して疑似乱数の抽選順で処理する.
+戦闘開始時に`SkillBattleState.activation_count=0`とし, 各`AbilityBattleState.activation_count=0`, `activated_this_turn=false`で初期化する. ターン開始時にすべての`AbilityBattleState.activated_this_turn`をfalseへ戻す. スキル発動時は`SkillBattleState.activation_count`を1増加し, Ability発動時は対応するAbilityIDの`AbilityBattleState.activation_count`を1増加して`activated_this_turn=true`とする. 最大発動回数判定は各マスターデータの`max_activation_count`と戦闘中状態の`activation_count`を比較して行う.
+戦闘フロー内の「回避は発動済み?」「状態異常付与アビリティは発動済み?」「追撃は発動済み?」「反撃は発動済み?」は, 対応するAbilityIDの`AbilityBattleState.activated_this_turn`を参照する. 発動済み状態はAbilityEffectID単位では共有しない.
 通常の行動順決定で敵味方の速度・フォーメーション内部値が同一となる場合も, PlayerIDの小さい順で抽選対象リストを作成する.
-戦闘中キャラクターは`BuffDebuffState`を保持し, スキル・アビリティによるバフ・デバフ付与状態に応じて更新する. フォーメーションおよびタクティクス補正はこの状態へ影響しない.
+戦闘中キャラクターは`BuffDebuffState`, `BuffDebuffEffectState`, `StatusAbnormalityState[]`を保持する. スキル・アビリティによるバフ・デバフ付与時は`BuffDebuffEffectState`の実値を更新し, その有無から`BuffDebuffState`を更新する. 状態異常付与・更新時は`StatusAbnormalityState[]`を更新する. フォーメーションおよびタクティクス補正はこれらのバフ・デバフ状態へ影響しない.
 暗闇状態の攻撃成功判定に失敗した場合は, `追撃は発動済み?`の判定を行わず, 直接`追撃率 > 乱数?`へ進む. この分岐は仕様上の意図した処理とする.
 
 ### ダメージ乱数の消費規則
@@ -60,7 +62,7 @@ flowchart TD;
 
     Attack[攻撃];
 
-    CheckSkillCount{スキル発動可能回数 > 0?};
+    CheckSkillCount{SkillBattleState.activation_count < 最大発動回数?};
     CheckSilent{沈黙状態?};
     CheckSkill{スキル発動率 > 乱数?};
     ActivateSkill[[スキル発動]];
@@ -101,11 +103,14 @@ flowchart TD;
     CheckBlindnessAttack -- No --> CheckPursuit;
 
     CheckActivatedStatusAbnormality{状態異常付与アビリティは発動済み?};
+    CheckStatusAbnormalityAvoidance{状態異常回避 > 乱数?};
     CheckStatusAbnormality{状態異常付与率 > 乱数?};
     AddStatusAbnormality[状態異常付与]; 
 
     CheckActivatedStatusAbnormality -- Yes --> Attack;
-    CheckActivatedStatusAbnormality -- No --> CheckStatusAbnormality;
+    CheckActivatedStatusAbnormality -- No --> CheckStatusAbnormalityAvoidance;
+    CheckStatusAbnormalityAvoidance -- Yes --> Attack;
+    CheckStatusAbnormalityAvoidance -- No --> CheckStatusAbnormality;
     CheckStatusAbnormality -- Yes --> AddStatusAbnormality;
     CheckStatusAbnormality -- No --> Attack;
 
@@ -148,3 +153,8 @@ flowchart TD;
     CheckAttackerHP -- No --> KilledAttackerAbility
     KilledAttackerAbility --> End
 ```
+
+
+戦闘フロー内の回避率, 状態異常回避率, 回避無効化率, 状態異常付与率, 追撃率, 反撃率, 反撃無効化率は, 対応するアビリティの`AbilityMasterData.activation_rate`を使用する.
+
+状態異常回避判定は, 付与しようとしている`StatusAbnormalityID`と一致する`ABILITY_EFFECT_AVOIDANCE`だけを対象とし, 当該Abilityの`activation_rate`で判定する.

@@ -4,7 +4,7 @@
 
 ## 戦闘結果の扱い
 
-ClientとGameServerは同一バージョンの戦闘ロジックを保持する. GameServerは戦闘を実行するが, `StartArenaBattle`の成功レスポンスでは戦闘結果そのものを返さず, Clientで同じ戦闘を再現するための相手キャラクター初期状態とSeedを返す.
+ClientとGameServerは同一バージョンの戦闘ロジックを保持する. Version一致はLogin時に検証し, 不一致の場合はLoginを拒否してClientへ更新を促す. GameServerは戦闘を実行するが, `StartArenaBattle`の成功レスポンスでは戦闘結果そのものを返さず, Clientで同じ戦闘を再現するための相手キャラクター初期状態とSeedを返す.
 
 Clientは自身の初期状態, GameServerから受け取った相手初期状態, Seedを用いて同一の戦闘ロジックを実行する. 同一入力から算出される結果は一致することを前提とし, 結果の正本はGameServerの計算結果とする.
 
@@ -68,7 +68,7 @@ sequenceDiagram
         Client->>PublicAPIServer: StartArenaBattle(SessionID, PlayerID, mode=random)
         PublicAPIServer->>GameServer: StartArenaBattle(SessionID, PlayerID, mode=random)
         GameServer->>GameServer: SessionID・PlayerID等を検証
-        GameServer->>GameServer: アリーナ戦闘用Seedを生成
+        GameServer->>GameServer: 共通内部API GenerateTimeBasedSeed で時刻ベースSeedを生成
         GameServer->>GameServer: PlayerID昇順の候補一覧へ生成したSeedを使用して対戦相手を抽選
         alt 候補プレイヤーが0人
             GameServer-->>PublicAPIServer: StartArenaBattle(ArenaBattleErrorResponse)
@@ -94,26 +94,34 @@ sequenceDiagram
         Client->>PublicAPIServer: StartArenaBattle(SessionID, PlayerID, mode=friend, OpponentID)
         PublicAPIServer->>GameServer: StartArenaBattle(SessionID, PlayerID, mode=friend, OpponentID)
         GameServer->>GameServer: SessionID・PlayerID等を検証
-        GameServer->>GameServer: アリーナ戦闘用Seedを生成
+        GameServer->>GameServer: 共通内部API GenerateTimeBasedSeed で時刻ベースSeedを生成
         GameServer->>PrivateAPIServer: GetArenaBattleData(PlayerID)
         PrivateAPIServer->>DB: 自分側編成データ取得
         DB-->>PrivateAPIServer: 自分側データ返却
         PrivateAPIServer-->>GameServer: GetArenaBattleData
         GameServer->>PrivateAPIServer: GetArenaBattleData(OpponentID)
-        PrivateAPIServer->>DB: 相手側編成データ取得
-        DB-->>PrivateAPIServer: 相手側データ返却
+        PrivateAPIServer->>DB: 相手側Player・ArenaPartyデータ取得
+        DB-->>PrivateAPIServer: PlayerExists・ArenaPartyRegistered・編成データ返却
         PrivateAPIServer-->>GameServer: GetArenaBattleData
-        GameServer->>GameServer: 同じSeedから戦闘専用PRNGを新規生成
-        GameServer->>GameServer: 自分側・相手側双方のFormationID・Charactersを初期状態として戦闘実行
-        GameServer-->>PublicAPIServer: StartArenaBattle(EnemyFormationID, EnemyCharacters, Seed)
-        PublicAPIServer-->>Client: StartArenaBattle(EnemyFormationID, EnemyCharacters, Seed)
-        Client->>Client: 同じSeedから戦闘専用PRNGを新規生成
-        Client->>Client: EnemyFormationID・EnemyCharactersを使用してGameServerと同一の戦闘ロジックで戦闘を再現
-        Client->>User: 戦闘内容表示
+        alt OpponentIDが存在しない
+            GameServer-->>PublicAPIServer: StartArenaBattle(ARENA_BATTLE_ERROR_PLAYER_NOT_FOUND)
+            PublicAPIServer-->>Client: StartArenaBattle(ArenaBattleErrorResponse)
+        else OpponentIDは存在するがArenaParty未登録
+            GameServer-->>PublicAPIServer: StartArenaBattle(ARENA_BATTLE_ERROR_ARENA_PARTY_NOT_REGISTERED)
+            PublicAPIServer-->>Client: StartArenaBattle(ArenaBattleErrorResponse)
+        else 対戦可能
+            GameServer->>GameServer: 同じSeedから戦闘専用PRNGを新規生成
+            GameServer->>GameServer: 自分側・相手側双方のFormationID・Charactersを初期状態として戦闘実行
+            GameServer-->>PublicAPIServer: StartArenaBattle(EnemyFormationID, EnemyCharacters, Seed)
+            PublicAPIServer-->>Client: StartArenaBattle(EnemyFormationID, EnemyCharacters, Seed)
+            Client->>Client: 同じSeedから戦闘専用PRNGを新規生成
+            Client->>Client: EnemyFormationID・EnemyCharactersを使用してGameServerと同一の戦闘ロジックで戦闘を再現
+            Client->>User: 戦闘内容表示
+        end
     end
 ```
 
 
 ## ランダム対戦候補同期
 
-GameServerはPrivateAPIの`GetAllPlayerIDs`を使用してDatabase上の全PlayerIDをPlayerID昇順で取得し, その順序を維持してランダムアリーナ候補のPlayerIDキャッシュを同期する. 抽選時は自身のPlayerIDを候補から除外し, 残りの候補もPlayerID昇順のまま「抽選」へ渡す.
+GameServerはPrivateAPIの`GetAllPlayerIDs`を使用してDatabase上でArenaParty登録済みのPlayerIDだけをPlayerID昇順で取得し, その順序を維持してランダムアリーナ候補のPlayerIDキャッシュを同期する. ArenaParty未登録Playerは候補へ含めない. 抽選時は自身のPlayerIDを候補から除外し, 残りの候補もPlayerID昇順のまま「抽選」へ渡す.

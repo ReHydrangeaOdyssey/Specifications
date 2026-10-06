@@ -56,6 +56,7 @@ erDiagram
 `InvalidateSession`実行時は対象`SessionID`の`PLAYER_SESSION`レコードを削除する.
 
 `PLAYER.guild_battle_win_count`と`PLAYER.guild_battle_lose_count`の初期値はともに`0`とする.
+`PLAYER.max_bp`の新規プレイヤー作成時初期値は`200`とする.
 
 
 ## GUILD / GUILD_MEMBER 制約

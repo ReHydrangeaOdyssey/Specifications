@@ -187,10 +187,28 @@ sequenceDiagram
 
     Note over GameServer,DB: 開戦5分前. 対象開始時刻の騎士団戦開戦前処理を開始
     Note over GameServer,DB: 対象開始時刻の騎士団の加入・脱退を禁止し所属を固定
-    GameServer->>PrivateAPIServer: CreateScheduledGuildBattles(TargetDate, GuildBattleStartTime)
-    PrivateAPIServer->>DB: 所属固定後の対象騎士団を抽出. 0人騎士団を除外して組み合わせ生成・保存
-    DB-->>PrivateAPIServer: 生成結果
-    PrivateAPIServer-->>GameServer: CreateScheduledGuildBattles(ScheduledGuildBattle[])
+    GameServer->>PrivateAPIServer: GetScheduledGuilds(TargetDate, GuildBattleStartTime)
+    PrivateAPIServer->>DB: 同一日付・開始時刻の既存GUILD_BATTLEを取得
+    DB-->>PrivateAPIServer: 既存ScheduledGuildBattle[]
+    PrivateAPIServer-->>GameServer: GetScheduledGuilds
+    alt 既存データあり
+        GameServer->>GameServer: 既存ScheduledGuildBattle[]をそのまま使用
+    else 既存データなし
+        GameServer->>PrivateAPIServer: GetGuildsForBattleMatching(TargetDate, GuildBattleStartTime)
+        PrivateAPIServer->>DB: 対象開始時刻のGuildID・所属人数一覧を取得
+        DB-->>PrivateAPIServer: GuildBattleMatchCandidate[]
+        PrivateAPIServer-->>GameServer: GetGuildsForBattleMatching
+        GameServer->>GameServer: 所属0人の騎士団を除外
+        GameServer->>GameServer: GuildID昇順へ並べ替え
+        GameServer->>GameServer: 共通内部API GenerateTimeBasedSeed でマッチング用Seedを生成
+        GameServer->>GameServer: Seedを使用して騎士団一覧をシャッフルしペア生成
+        GameServer->>GameServer: PairIndex=0からGuildBattleIDを生成
+        GameServer->>PrivateAPIServer: SaveScheduledGuildBattles(TargetDate, StartTime, Battles[])
+        PrivateAPIServer->>DB: GameServer生成済みGUILD_BATTLEをscheduledとして保存
+        DB-->>PrivateAPIServer: 保存済みまたは既存ScheduledGuildBattle[]
+        PrivateAPIServer-->>GameServer: SaveScheduledGuildBattles
+    end
+    Note over GameServer,DB: 0人で組み合わせ生成対象から除外された騎士団も所属変更禁止解除対象として保持
 
     loop 生成した騎士団戦すべて
         alt GameServerの処理容量上限に到達
@@ -330,7 +348,7 @@ sequenceDiagram
     alt 使用可能
         GameServer->>GameServer: 使用可能回数, TP処理
         GameServer->>GameServer: タクティクス固有効果を適用
-        GameServer->>GameServer: 継続効果はTacticsActiveEffectStateとして保持
+        GameServer->>GameServer: 継続効果はend_type・count_consume_triggerを含むTacticsActiveEffectStateとして保持
         GameServer->>GameServer: 成功した要求のRequestSequenceを1加算
         GameServer-->>PublicAPIServer: UseTactics
         PublicAPIServer-->>Client: UseTactics
@@ -657,17 +675,17 @@ sequenceDiagram
         end
     end
 
-    Note over GameServer: 最終結果処理完了後
-    loop 勝敗数更新対象Player
-        GameServer->>PrivateAPIServer: UpdatePlayerGuildBattleRecord(PlayerID, Result)
-        PrivateAPIServer->>DB: 勝利ならwin_count+1 / 敗北ならlose_count+1 / 引き分けは更新なし
-    end
-
-    GameServer->>GameServer: 対象2騎士団の加入・脱退禁止を解除
 
     alt 最終結果保存が完了
+        Note over GameServer: 最終結果保存成功後にPlayer勝敗数を更新
+        loop 勝敗数更新対象Player
+            GameServer->>PrivateAPIServer: UpdatePlayerGuildBattleRecord(PlayerID, Result)
+            PrivateAPIServer->>DB: 勝利ならwin_count+1 / 敗北ならlose_count+1 / 引き分けは更新なし
+        end
         GameServer->>PrivateAPIServer: UpdateGuildBattleStatus(GuildBattleID, completed)
         PrivateAPIServer->>DB: GUILD_BATTLE.status = completed
+        GameServer->>GameServer: 対象2騎士団の加入・脱退禁止を解除
+        GameServer->>GameServer: 同じ開始時刻に0人除外された騎士団の加入・脱退禁止も解除
     else 再試行後も最終結果保存失敗
         Note over GameServer: ErrorLog・Bot通知済み. 運営が原因調査し手動復旧する
     end

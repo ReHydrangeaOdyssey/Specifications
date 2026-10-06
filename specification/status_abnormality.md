@@ -20,6 +20,7 @@
 状態異常を付与したターンを1ターン目として数える.
 複数の状態異常が同時に成立し得る.
 状態異常が付与される際に既に同一の状態異常であれば経過した最低ターンが初期値にリセットされる.
+戦闘中の状態異常は「[型定義](../design/types.md)」の`StatusAbnormalityState`として`CharacterBattle.status_abnormalities`へ保持する. `elapsed_turns`で状態異常の経過ターンを管理し, 毒では`poison_cycle_turns`で3ターン周期を独立して管理する.
 
 複数状態異常に罹っている場合の解除の順序は以下順序で行われる.
 1. 毒.
