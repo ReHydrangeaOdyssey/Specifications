@@ -60,6 +60,7 @@ erDiagram
 
 ## GUILD / GUILD_MEMBER 制約
 
+* `GUILD.name`はUTF-8, 最大10文字, 空文字不可とし, 騎士団間の重複を許可する.
 * プレイヤーの初期騎士団は`GUILD.id = PLAYER.id`となるように作成する.
 * 初期騎士団作成時は`castle_level`, `armory_level`, `food_storage_level`, `smithy_level`, `strategy_office_level`, `tavern_level`をすべて1で保存する.
 * 初期騎士団は, その所有プレイヤーが別の騎士団へ所属している間も`GUILD`レコードを削除しない.
@@ -68,6 +69,7 @@ erDiagram
 * `player_id`には一意制約を設定し, 1つのPlayerIDが同時に複数騎士団へ所属できないようにする.
 * 所属変更時は, 対象PlayerIDの既存`GUILD_MEMBER`行を削除してから新しいGuildIDの行を挿入する処理を同一トランザクションで行う.
 * `LeaveGuild`では新しい`GUILD`レコードを作成せず, `guild_id = player_id`の既存初期騎士団へ`GUILD_MEMBER`を戻す.
+* 団長・副団長変更時は`GUILD.leader_player_id`および`GUILD.subleader_player_id`を更新し, 加工済みマスターデータへは保存しない.
 * `GUILD.daytime_start_time`は`GUILD_BATTLE_START_1130`, `GUILD_BATTLE_START_1215`, `GUILD_BATTLE_START_1300`のいずれか1つとする.
 * `GUILD.nighttime_start_time`は`GUILD_BATTLE_START_2100`, `GUILD_BATTLE_START_2200`, `GUILD_BATTLE_START_2300`のいずれか1つとする.
 
@@ -132,12 +134,6 @@ erDiagram
         StatusAbnormalityID status
     }
 
-    ABILITY_EFFECT_CONDITION_CORRECTION {
-        AbilityID ability_id PK, FK
-        ConditionValue condition_value
-        CorrectionValue correction_value
-    }
-
     ABILITY_EFFECT_STAT_CORRECTION {
         AbilityID ability_id PK, FK
         CorrectionValue attack
@@ -164,10 +160,10 @@ erDiagram
     TACTICS_STAGE_EFFECT {
         RecordID id PK
         TacticsID tactics_id FK
-        Stage stage
         TacticsEffectID effect_id
         TacticsTarget target
         CorrectionValue increase_value
+        Count increase_uint_value
     }
 
     TACTICS_STAGE_BATTLE_SPECIAL_EFFECT {
@@ -182,7 +178,8 @@ erDiagram
         TacticsID tactics_id FK
         TacticsEffectID effect_id
         TacticsTarget target
-        CorrectionValue effect_value
+        CorrectionValue correction_value
+        Count uint_value
     }
 
     TACTICS_HP_RECOVERY_EFFECT {
@@ -231,7 +228,6 @@ erDiagram
     ABILITY ||--o| ABILITY_CONDITION_VALUE : condition_data
     ABILITY ||--o| ABILITY_EFFECT_CORRECTION : effect_data
     ABILITY ||--o| ABILITY_EFFECT_STATUS : effect_data
-    ABILITY ||--o| ABILITY_EFFECT_CONDITION_CORRECTION : effect_data
     ABILITY ||--o| ABILITY_EFFECT_STAT_CORRECTION : effect_data
 
     TACTICS ||--o{ TACTICS_STAGE_EFFECT : has
@@ -243,8 +239,8 @@ erDiagram
 ```
 
 `SKILL.activation_rate`は基本スキル発動率`0.2`へ加算する値とする. `SKILL.max_activation_count`は1戦闘中の最大発動回数とし, `u32::MAX`は回数無制限を表す. `SKILL`の効果別フィールドは加工済み`SkillMasterData.effect_data`の`oneof`に対応して格納する. 該当しない効果別フィールドは未使用とし, DatabaseではNULLを許可する. `SKILL.target_condition_status_abnormality_id`は`target_condition_id=SKILL_TARGET_CONDITION_STATUS_ABNORMALITY`の場合のみ使用する. `SKILL.heal_rate`は対象の最大HPに対する回復割合とし, `SKILL.effect_id=SKILL_EFFECT_HEAL`では`SKILL.correction_value`を使用しない.
-`SKILL.effect_id`は「[型定義](types.md)」の`SkillEffectID`, `ABILITY.effect_id`は`AbilityEffectID`, `TACTICS_EFFECT.effect_id`は`TacticsEffectID`を使用する. これら3つは相互に別の列挙型とする. `ABILITY.condition_id`は発動条件を保持し, 具体値が必要な場合だけ`ABILITY_CONDITION_VALUE.condition_value`を使用する. `ABILITY`の効果固有値は加工済み`AbilityMasterData.effect_data`の`oneof`に対応する4つの詳細テーブルへ格納し, 1つのAbilityIDについて有効な共有体に対応する詳細だけを使用する. 発動条件値と効果詳細は独立して保持するため同時に存在できる.
-同一`TacticsEffectID`系列の効果値はすべて加算する. `TACTICS_STAGE_EFFECT`は段階ごと・`TacticsEffectID`ごと・`TacticsTarget`ごとの効果上昇量を保持する. `TACTICS_EFFECT_BATTLE_SPECIAL`の段階上昇量は`TACTICS_STAGE_BATTLE_SPECIAL_EFFECT`へ攻撃・防御・速度の3値として保持する. `TACTICS_EFFECT_HP_RECOVERY`は`TACTICS_HP_RECOVERY_EFFECT`, `TACTICS_EFFECT_BATTLE_SPECIAL`は`TACTICS_BATTLE_SPECIAL_EFFECT`へ効果固有値を保持し, それらでは`TACTICS_EFFECT.effect_value`を使用しないためNULLを許可する. `TACTICS.end_type=TACTICS_END_TYPE_COUNT`の場合は`TACTICS.count_consume_trigger`で残り回数を消費するイベントを指定する.
+`SKILL.effect_id`は「[型定義](types.md)」の`SkillEffectID`, `ABILITY.effect_id`は`AbilityEffectID`, `TACTICS_EFFECT.effect_id`は`TacticsEffectID`を使用する. これら3つは相互に別の列挙型とする. `ABILITY.condition_id`は発動条件を保持し, 具体値が必要な場合だけ`ABILITY_CONDITION_VALUE.condition_value`を使用する. `ABILITY`の効果固有値は加工済み`AbilityMasterData.effect_data`の`oneof`に対応する詳細テーブルへ格納する. `no_parameter`を使用するAbilityEffectIDでは効果詳細テーブルを使用しない. `ABILITY_EFFECT_STATUS.status`は`ABILITY_EFFECT_AVOIDANCE`で攻撃回避を表す場合にNULLを許可し, 状態異常回避および`ABILITY_EFFECT_STATUS_ABNORMALITY_ATTACK`では対象または付与する`StatusAbnormalityID`を保持する. 発動条件値と効果詳細は独立して保持するため同時に存在できる.
+同一`TacticsEffectID`系列の効果値はすべて加算する. 段階レベル`n`の最終効果値は`基本効果値 + (n - 1) * 増加値`で算出する. `TACTICS_STAGE_EFFECT.increase_value`は浮動小数点効果, `increase_uint_value`はBP固定回復等の整数効果に使用する. `TACTICS_EFFECT_BATTLE_SPECIAL`の段階上昇量は`TACTICS_STAGE_BATTLE_SPECIAL_EFFECT`へ攻撃・防御・速度の3値として保持する. `TACTICS_EFFECT.correction_value`は浮動小数点効果, `TACTICS_EFFECT.uint_value`はBP固定回復等の整数効果に使用する. `TACTICS_EFFECT_HP_RECOVERY`は`TACTICS_HP_RECOVERY_EFFECT`, `TACTICS_EFFECT_BATTLE_SPECIAL`は`TACTICS_BATTLE_SPECIAL_EFFECT`へ効果固有値を保持する. 使用しない値列はNULLとする. `TACTICS.end_type=TACTICS_END_TYPE_COUNT`の場合は`TACTICS.count_consume_trigger`で残り回数を消費するイベントを指定する.
 
 
 ```mermaid
@@ -426,7 +422,9 @@ erDiagram
 
 ## 騎士団戦DB送信失敗時
 
-騎士団戦中のDatabase更新・ログ保存要求が失敗した場合は, 同一要求を1回だけ再試行する. 再試行も失敗した場合, GameServerはDB障害発生状態へ移行し, それ以降の騎士団戦中DB送信を停止して送信予定データをローカル保存する. 騎士団戦終了時にローカル保存データをDatabaseへ一括送信する.
+騎士団戦中のDatabase更新・ログ保存要求が失敗した場合は, 同一要求を1回だけ再試行する. 再試行も失敗した場合, GameServerはDB障害発生状態へ移行し, それ以降の騎士団戦中DB送信を停止して送信予定データをローカル保存する.
+ローカル保存はGameServerプロセスのカレントディレクトリ直下にUTF-8 JSONファイルとして行い, GameServer再起動後も保持する.
+騎士団戦終了時にローカル保存データをDatabaseへ一括送信する. 一括送信に失敗した場合はローカルファイルを残し, 成功した場合は対応するローカルファイルを削除する.
 
 `SaveGuildBattleResult`はこの一般規則とは別に, 初回失敗後1回だけ再試行し, 再試行も失敗した場合はErrorLogを保存してBotへ通知する. その後の原因調査・復旧は運営が手動で行う. `GUILD_BATTLE.status`の`completed`更新は最終結果保存が完了した場合に行う.
 

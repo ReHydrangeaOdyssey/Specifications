@@ -74,12 +74,16 @@ sequenceDiagram
             GameServer-->>PublicAPIServer: StartArenaBattle(ArenaBattleErrorResponse)
             PublicAPIServer-->>Client: StartArenaBattle(ArenaBattleErrorResponse)
         else 対戦相手決定
+            GameServer->>PrivateAPIServer: GetArenaBattleData(PlayerID)
+            PrivateAPIServer->>DB: 自分側編成データ取得
+            DB-->>PrivateAPIServer: 自分側データ返却
+            PrivateAPIServer-->>GameServer: GetArenaBattleData
             GameServer->>PrivateAPIServer: GetArenaBattleData(OpponentPlayerID)
-            PrivateAPIServer->>DB: 必要データ取得
-            DB-->>PrivateAPIServer: データ返却
+            PrivateAPIServer->>DB: 相手側編成データ取得
+            DB-->>PrivateAPIServer: 相手側データ返却
             PrivateAPIServer-->>GameServer: GetArenaBattleData
             GameServer->>GameServer: 同じSeedから戦闘専用PRNGを新規生成
-            GameServer->>GameServer: EnemyFormationID・EnemyCharactersを初期状態として戦闘実行
+            GameServer->>GameServer: 自分側・相手側双方のFormationID・Charactersを初期状態として戦闘実行
             GameServer-->>PublicAPIServer: StartArenaBattle(EnemyFormationID, EnemyCharacters, Seed)
             PublicAPIServer-->>Client: StartArenaBattle(EnemyFormationID, EnemyCharacters, Seed)
             Client->>Client: 同じSeedから戦闘専用PRNGを新規生成
@@ -91,12 +95,16 @@ sequenceDiagram
         PublicAPIServer->>GameServer: StartArenaBattle(SessionID, PlayerID, mode=friend, OpponentID)
         GameServer->>GameServer: SessionID・PlayerID等を検証
         GameServer->>GameServer: アリーナ戦闘用Seedを生成
+        GameServer->>PrivateAPIServer: GetArenaBattleData(PlayerID)
+        PrivateAPIServer->>DB: 自分側編成データ取得
+        DB-->>PrivateAPIServer: 自分側データ返却
+        PrivateAPIServer-->>GameServer: GetArenaBattleData
         GameServer->>PrivateAPIServer: GetArenaBattleData(OpponentID)
-        PrivateAPIServer->>DB: 必要データ取得
-        DB-->>PrivateAPIServer: データ返却
+        PrivateAPIServer->>DB: 相手側編成データ取得
+        DB-->>PrivateAPIServer: 相手側データ返却
         PrivateAPIServer-->>GameServer: GetArenaBattleData
         GameServer->>GameServer: 同じSeedから戦闘専用PRNGを新規生成
-        GameServer->>GameServer: EnemyFormationID・EnemyCharactersを初期状態として戦闘実行
+        GameServer->>GameServer: 自分側・相手側双方のFormationID・Charactersを初期状態として戦闘実行
         GameServer-->>PublicAPIServer: StartArenaBattle(EnemyFormationID, EnemyCharacters, Seed)
         PublicAPIServer-->>Client: StartArenaBattle(EnemyFormationID, EnemyCharacters, Seed)
         Client->>Client: 同じSeedから戦闘専用PRNGを新規生成

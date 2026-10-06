@@ -162,6 +162,7 @@
 #### 処理内容
 
 - SessionIDを検証する.
+- GuildNameがUTF-8, 最大10文字, 空文字不可の制約を満たすことを確認する. GuildNameの重複は許可する.
 - プレイヤーの初期騎士団を新規作成する.
 - 作成する騎士団の`GuildID`には要求元`PlayerID`と同一値を使用する.
 - 城, 武器庫, 食糧庫, 鍛冶屋, 兵法所, 酒場の各施設レベルをすべて1で初期化する.
@@ -177,6 +178,31 @@
 #### 成功時レスポンス
 
 [API Payload](api_payload.md)の「CreateGuildResponse」を参照する.
+
+#### 失敗時レスポンス
+
+GuildNameが制約を満たさない場合は`ApiErrorResponse(API_ERROR_INVALID_GUILD_NAME)`を返す.
+
+### 騎士団役職変更
+
+#### メソッド名
+
+`UpdateGuildLeadership`
+
+#### 処理内容
+
+- SessionIDを検証する.
+- 団長・副団長の変更権限条件および指定可能PlayerID条件は, 現時点では未定義とする.
+- GameServerからPrivate API Serverへ`SaveGuildLeadership`を要求する.
+- Private API ServerがDatabaseの`GUILD.leader_player_id`および`GUILD.subleader_player_id`を要求値へ更新する.
+
+#### 要求データ
+
+[API Payload](api_payload.md)の「UpdateGuildLeadershipRequest」を参照する.
+
+#### 成功時レスポンス
+
+[API Payload](api_payload.md)の「UpdateGuildLeadershipResponse」を参照する.
 
 ### 騎士団所属変更
 
@@ -269,9 +295,9 @@
 - SessionID, PlayerID等の要求検証を完了する.
 - GameServerがアリーナ戦闘用Seedを生成する.
 - `Mode=random`の場合は候補PlayerIDをPlayerID昇順に並べ, 生成したSeedを用いて対戦相手を抽選する.
-- GameServerはPrivate API Server経由でDatabaseから必要データを取得する.
+- GameServerはPrivate API Server経由でDatabaseから要求元PlayerIDと対戦相手PlayerIDの両方について`GetArenaBattleData`を実行し, 双方のFormationID・編成情報を取得する.
 - 対戦相手抽選後, 戦闘開始前に同じSeedから戦闘専用の新しいPRNGを生成する. 対戦相手抽選で進んだPRNG状態は引き継がない.
-- GameServerが相手`FormationID`を含む初期状態を用いて戦闘を実行し, その計算結果を正本とする.
+- GameServerが自分側と相手側双方のFormationID・キャラクター初期状態を用いて戦闘を実行し, その計算結果を正本とする.
 - 成功レスポンスでは戦闘結果そのものは返さず, Clientが同一戦闘を再現するための`EnemyFormationID`・相手キャラクター初期状態・Seedを返す.
 - Clientも戦闘開始前に同じSeedから戦闘専用の新しいPRNGを生成する.
 
@@ -294,10 +320,11 @@
 
 - 参加前の初期値は`0`とする.
 - `JoinGuildBattle`成功時に, プレイヤー固有の初期RequestSequenceを範囲乱数`1..=1,000,000,000`で生成して割り当てる. 他プレイヤーとの重複は許可する.
-- 参加後の騎士団戦PublicAPI要求は`GuildBattleID`, `PlayerID`, `RequestSequence`を含む.
+- 参加後の騎士団戦PublicAPI要求は, 再接続用の`GetGuildBattleStatus`を除き`GuildBattleID`, `PlayerID`, `RequestSequence`を含む.
+- `GetGuildBattleStatus`はSessionID・PlayerID・GuildBattleIDで本人性と参加状態を検証し, 現在のRequestSequenceを含む状態一式を返す. この要求ではRequestSequenceを加算しない.
 - 要求RequestSequenceがGameServer保持値と一致する場合のみ処理する.
 - 一致しない場合は`ApiErrorResponse(API_ERROR_INVALID_GUILD_BATTLE_SEQUENCE)`を返す.
-- 要求が成功するたびにGameServer保持RequestSequenceを`1`加算し, 成功レスポンスの`NextRequestSequence`としてClientへ返す.
+- `GetGuildBattleStatus`を除く要求が成功するたびにGameServer保持RequestSequenceを`1`加算し, 成功レスポンスの`NextRequestSequence`としてClientへ返す.
 - 失敗した要求ではRequestSequenceを加算しない.
 
 
@@ -361,7 +388,10 @@
 `GetGuildBattleStatus`
 
 #### 処理内容
-- 参加中プレイヤーの編成IDと現在HPを取得する.
+
+- SessionID, PlayerID, GuildBattleIDから参加中プレイヤーを検証する.
+- 再接続時にClient状態を復元するため, 現在HP, BP, TP, 治療・復活状態, 出撃待機, タクティクス状態, アイテム残数, スコア, チェイン, CBC状態, 現在RequestSequenceを取得する.
+- 本APIではRequestSequenceを加算しない.
 
 #### 要求データ
 
@@ -411,6 +441,7 @@
 
 GameServer側のチェック.
 
+- 要求TacticsIDが当該プレイヤーの騎士団戦編成キャラクターから使用可能になっているタクティクスであること.
 - TP.
 - 使用回数.
 
@@ -554,13 +585,14 @@ GameServer側のチェック.
 #### GameServer側の処理
 
 - 復活可能かチェックする.
+- 「[パーティランク](../specification/party_rank.md)」に従ってパーティランクを算出し, 復活待機時間を決定する.
 - 復活可能な場合は復活中状態へ変更する.
 
 #### 復活可能時レスポンス
 
 [API Payload](api_payload.md)の「StartReviveResponse」を参照する.
 
-5秒経過後, GameServerは復活完了状態へ変更する. この時点ではBP消費・HP回復は行わない.
+パーティランクに応じた復活待機時間経過後, GameServerは復活完了状態へ変更する. この時点ではBP消費・HP回復は行わない.
 
 #### 復活不可時レスポンス
 
@@ -628,7 +660,7 @@ GameServer側のチェック.
 - GameServer から要求を受ける.
 - Database とのデータ保存・取得を仲介する.
 - 要求/レスポンスのデータ構造は[API Payload](api_payload.md)を参照する.
-- 騎士団戦中のDatabase送信失敗時は同一要求を1回だけ再試行する. 再試行も失敗した場合, GameServerはDB障害発生状態へ移行し, それ以降の騎士団戦中DB送信を行わず, 本来送信するデータをローカル保存する. 騎士団戦終了時にローカル保存データを一括送信する.
+- 騎士団戦中のDatabase送信失敗時は同一要求を1回だけ再試行する. 再試行も失敗した場合, GameServerはDB障害発生状態へ移行し, それ以降の騎士団戦中DB送信を行わず, 本来送信するデータをカレントディレクトリ直下のUTF-8 JSONファイルへ保存する. ファイルはGameServer再起動後も保持する. 騎士団戦終了時にローカル保存データを一括送信し, 成功時は対応ファイルを削除し, 失敗時は削除せず残す.
 - `SaveGuildBattleResult`は専用の失敗処理を使用し, 1回再試行しても失敗した場合はErrorLog保存・Bot通知後, 運営による手動復旧対象とする.
 
 ## セッション・プレイヤー関連
@@ -675,6 +707,21 @@ GameServer側のチェック.
 #### 要求データ
 
 [API Payload](api_payload.md)の「SaveGuildRequest」を参照する.
+
+### 騎士団役職保存
+
+#### メソッド名
+
+`SaveGuildLeadership`
+
+#### 処理内容
+
+- `GUILD.leader_player_id`を指定LeaderPlayerIDへ更新する.
+- `GUILD.subleader_player_id`を指定SubleaderPlayerIDへ更新する.
+
+#### 要求データ
+
+[API Payload](api_payload.md)の「SaveGuildLeadershipRequest」を参照する.
 
 ### プレイヤー所属騎士団更新
 
@@ -836,7 +883,9 @@ GameServer側のチェック.
 
 #### 処理内容
 
-- 対象日・`GuildBattleStartTime`に一致する騎士団を抽出する.
+- 開戦5分前の騎士団戦開戦前処理内で実行する.
+- 対象日・`GuildBattleStartTime`に一致する騎士団の所属変更禁止を開始し, 所属を固定する.
+- 所属固定後に対象騎士団を抽出する.
 - `GUILD_MEMBER`が0件の騎士団は対戦組み合わせ生成対象から除外する.
 - 抽出一覧へ疑似乱数の「抽選」を適用して順序を決め, 先頭から2騎士団ずつペアを作る.
 - 奇数の場合は最後の騎士団を事前作成済みダミープレイヤーの初期騎士団とペアにする.

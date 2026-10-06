@@ -56,14 +56,16 @@
 
 | 共有体フィールド | 型 | 使用対象 |
 |---|---|---|
-| ScalarValue | `Float32` | スカラー値だけで表現できる効果 |
+| ScalarValue | `Float32` | 浮動小数点のスカラー値で表現する効果 |
+| UintValue | `Count` | `u32`の整数値で表現する効果. `TACTICS_EFFECT_BP_RECOVERY`で使用 |
 | StatusEffect | `TacticsStatEffectResult` | 攻撃・防御・速度のステータス補正結果 |
 | HpRecovery | `TacticsHpRecoveryEffectResult` | `TACTICS_EFFECT_HP_RECOVERY` |
 | BattleSpecial | `TacticsBattleSpecialEffectResult` | `TACTICS_EFFECT_BATTLE_SPECIAL` |
 
 `TACTICS_EFFECT_ATTACK_CORRECTION`, `TACTICS_EFFECT_DEFENSE_CORRECTION`, `TACTICS_EFFECT_SPEED_CORRECTION`では`StatusEffect`を使用し, 対象となるフィールドへ効果値を設定する. 対象外フィールドは0とする.
 `TACTICS_EFFECT_BATTLE_SPECIAL`では`BattleSpecial`を使用し, 攻撃・防御・速度を`BattleSpecial.StatusEffect`へまとめて返す.
-それ以外で単一値として表現できる効果は`ScalarValue`を使用する.
+`TACTICS_EFFECT_BP_RECOVERY`では`UintValue`を使用する.
+それ以外で浮動小数点の単一値として表現できる効果は`ScalarValue`を使用する.
 
 ### TacticsEffectResult
 
@@ -81,6 +83,29 @@
 | CurrentHP | `HP` | 現在HP |
 
 固定長配列で未使用要素を表す場合は `FormationSlotID=255`, `CurrentHP=0` とする.
+
+### GuildBattleTacticsStatus
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| TacticsID | `TacticsID` | 使用可能なタクティクスID |
+| RemainingUseCount | `Count` | 残り使用可能回数 |
+
+### GuildBattleItemStatus
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| ItemID | `ItemID` | 所持アイテムID |
+| RemainingCount | `Count` | 現在の残り所持数 |
+
+### GuildBattleCbcStatus
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| IsActive | `Bool` | キャッスルブレイクチャンス中の場合true |
+| InitiatorGuildID | `GuildID` | CBCを発生させた騎士団ID. 非CBC時は`0` |
+| RemainingTime | `DurationSeconds` | CBC残り時間. 非CBC時は0 |
+| RemainingCount | `Count` | CBC残りカウント. 非CBC時は0 |
 
 ### ArenaPartyCharacter
 
@@ -176,7 +201,7 @@ PublicAPIで失敗レスポンスが必要な場合は, 個別に別構造が定
 |---|---|---|
 | SessionID | `SessionID` | セッションID |
 | PlayerID | `PlayerID` | 騎士団を作成するプレイヤーID |
-| GuildName | `Name` | 作成する騎士団名 |
+| GuildName | `Name` | 作成する騎士団名. UTF-8, 最大10文字, 空文字不可, 重複可 |
 | DaytimeStartTime | `GuildBattleStartTime` | 昼開始時刻.11:30 / 12:15 / 13:00のいずれか |
 | NighttimeStartTime | `GuildBattleStartTime` | 夜開始時刻.21:00 / 22:00 / 23:00のいずれか |
 
@@ -214,6 +239,24 @@ PublicAPIで失敗レスポンスが必要な場合は, 個別に別構造が定
 | 項目 | 型 | 内容 |
 |---|---|---|
 | GuildID | `GuildID` | 脱退後に戻った初期騎士団ID. 値はPlayerIDと同一 |
+
+### UpdateGuildLeadershipRequest
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| SessionID | `SessionID` | セッションID |
+| PlayerID | `PlayerID` | 変更要求を行うプレイヤーID |
+| GuildID | `GuildID` | 役職を変更する騎士団ID |
+| LeaderPlayerID | `PlayerID` | 変更後の団長PlayerID |
+| SubleaderPlayerID | `PlayerID` | 変更後の副団長PlayerID |
+
+### UpdateGuildLeadershipResponse
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| GuildID | `GuildID` | 役職変更対象の騎士団ID |
+| LeaderPlayerID | `PlayerID` | 変更後の団長PlayerID |
+| SubleaderPlayerID | `PlayerID` | 変更後の副団長PlayerID |
 
 ## アリーナ
 
@@ -293,14 +336,31 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 | SessionID | `SessionID` | セッションID |
 | PlayerID | `PlayerID` | プレイヤーID |
 | GuildBattleID | `GuildBattleID` | 対象騎士団戦ID |
-| RequestSequence | `RequestSequence` | GameServerが当該PlayerIDについて現在保持している要求シーケンス番号と一致させる値 |
+
+`GetGuildBattleStatus`は再接続時の状態復元に使用するため`RequestSequence`を要求しない.
 
 ### GetGuildBattleStatusResponse
 
 | 項目 | 型 | 内容 |
 |---|---|---|
 | Characters | `FormationCharacterHP[10]` | 編成IDと現在HPの一覧 |
-| NextRequestSequence | `RequestSequence` | 要求成功後の次要求シーケンス番号 |
+| BP | `BP` | 現在BP |
+| MaxBP | `BP` | 最大BP |
+| TP | `TP` | 現在TP |
+| MaxTP | `TP` | 現在の最大TP |
+| HealState | `HealState` | 現在の治療状態 |
+| HealRemainingTime | `DurationSeconds` | 治療中の残り待機時間. 治療中以外は0 |
+| ReviveState | `ReviveState` | 現在の復活状態 |
+| ReviveRemainingTime | `DurationSeconds` | 復活中の残り待機時間. 復活中以外は0 |
+| SortieWaitRemainingTime | `DurationSeconds` | 出撃待機タイマーの残り時間 |
+| Tactics | `GuildBattleTacticsStatus[]` | 使用可能タクティクスと残り使用回数 |
+| ActiveTacticsEffects | `TacticsActiveEffectState[]` | 現在有効な継続タクティクス効果 |
+| Items | `GuildBattleItemStatus[]` | 所持アイテムと現在個数 |
+| AllyScore | `Score` | 所属騎士団の現在スコア |
+| EnemyScore | `Score` | 相手騎士団の現在スコア |
+| Chain | `Count` | 現在のチェイン数 |
+| CbcStatus | `GuildBattleCbcStatus` | 現在のキャッスルブレイクチャンス状態 |
+| RequestSequence | `RequestSequence` | GameServerが現在保持する要求シーケンス番号. 状態取得では加算しない |
 
 ### GuildBattleSortieRequest
 
@@ -434,7 +494,7 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 | WaitTime | `DurationSeconds` | 復活待機時間 |
 | NextRequestSequence | `RequestSequence` | 要求成功後の次要求シーケンス番号 |
 
-`WaitTime` は5秒.
+`WaitTime`は「[パーティランク](../specification/party_rank.md)」で算出したパーティランクに対応する復活待機時間とする.
 
 ### CancelReviveRequest
 
@@ -500,7 +560,7 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 | 項目 | 型 | 内容 |
 |---|---|---|
 | GuildID | `GuildID` | 保存する騎士団ID |
-| GuildName | `Name` | 騎士団名 |
+| GuildName | `Name` | 騎士団名. UTF-8, 最大10文字, 空文字不可, 重複可 |
 | LeaderPlayerID | `PlayerID` | 団長PlayerID |
 | DaytimeStartTime | `GuildBattleStartTime` | 昼開始時刻.11:30 / 12:15 / 13:00のいずれか |
 | NighttimeStartTime | `GuildBattleStartTime` | 夜開始時刻.21:00 / 22:00 / 23:00のいずれか |
@@ -512,6 +572,14 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 | PlayerID | `PlayerID` | 所属を更新するPlayerID |
 | GuildID | `GuildID` | 所属先GuildID |
 
+
+### SaveGuildLeadershipRequest
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| GuildID | `GuildID` | 更新対象の騎士団ID |
+| LeaderPlayerID | `PlayerID` | 保存する団長PlayerID |
+| SubleaderPlayerID | `PlayerID` | 保存する副団長PlayerID |
 
 ### SavePlayerIDRequest
 

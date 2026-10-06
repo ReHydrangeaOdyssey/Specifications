@@ -75,7 +75,7 @@
 | `Float32` | `f32` | `float` | `real` | IEEE-754 32bit浮動小数点数 |
 | `Rate` | `f32` | `float` | `real` | 確率/倍率 |
 | `CorrectionValue` | `f32` | `float` | `real` | 補正値 |
-| `ConditionValue` | `u32` | `uint32` | `bigint` | アビリティ発動条件に付随する値. `ABILITY_CONDITION_EVERY_N_TURNS`のターン数, `ABILITY_CONDITION_HP_AT_OR_BELOW_THRESHOLD`の閾値等に使用 |
+| `ConditionValue` | `u32` | `uint32` | `bigint` | アビリティ発動条件に付随する値. `ABILITY_CONDITION_EVERY_N_TURNS`ではターン数, `ABILITY_CONDITION_HP_AT_OR_BELOW_THRESHOLD`では最大HPに対する整数パーセント値として使用 |
 | `BinaryData` | `Vec<u8>` | `bytes` | `bytea` | バイナリデータ |
 | `JsonData` | `serde_json::Value` | `string` | `jsonb` | UTF-8 JSONデータ. Protocol Buffers上ではJSON文字列として扱う |
 
@@ -360,7 +360,7 @@ enum AbilityConditionID {
 ```proto
 enum TacticsTarget {
   TACTICS_TARGET_SELF_PARTY = 0; // 使用プレイヤー自身のパーティを対象とする.
-  TACTICS_TARGET_OPPONENT_PARTY = 1; // 相手パーティを対象とする.
+  TACTICS_TARGET_OPPONENT_PARTY = 1; // 出撃後に戦闘へ入った時点の対戦相手パーティを対象とする. 使用時点で特定Playerへ固定しない.
   TACTICS_TARGET_ALLY_GUILD = 2; // 味方騎士団を対象とする.
   TACTICS_TARGET_ENEMY_GUILD = 3; // 敵騎士団を対象とする.
 }
@@ -439,6 +439,7 @@ enum ApiErrorCode {
   API_ERROR_GUILD_MEMBERSHIP_CHANGE_NOT_ALLOWED = 20; // 騎士団加入・脱退が禁止されている.
   API_ERROR_INVALID_PARTY = 21; // 編成制約を満たしていない.
   API_ERROR_RATE_LIMIT_EXCEEDED = 22; // PublicAPIのレート制限を超過した.
+  API_ERROR_INVALID_GUILD_NAME = 23; // GuildNameがUTF-8・最大10文字・空文字不可の制約を満たさない.
 }
 ```
 
@@ -515,6 +516,61 @@ enum SpeedRank {
 }
 ```
 
+### BuffDebuffState
+
+`BuffDebuffState`は戦闘中キャラクターのバフ・デバフ付与状態を表す. スキルおよびアビリティによるバフ・デバフだけを対象とし, フォーメーションおよびタクティクスの補正は含めない.
+
+```proto
+enum BuffDebuffState {
+  BUFF_DEBUFF_STATE_NONE = 0; // バフもデバフも付与されていない.
+  BUFF_DEBUFF_STATE_BUFF = 1; // バフだけが付与されている.
+  BUFF_DEBUFF_STATE_DEBUFF = 2; // デバフだけが付与されている.
+  BUFF_DEBUFF_STATE_BUFF_DEBUFF = 3; // バフとデバフの両方が付与されている.
+}
+```
+
+### PartyRank
+
+`PartyRank`はHP, 攻撃, 防御の各ランクおよび最終的なパーティランクで使用する33段階のランクを表す. 値と算出規則は「[パーティランク](../specification/party_rank.md)」を参照する.
+
+```proto
+enum PartyRank {
+  PARTY_RANK_SS9 = 0; // パーティランクSS9.
+  PARTY_RANK_SS8 = 1; // パーティランクSS8.
+  PARTY_RANK_SS7 = 2; // パーティランクSS7.
+  PARTY_RANK_SS6 = 3; // パーティランクSS6.
+  PARTY_RANK_SS5 = 4; // パーティランクSS5.
+  PARTY_RANK_SS4 = 5; // パーティランクSS4.
+  PARTY_RANK_SS3 = 6; // パーティランクSS3.
+  PARTY_RANK_SS2 = 7; // パーティランクSS2.
+  PARTY_RANK_SS1 = 8; // パーティランクSS1.
+  PARTY_RANK_SS_PLUS = 9; // パーティランクSS+.
+  PARTY_RANK_SS = 10; // パーティランクSS.
+  PARTY_RANK_SS_MINUS = 11; // パーティランクSS-.
+  PARTY_RANK_S_PLUS = 12; // パーティランクS+.
+  PARTY_RANK_S = 13; // パーティランクS.
+  PARTY_RANK_S_MINUS = 14; // パーティランクS-.
+  PARTY_RANK_A_PLUS = 15; // パーティランクA+.
+  PARTY_RANK_A = 16; // パーティランクA.
+  PARTY_RANK_A_MINUS = 17; // パーティランクA-.
+  PARTY_RANK_B_PLUS = 18; // パーティランクB+.
+  PARTY_RANK_B = 19; // パーティランクB.
+  PARTY_RANK_B_MINUS = 20; // パーティランクB-.
+  PARTY_RANK_C_PLUS = 21; // パーティランクC+.
+  PARTY_RANK_C = 22; // パーティランクC.
+  PARTY_RANK_C_MINUS = 23; // パーティランクC-.
+  PARTY_RANK_D_PLUS = 24; // パーティランクD+.
+  PARTY_RANK_D = 25; // パーティランクD.
+  PARTY_RANK_D_MINUS = 26; // パーティランクD-.
+  PARTY_RANK_E_PLUS = 27; // パーティランクE+.
+  PARTY_RANK_E = 28; // パーティランクE.
+  PARTY_RANK_E_MINUS = 29; // パーティランクE-.
+  PARTY_RANK_F_PLUS = 30; // パーティランクF+.
+  PARTY_RANK_F = 31; // パーティランクF.
+  PARTY_RANK_F_MINUS = 32; // パーティランクF-.
+}
+```
+
 ## 共通データ構造型
 
 Protocol Buffersでは以下を使用する.
@@ -530,6 +586,14 @@ message Player {
   uint64 guild_id = 3; // 現在所属している騎士団ID. 論理型GuildID.
 }
 
+message PartyCharacterStatus {
+  uint32 id = 1; // キャラクターID. 論理型CharacterID.
+  float max_hp = 2; // 従者補正適用後の編成時最大HP. 現在HPは保持しない. 論理型Float32.
+  float attack = 3; // 従者補正適用後の編成時攻撃力. 論理型Float32.
+  float defense = 4; // 従者補正適用後の編成時防御力. 論理型Float32.
+  SpeedRank speed = 5; // 編成時の速度ランク. 従者による速度補正は存在しない.
+}
+
 message CharacterBattle {
   uint32 id = 1; // キャラクターID. 論理型CharacterID.
   CharacterAttribute attribute = 2; // キャラクター属性.
@@ -541,6 +605,8 @@ message CharacterBattle {
   uint32 main_skill_id = 8; // 戦闘で使用するメインスキルID. 論理型SkillID.
   repeated uint32 tactics_ids = 9; // 戦闘で使用可能なタクティクスID一覧. 各要素は論理型TacticsID.
   repeated uint32 ability_ids = 10; // Abilityスロット順のアビリティID一覧. 各要素は論理型AbilityID.
+  uint64 owner_player_id = 11; // このキャラクターを編成しているプレイヤーID. 同順位抽選の初期順序決定に使用する. 論理型PlayerID.
+  BuffDebuffState buff_debuff_state = 12; // スキル・アビリティによる現在のバフ・デバフ付与状態.
 }
 
 message HitPoints {
@@ -594,7 +660,8 @@ message AccessTokenState {
 }
 ```
 
-`CharacterBattle` の `hp` / `attack` / `defense` は従者等の補正適用後に戦闘計算で使用する値であるため, 戦闘仕様に従い `Float32` とする. プレイヤーへ表示する際の丸めは各仕様書の表示規則に従う.
+`PartyCharacterStatus`は編成時専用の状態とし, 現在HPを保持しない. `max_hp` / `attack` / `defense`には従者補正だけを適用した値を保持する. パーティランク算出ではこの構造を使用する.
+`CharacterBattle` の `hp` / `attack` / `defense` は従者等の補正適用後に戦闘計算で使用する値であるため, 戦闘仕様に従い `Float32` とする. プレイヤーへ表示する際の丸めは各仕様書の表示規則に従う. `buff_debuff_state`はスキル・アビリティによるバフ・デバフの有無から更新する.
 `TacticsActiveEffectState`は騎士団戦中にGameServerが保持する継続中タクティクス効果の状態とする. `TacticsBattleSpecialData`は`TACTICS_EFFECT_BATTLE_SPECIAL`の具体的な特殊効果を表す. `AccessTokenState`はGameServerメモリ上だけで保持し, Databaseへ永続化しない.
 
 ## 疑似乱数内部型

@@ -8,7 +8,7 @@
 
 ## キャラクター関連
 
-`Rarity`, `CharacterAttribute`, `SpeedRank`, `CharacterBattle`, `HitPoints`は「[型定義](types.md)」を参照する. `CharacterMasterData`を含む加工済みマスターデータ構造は「[マスターデータ](master_data.md)」を参照する.
+`Rarity`, `CharacterAttribute`, `SpeedRank`, `PartyCharacterStatus`, `CharacterBattle`, `HitPoints`, `BuffDebuffState`は「[型定義](types.md)」を参照する. `CharacterMasterData`を含む加工済みマスターデータ構造は「[マスターデータ](master_data.md)」を参照する.
 
 ## タクティクス関連
 

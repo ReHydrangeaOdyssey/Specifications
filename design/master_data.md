@@ -87,13 +87,11 @@ message AbilityCorrectionData {
   float correction_value = 1; // 単一の補正値で表現するアビリティ効果値. 論理型CorrectionValue.
 }
 
-message AbilityStatusAbnormalityData {
-  StatusAbnormalityID status = 1; // 状態異常攻撃で付与する状態異常ID.
+message AbilityNoParameterData {
 }
 
-message AbilityConditionCorrectionData {
-  uint32 condition_value = 1; // AbilityEffectIDに応じて効果側で使用する条件値. 発動条件値とは別に保持する. 論理型ConditionValue.
-  float correction_value = 2; // 当該アビリティの効果補正値. 論理型CorrectionValue.
+message AbilityStatusAbnormalityData {
+  optional StatusAbnormalityID status = 1; // 回避では未設定時に攻撃回避, 設定時に指定状態異常の回避を表す. 状態異常攻撃では付与する状態異常IDを必須で設定する.
 }
 
 message AbilityStatCorrectionData {
@@ -112,10 +110,10 @@ message AbilityMasterData {
   AbilityEffectID effect_id = 8; // アビリティ効果種別. effect_dataの解釈を決定する.
 
   oneof effect_data {
-    AbilityCorrectionData correction = 9; // 単一の補正値を持つ効果で使用する.
-    AbilityStatusAbnormalityData status_abnormality = 10; // 状態異常攻撃で使用する.
-    AbilityConditionCorrectionData condition_correction = 11; // 効果側の条件値と補正値の両方を必要とする効果で使用する.
-    AbilityStatCorrectionData stat_correction = 12; // 攻撃・防御を同時または個別に補正するバフ・デバフで使用する.
+    AbilityCorrectionData correction = 9; // 単一の補正値を実際に使用する効果で使用する.
+    AbilityStatusAbnormalityData status_abnormality = 10; // 回避または状態異常攻撃で使用する.
+    AbilityStatCorrectionData stat_correction = 11; // 攻撃・防御を同時または個別に補正するバフ・デバフで使用する.
+    AbilityNoParameterData no_parameter = 12; // 効果固有値を使用しない効果で使用する.
   }
 }
 
@@ -124,29 +122,44 @@ message AbilityMasterData {
 `AbilityMasterData.activation_condition`と`AbilityMasterData.effect_data`は独立して保持する. これにより, 発動条件の具体値と効果固有値を同時に保持できる.
 `AbilityMasterData.effect_data`は`AbilityEffectID`に応じて使用する共有体フィールドを切り替える.
 
-* `ABILITY_EFFECT_BUFF` / `ABILITY_EFFECT_DEBUFF`: `stat_correction`を使用する.
-* `ABILITY_EFFECT_STATUS_ABNORMALITY_ATTACK`: `status_abnormality`を使用する.
-* 単一補正値だけを必要とする効果: `correction`を使用する.
-* 効果側の条件値と効果補正値の両方を必要とする効果: `condition_correction`を使用する.
+* `ABILITY_EFFECT_BUFF`: `stat_correction`を使用する.
+* `ABILITY_EFFECT_DEBUFF`: `stat_correction`を使用する.
+* `ABILITY_EFFECT_AVOIDANCE`: `status_abnormality`を使用する. `status`未設定時は攻撃の回避を表し, `status`設定時は指定した状態異常の回避を表す.
+* `ABILITY_EFFECT_COUNTER`: `no_parameter`を使用し, 効果固有値を持たない.
+* `ABILITY_EFFECT_AVOIDANCE_DISABLE`: `no_parameter`を使用し, 効果固有値を持たない.
+* `ABILITY_EFFECT_COUNTER_DISABLE`: `no_parameter`を使用し, 効果固有値を持たない.
+* `ABILITY_EFFECT_STATUS_ABNORMALITY_ATTACK`: `status_abnormality`を使用し, `status`へ付与する状態異常IDを必ず設定する.
+* `ABILITY_EFFECT_DAMAGE_INCREASE`: `correction`を使用する.
+* `ABILITY_EFFECT_FIXED_DAMAGE_INCREASE`: `correction`を使用する.
+* `ABILITY_EFFECT_HEAL`: `correction`を使用する.
+* `ABILITY_EFFECT_COVER`: `no_parameter`を使用し, 効果固有値を持たない.
+* `ABILITY_EFFECT_DRAW_AGGRO`: `no_parameter`を使用し, 効果固有値を持たない.
+* `ABILITY_EFFECT_PURSUIT`: `no_parameter`を使用し, 効果固有値を持たない.
 * 発動条件の具体値は`activation_condition.condition_value`に保持する.
-* `condition_correction.condition_value`は効果側の条件値であり, 発動条件の具体値には使用しない.
 * `condition_value`と`correction_value`は`AbilityMasterData`直下には保持しない.
 
 ```proto
 message TacticsStageEffectData {
-  uint32 stage = 1; // 効果上昇量を適用する段階. 論理型Stage.
-  TacticsEffectID effect_id = 2; // 段階効果の対象となる効果種別.
-  TacticsTarget target = 3; // 段階効果の対象.
-  float increase_value = 4; // スカラー値で表現する効果の当該段階上昇量. 論理型CorrectionValue.
-  TacticsBattleSpecialParameters battle_special_increase = 5; // effect_idがBATTLE_SPECIALの場合の攻撃・防御・速度の段階上昇量.
+  TacticsEffectID effect_id = 1; // 段階効果の対象となる効果種別.
+  TacticsTarget target = 2; // 段階効果の対象.
+
+  oneof increase_data {
+    float increase_value = 3; // 浮動小数点で表現する効果の1段階あたり増加値. 論理型CorrectionValue.
+    uint32 increase_uint_value = 4; // BP固定回復等, 整数で表現する効果の1段階あたり増加値.
+    TacticsBattleSpecialParameters battle_special_increase = 5; // BATTLE_SPECIALの攻撃・防御・速度の1段階あたり増加値.
+  }
 }
 
 message TacticsEffectData {
   TacticsEffectID effect_id = 1; // タクティクス効果種別.
   TacticsTarget target = 2; // タクティクス効果対象.
-  float effect_value = 3; // スカラー値で表現する基本効果値. 論理型CorrectionValue. BP回復では固定回復値として使用する.
-  TacticsHpRecoveryData hp_recovery = 4; // effect_idがHP_RECOVERYの場合のHP回復方式・割合.
-  TacticsBattleSpecialData battle_special = 5; // effect_idがBATTLE_SPECIALの場合の特殊効果定義.
+
+  oneof effect_data {
+    float correction_value = 3; // 補正値・割合等, 浮動小数点で表現する基本効果値. 論理型CorrectionValue.
+    uint32 uint_value = 4; // BP固定回復等, 整数で表現する基本効果値.
+    TacticsHpRecoveryData hp_recovery = 5; // HP_RECOVERYのHP回復方式・割合.
+    TacticsBattleSpecialData battle_special = 6; // BATTLE_SPECIALの特殊効果定義.
+  }
 }
 
 message TacticsMasterData {
@@ -155,7 +168,7 @@ message TacticsMasterData {
   string description = 3; // タクティクス効果説明文. 論理型Description.
   TacticsCategory category = 4; // タクティクス分類. Client側のアイコン分類にも使用する.
   uint32 tp_cost = 5; // 使用時に消費するTP.wire上はuint32, 論理型TP.
-  repeated TacticsStageEffectData stage_effects = 6; // 段階ごとの効果上昇量一覧.
+  repeated TacticsStageEffectData stage_effects = 6; // 効果ごとの1段階あたり増加値一覧.
   TacticsEndType end_type = 7; // 効果終了方式.
   uint32 duration_seconds = 8; // end_typeがDURATIONの場合の効果時間. 論理型DurationSeconds.
   uint32 effect_count = 9; // end_typeがCOUNTの場合の効果回数. 論理型Count.
@@ -223,9 +236,11 @@ message GuildMasterData {
 
 ## タクティクス特殊データ
 
-* `TACTICS_EFFECT_BP_RECOVERY`では`TacticsEffectData.effect_value`を固定BP回復値として扱い, 最大BPを超えて回復しない.
+* `TACTICS_EFFECT_BP_RECOVERY`では`TacticsEffectData.uint_value`を固定BP回復値として使用する. 値は`u32`とし, 小数値を保持しない. 最大BPを超えて回復しない.
 * `TACTICS_EFFECT_HP_RECOVERY`では`TacticsEffectData.hp_recovery`を使用する. HP0全回復型はHP0のみ, 割合回復型はHP1以上のみを対象とし, いずれも最大HPを超えない.
 * `TACTICS_EFFECT_BATTLE_SPECIAL`では`TacticsEffectData.battle_special`を使用し, 特殊効果系列, 攻撃・防御・速度パラメータ, 適用箇所, 発動条件を保持する.
+* 上記以外の浮動小数点補正値は`TacticsEffectData.correction_value`を使用する.
+* 段階レベル`n`の最終効果値は`基本効果値 + (n - 1) * 1段階あたり増加値`で算出する. BP固定回復は`uint_value`と`increase_uint_value`, 通常補正・割合は`correction_value`と`increase_value`, Battle Specialは各パラメータと`battle_special_increase`を対応させて同じ式を適用する.
 
 ## 効果値の合算規則
 

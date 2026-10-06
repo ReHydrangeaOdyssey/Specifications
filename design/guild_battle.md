@@ -71,7 +71,7 @@ stateDiagram-v2
 
     全滅 --> 復活中: 復活開始
     復活中 --> 全滅: 復活キャンセル
-    復活中 --> 復活完了: 5秒経過
+    復活中 --> 復活完了: パーティランクに応じた復活待機時間経過
     復活完了 --> 通常: 復活完了待機終了
 ```
 
@@ -174,6 +174,10 @@ sequenceDiagram
 
 #### 騎士団戦開戦前
 
+騎士団戦開戦前処理は開戦5分前に開始する.
+対象開始時刻の騎士団は, 対戦組み合わせ生成前に加入・脱退を禁止して所属を固定する.
+所属固定後に対戦組み合わせを生成する.
+
 ```mermaid
 sequenceDiagram
     participant Bot
@@ -181,17 +185,18 @@ sequenceDiagram
     participant PrivateAPIServer
     participant DB
 
-    GameServer->>PrivateAPIServer: GetScheduledGuilds(TargetDate, GuildBattleStartTime)
-    PrivateAPIServer->>DB: 指定日・固定開始時刻に一致するscheduled騎士団戦要求
-    DB-->>PrivateAPIServer: 対象騎士団戦返答
-    PrivateAPIServer-->>GameServer: GetScheduledGuilds
+    Note over GameServer,DB: 開戦5分前. 対象開始時刻の騎士団戦開戦前処理を開始
+    Note over GameServer,DB: 対象開始時刻の騎士団の加入・脱退を禁止し所属を固定
+    GameServer->>PrivateAPIServer: CreateScheduledGuildBattles(TargetDate, GuildBattleStartTime)
+    PrivateAPIServer->>DB: 所属固定後の対象騎士団を抽出. 0人騎士団を除外して組み合わせ生成・保存
+    DB-->>PrivateAPIServer: 生成結果
+    PrivateAPIServer-->>GameServer: CreateScheduledGuildBattles(ScheduledGuildBattle[])
 
-    loop 対象騎士団戦すべて
+    loop 生成した騎士団戦すべて
         alt GameServerの処理容量上限に到達
             GameServer->>Bot: 処理容量上限到達メッセージ送信
             Note over GameServer,DB: 対象騎士団戦については何も処理せず, DB上の状態はscheduledのまま維持する
         else 処理容量に空きあり
-            Note over GameServer,DB: 騎士団戦開戦前処理開始. 対象2騎士団の加入・脱退をこの時点から騎士団戦終了まで禁止
             loop 対戦する2騎士団
                 GameServer->>PrivateAPIServer: GetGuildData(GuildID)
                 PrivateAPIServer->>DB: 騎士団レベル情報要求
@@ -267,7 +272,7 @@ sequenceDiagram
         GameServer ->> GameServer: GuildBattleID・PlayerID・RequestSequence一致確認
         GameServer ->> GameServer: 出撃可否チェック
         GameServer ->> GameServer: 騎士団戦全体Sequence加算
-        GameServer ->> GameServer: 出撃内容抽選
+        GameServer ->> GameServer: 相手PlayerID候補をPlayerID昇順, 相手Character候補を編成ID昇順で構築して出撃内容抽選
 
         alt キャッスルブレイク
             GameServer ->> GameServer: キャッスルブレイク処理
@@ -295,6 +300,13 @@ GameServerが受信するあらゆる要求は先に到達した順に処理す�
 出撃要求についても同じ規則を使用する. Clientは出撃要求送信後から処理結果応答受信まで通信中として追加操作送信を抑止するため, GameServer側に出撃処理中・処理待ちを表す独立状態は持たせない.
 
 
+#### 再接続・状態復元
+
+`GetGuildBattleStatus`は再接続用の状態復元APIとして扱う.
+ClientはSessionID, PlayerID, GuildBattleIDだけを送信し, GameServerは現在のRequestSequenceを要求しない.
+GameServerは現在HP, BP, TP, 治療・復活状態と残り時間, 出撃待機時間, タクティクス状態, アイテム残数, 両騎士団スコア, チェイン, CBC状態, 現在RequestSequenceを返す.
+`GetGuildBattleStatus`の実行ではRequestSequenceを加算しない.
+
 ##### タクティクス使用時
 
 ``` mermaid
@@ -312,6 +324,7 @@ sequenceDiagram
     PublicAPIServer->>GameServer: UseTactics(SessionID, PlayerID, GuildBattleID, RequestSequence, TacticsID)
 
     GameServer->>GameServer: GuildBattleID・PlayerID・RequestSequence一致確認
+    GameServer->>GameServer: 要求TacticsIDが編成から使用可能なタクティクスか確認
     GameServer->>GameServer: TP, 使用回数チェック
 
     alt 使用可能
@@ -499,6 +512,8 @@ sequenceDiagram
     GameServer->>GameServer: 使用可能かチェック
 
     alt 復活可能
+        GameServer->>GameServer: パーティランク仕様に従ってパーティランクを算出
+        GameServer->>GameServer: パーティランクに応じた復活待機時間を設定
         GameServer->>GameServer: 復活中状態へ変更
         GameServer->>GameServer: 成功した要求のRequestSequenceを1加算
         GameServer-->>PublicAPIServer: StartRevive
@@ -507,7 +522,7 @@ sequenceDiagram
         GameServer ->> PrivateAPIServer: SaveGuildBattleReviveLog
         PrivateAPIServer ->> DB: ログ送信(GuildBattleID, Time, PlayerID, ReviveState)
 
-        Note over GameServer: 5秒経過
+        Note over GameServer: パーティランクに応じた復活待機時間経過
 
         GameServer->>GameServer: 復活完了状態へ変更
         Note over GameServer: この時点ではBP消費・HP回復なし
@@ -589,7 +604,11 @@ sequenceDiagram
 
 騎士団戦中にDatabaseへの送信が失敗した場合は, 同一送信を1回だけ再試行する. 再試行も失敗した場合, GameServerは当該騎士団戦についてDB障害発生状態へ移行する.
 
-DB障害発生状態では, それ以降の騎士団戦中Database送信を行わず, 本来送信するデータをGameServerローカルへ保存する. 騎士団戦終了時にローカル保存したデータをDatabaseへ一括送信する.
+DB障害発生状態では, それ以降の騎士団戦中Database送信を行わず, 本来送信するデータをGameServerローカルのファイルへ保存する.
+保存形式はUTF-8 JSONとし, 保存先はGameServerプロセスのカレントディレクトリ直下とする.
+ローカルファイルはGameServer再起動後も保持する.
+騎士団戦終了時にローカル保存したデータをDatabaseへ一括送信する.
+一括送信に失敗した場合はローカルファイルを残し, 一括送信に成功した場合は対応するローカルファイルを削除する.
 
 騎士団戦最終結果の保存は下記終了シーケンスの専用規則を使用する.
 
