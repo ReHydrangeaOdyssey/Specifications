@@ -16,19 +16,54 @@
 * 騎士団戦は16騎士団戦を1単位として1単位当たり1つの専用スレッド上で行う.
 	- CPUが扱えるスレッド数が4以下の場合は1スレッドとする.
 	- CPUが扱えるスレッド数が5以上の場合は最小1, 最大`CPUが扱えるスレッド数 - 4`まで拡張可能とする.
-* 騎士団戦の処理容量上限に到達している場合, 新たな騎士団戦については何も処理しない.
+* 騎士団戦の処理容量上限に到達している場合, 新たな騎士団戦をClaimしない.
   - 待機キューへの追加や自動再試行は行わない.
-  - Databaseの騎士団戦状態も更新せず, `scheduled` のまま維持する.
-  - 上限到達時はDiscord Webhookを使用して処理容量上限到達メッセージを送信する.
+  - 未Claimの騎士団戦はDatabase上で`scheduled`かつ`game_server_instance_id = NULL`のまま維持する.
+  - 上限到達時は`DiscordNotificationEnabled=true`の場合, Discord Botへ処理容量上限到達メッセージを送信する.
 * このGameServerの計算結果を正とする.
-* GameServerは現在要求する`Version`を保持し, Login時に`LoginRequest.ClientVersion`との一致を検証する.
+* GameServerは自身が使用する`Version`を保持し, 戦闘計算およびリプレイログへ使用する. Login時のClientVersion検証はPublic API Serverが行う.
 
-## Discord Webhook通知
 
-* GameServerからDiscordへの容量上限通知はDiscord Webhookを使用する.
-* 容量上限到達時にWebhookへ処理容量上限到達メッセージをPOSTする.
+## 複数GameServer構成
 
-* アリーナの`StartArenaBattle`ではSessionID・PlayerID等の検証完了後に共通内部API`GenerateTimeBasedSeed`でSeedを生成し, そのSeedでランダム対戦相手を抽選する.
+* Kubernetes上で複数GameServer Instanceを稼働可能とする.
+* 各GameServerは起動時に自身を一意に識別する`GameServerInstanceID`を保持する.
+  - 本番Kubernetes環境ではPod UIDを`GameServerInstanceID`として使用する.
+  - テスト環境ではProcess起動ごとに一意となるUUIDを使用する.
+* 騎士団戦は`GuildBattleID`単位で1つのGameServer Instanceだけが所有する.
+* 所有GameServerはPrivate APIの`ClaimScheduledGuildBattles`で未割当の騎士団戦を原子的にClaimする.
+* Claim成功後, `GUILD_BATTLE.game_server_instance_id`を割当の正本とする.
+* Public API Serverは`GetGuildBattleAssignment`で所有GameServerを解決し, 当該GameServerへ要求を中継する. Public API Serverは解決結果をローカルキャッシュしてよい.
+* 本番Kubernetes環境ではPublic API ServerがGameServer用EndpointSliceをwatchし, `endpoint.targetRef.uid`とEndpoint Addressの対応をメモリ上に保持する. `GameServerInstanceID`に一致するPod UIDのEndpointへ直接中継する.
+* 騎士団戦要求を通常のKubernetes Service Load Balancingへ渡して所有GameServer以外へ到達させない.
+* 所有していないGameServerは対象`GuildBattleID`の状態変更要求を処理しない.
+* 同一騎士団戦の状態を複数GameServer間で共有メモリ同期する方式とはしない.
+
+### 騎士団戦マッチング実行
+
+* Kubernetes上で複数GameServerが稼働する場合, `CreateScheduledGuildBattles`を実行するInstanceはKubernetes LeaseによるLeader Electionで1つに限定する.
+* Leader以外のGameServerは騎士団戦マッチング生成を行わない.
+* Leader変更後は既存の`GetScheduledGuilds`確認規則に従い, 既存データがある場合は再生成しない.
+* マッチング生成後の騎士団戦処理は各GameServerが`ClaimScheduledGuildBattles`で取得した騎士団戦だけを対象とする.
+
+### Scale down
+
+* GameServerのscale upは負荷および未処理騎士団戦数に応じて行ってよい.
+* GameServerのscale downは通常のHPAによるreplica数減少を直接使用せず, 対象Instanceを先に`draining`へ遷移させるControllerを介して行う.
+* GameServerは新規騎士団戦をClaim可能な`ready`状態と, 新規Claimを停止する`draining`状態を持つ.
+* scale down対象になったGameServerは`draining`へ遷移し, 新規騎士団戦をClaimしない.
+* `draining`状態でも所有中騎士団戦のPublic API要求は処理し続ける.
+* `draining`状態で所有する進行中騎士団戦が0件になった場合のみ終了可能とし, Controllerは0件を確認してからPodを削除する.
+* CPU使用率だけを条件として進行中騎士団戦を所有するGameServer Podを削除しない.
+* GameServer Podの異常終了時に進行中騎士団戦を別Instanceへ自動復旧する処理は本仕様では定義しない.
+
+## Discord Bot通知
+
+* `DiscordNotificationEnabled=true`の場合, GameServerからDiscord Botへ運営通知を送信する.
+* 容量上限到達時はDiscord Botへ処理容量上限到達メッセージを送信する.
+* `DiscordNotificationEnabled=false`の場合はDiscord Botへの通知を行わない. 通知以外のErrorLog保存および処理結果には影響させない.
+
+* アリーナの`StartArenaBattle`ではAccessToken・PlayerID等の検証完了後に共通内部API`GenerateTimeBasedSeed`でSeedを生成し, そのSeedでランダム対戦相手を抽選する.
 * ランダムアリーナ候補はPrivateAPIの`GetAllPlayerIDs`でDatabaseから取得・同期する.
 
 ## 騎士団戦マッチング生成

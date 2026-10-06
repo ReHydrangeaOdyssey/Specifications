@@ -3,43 +3,114 @@
 API全体の分類は「[API仕様](api.md)」を参照する.
 
 - Private Network 内に配置される.
-- GameServer から要求を受ける.
-- GameServerとPrivate API Server間の通信はmTLSを必須とし, 双方が信頼済みCAによる証明書を検証する. Client/Botからの直接接続を受け付けない.
-- Database とのデータ保存・取得を仲介する. ゲームロジック上の抽選・マッチング生成はGameServerが行う.
+- 認証・Account・騎士団戦ルーティング関連要求はPublic API Serverから受ける.
+- Database保存・取得要求はGameServerから受ける.
+- Public API ServerおよびGameServerとPrivate API Server間の通信はmTLSを必須とし, 双方が信頼済みCAによる証明書を検証する. Clientからの直接接続を受け付けない.
+- mTLS証明書のService Identityを検証し, Public API Serverからは認証・Account・騎士団戦ルーティング関連API, GameServerからはゲームデータ関連APIだけを受け付ける.
+- Databaseへ直接接続できるApplication ComponentはPrivate API Serverだけとする.
+- AccessToken署名用秘密鍵はPrivate API Serverだけが保持する.
+- Databaseとのデータ保存・取得を仲介する. ゲームロジック上の抽選・マッチング生成はGameServerが行う.
 - 要求/レスポンスのデータ構造は[API Payload](api_payload.md)を参照する.
 - 騎士団戦中のDatabase送信失敗時は同一要求を1回だけ再試行する. 再試行も失敗した場合, GameServerはDB障害発生状態へ移行し, それ以降の騎士団戦中DB送信を行わず, 本来送信するデータをカレントディレクトリ直下のUTF-8 JSONファイルへ保存する. ファイルはGameServer再起動後も保持する. 騎士団戦終了時にローカル保存データを一括送信し, 成功時は対応ファイルを削除し, 失敗時は削除せず残す.
-- `SaveGuildBattleResult`は専用の失敗処理を使用し, 1回再試行しても失敗した場合はErrorLog保存・Bot通知後, 運営による手動復旧対象とする.
+- `SaveGuildBattleResult`は専用の失敗処理を使用し, 1回再試行しても失敗した場合はErrorLogを保存し, `DiscordNotificationEnabled=true`の場合はBot通知を行った後, 運営による手動復旧対象とする.
 
-## セッション・プレイヤー関連
+## 認証・アカウント関連
 
-### Discord User IDからPlayerID取得
-
-#### メソッド名
-
-`GetPlayerIDByDiscordUserID`
-
-#### 処理内容
-
-- 指定DiscordUserIDに一意に結び付くPlayerIDをDatabaseから取得する.
-- 未登録の場合は`Exists=false`を返す.
-
-#### 要求・レスポンス
-
-[API Payload](api_payload.md)の「GetPlayerIDByDiscordUserIDRequest」「GetPlayerIDByDiscordUserIDResponse」を参照する.
-
-### PlayerID重複確認
+### アカウント新規作成
 
 #### メソッド名
 
-`CheckPlayerIDExists`
+`CreateAccount`
 
 #### 処理内容
 
-- 指定PlayerIDがDatabaseに既に存在するか確認する.
+- LoginIDの重複をDatabaseで確認する.
+- LoginID重複時は作成しない.
+- PasswordをArgon2idでPasswordHashへ変換する.
+- AccountIDおよびPlayerIDを生成する.
+  - `0`と`u64::MAX`は予約済み無効値のため生成対象外.
+  - Databaseの一意制約に衝突した場合は再生成する.
+- `ACCOUNT`と`PLAYER`を同一トランザクションで保存する.
+- `PLAYER.max_bp`は200, `guild_battle_win_count`と`guild_battle_lose_count`は0で初期化する.
 
 #### 要求・レスポンス
 
-[API Payload](api_payload.md)の「CheckPlayerIDExistsRequest」「CheckPlayerIDExistsResponse」を参照する.
+[API Payload](api_payload.md)の「CreateAccountPrivateRequest」「CreateAccountPrivateResponse」を参照する.
+
+### アカウント認証
+
+#### メソッド名
+
+`AuthenticateAccount`
+
+#### 処理内容
+
+- LoginIDに対応する`ACCOUNT`および`PLAYER`を取得する.
+- Argon2idでPasswordを検証する.
+- LoginID不存在とPassword不一致を呼び出し元へ区別して返さない.
+- 認証成功時は既存`ACCOUNT_SESSION`を削除する.
+- 128bitのSessionIDを暗号学的乱数で生成する.
+- 32byteのRefreshTokenを暗号学的乱数で生成する.
+- `SHA-256(RefreshToken)`を`refresh_token_hash`として保存する.
+- `ACCOUNT_SESSION.expires_at`を認証成功時刻から72時間後として保存する.
+- AccessTokenを生成してEd25519で署名する. AccessTokenの有効期限は発行時刻から5分とする.
+
+#### 要求・レスポンス
+
+[API Payload](api_payload.md)の「AuthenticateAccountRequest」「AuthenticateAccountResponse」を参照する.
+
+### AccessToken更新
+
+#### メソッド名
+
+`RefreshAccessToken`
+
+#### 処理内容
+
+- 受信したRefreshTokenをSHA-256でHash化する.
+- `ACCOUNT_SESSION.refresh_token_hash`が一致し, `expires_at`が有効期限内であることを確認する.
+- 新しいRefreshTokenを生成し, `refresh_token_hash`を新しいHashへ置換する.
+- 新しいAccessTokenを生成してEd25519で署名する.
+- `ACCOUNT_SESSION.expires_at`は変更しない.
+- RefreshToken検証とHash置換は同一トランザクションで行い, 対象`ACCOUNT_SESSION`を排他的に更新する. 同一RefreshTokenによる同時要求では1要求だけを成功させる.
+
+#### 要求・レスポンス
+
+[API Payload](api_payload.md)の「RefreshAccessTokenPrivateRequest」「RefreshAccessTokenPrivateResponse」を参照する.
+
+### ログアウト
+
+#### メソッド名
+
+`Logout`
+
+#### 処理内容
+
+- 受信したRefreshTokenをSHA-256でHash化する.
+- 一致する`ACCOUNT_SESSION`を削除する.
+- 既に発行済みのAccessTokenは個別失効させない.
+
+#### 要求・レスポンス
+
+[API Payload](api_payload.md)の「LogoutPrivateRequest」「LogoutPrivateResponse」を参照する.
+
+### Refresh Session期限更新
+
+#### メソッド名
+
+`ExtendAccountSession`
+
+#### 処理内容
+
+- 指定SessionIDに対応する`ACCOUNT_SESSION`が存在し, 現在時刻が`expires_at`未満であることを確認する.
+- 有効な場合は`expires_at`を現在時刻から72時間後へ更新し`IsValid=true`を返す.
+- 存在しない, または期限切れの場合は更新せず`IsValid=false`を返す.
+
+#### 要求・レスポンス
+
+[API Payload](api_payload.md)の「ExtendAccountSessionRequest」「ExtendAccountSessionResponse」を参照する.
+
+## プレイヤー・騎士団関連
 
 ### 騎士団保存
 
@@ -65,108 +136,94 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 
 - `SaveGuildLeadershipRequest.RequesterPlayerID`が更新対象`GUILD.leader_player_id`と一致することをDatabase上で確認する.
 - 一致しない場合は更新せず, 団長権限なしとしてGameServerへ返す.
-- 一致する場合のみ`GUILD.leader_player_id`を指定LeaderPlayerIDへ更新し, `GUILD.subleader_player_id`を指定SubleaderPlayerIDへ更新する. 団長確認と更新は同一トランザクションで行う.
+- LeaderPlayerIDとSubleaderPlayerIDがともに対象Guildの`GUILD_MEMBER`に存在することを確認する.
+- LeaderPlayerIDとSubleaderPlayerIDが同一値の場合は更新しない.
+- 上記をすべて満たす場合のみ`GUILD.leader_player_id`と`GUILD.subleader_player_id`を更新する. 団長確認, 所属確認, 同一PlayerID禁止確認, 更新は同一トランザクションで行う.
 
 #### 要求データ
 
 [API Payload](api_payload.md)の「SaveGuildLeadershipRequest」を参照する.
 
-### プレイヤー所属騎士団更新
+### 騎士団加入申請保存
 
 #### メソッド名
 
-`SetPlayerGuild`
+`SaveGuildJoinApplication`
 
 #### 処理内容
 
-- `GUILD_MEMBER`のPlayerID所属先を指定GuildIDへ更新する.
+- `GUILD_JOIN_APPLICATION`へ未承認加入申請を保存する.
+- 本処理では`GUILD_MEMBER`を変更しない.
 
 #### 要求データ
 
-[API Payload](api_payload.md)の「SetPlayerGuildRequest」を参照する.
+[API Payload](api_payload.md)の「SaveGuildJoinApplicationRequest」を参照する.
 
-### PlayerID保存
+### 騎士団加入申請承認
 
 #### メソッド名
 
-`SavePlayerID`
+`ApproveGuildJoinApplicationPrivate`
 
 #### 処理内容
 
-- DatabaseへPlayerID, DiscordUserID, UserNameを保存し, `PLAYER.max_bp`を初期値200で作成する.
-- `PLAYER.discord_user_id`は一意制約で1つのDiscord User IDが複数PlayerIDへ結び付かないようにする.
+- RequesterPlayerIDが対象Guildの加入申請を承認できる権限を持つことをDatabase上で確認する. 承認可能な役職条件は現時点では未定義とする.
+- `GUILD_JOIN_APPLICATION`に対象申請が存在することを確認する.
+- 対象Guildの`GUILD_MEMBER`件数を同一トランザクション内で確認し, 20人以上の場合は加入を成立させない.
+- 条件を満たす場合だけApplicantPlayerIDの既存`GUILD_MEMBER`を加入先Guildへ更新し, 対応する加入申請を削除する.
 
 #### 要求データ
 
-[API Payload](api_payload.md)の「SavePlayerIDRequest」を参照する.
+[API Payload](api_payload.md)の「ApproveGuildJoinApplicationPrivateRequest」を参照する.
 
-### セッションID保存
+### 騎士団招待保存
 
 #### メソッド名
 
-`SaveSessionID`
+`SaveGuildInvitation`
 
 #### 処理内容
 
-- `player_id`を競合キーとしてDatabaseへセッションIDをUPSERTする.
-- SessionIDのUNIQUE制約衝突時は衝突をGameServerへ返す.
+- RequesterPlayerIDが対象Guildの現在の団長または副団長であることをDatabase上で確認する.
+- 権限を満たす場合だけ`GUILD_INVITATION`へ招待を保存する.
+- 本処理では`GUILD_MEMBER`を変更しない.
 
 #### 要求データ
 
-[API Payload](api_payload.md)の「SaveSessionIDRequest」を参照する.
+[API Payload](api_payload.md)の「SaveGuildInvitationRequest」を参照する.
 
-#### 成功時レスポンス
-
-- 保存完了とする.
-
-#### エラー時レスポンス
-
-[API Payload](api_payload.md)の「SaveSessionIDErrorResponse」を参照する. SessionIDのUNIQUE制約衝突時は`SAVE_SESSION_ID_ERROR_SESSION_ID_CONFLICT`を返す.
-
-### 有効セッション取得
+### 騎士団招待承諾
 
 #### メソッド名
 
-`GetActiveSession`
+`AcceptGuildInvitationPrivate`
 
 #### 処理内容
-- PlayerIDに紐づく有効なセッションを取得する.
+
+- 指定PlayerID宛ての`GUILD_INVITATION`が存在することを確認する.
+- 対象Guildの`GUILD_MEMBER`件数を同一トランザクション内で確認し, 20人以上の場合は加入を成立させない.
+- 条件を満たす場合だけPlayerIDの既存`GUILD_MEMBER`を招待元Guildへ更新し, 対応する招待を削除する.
 
 #### 要求データ
-[API Payload](api_payload.md)の「GetActiveSessionRequest」を参照する.
 
-#### レスポンス
-[API Payload](api_payload.md)の「GetActiveSessionResponse」を参照する.
+[API Payload](api_payload.md)の「AcceptGuildInvitationPrivateRequest」を参照する.
 
-### セッション無効化
+### 騎士団脱退・初期騎士団復帰
 
 #### メソッド名
 
-`InvalidateSession`
+`LeaveGuildPrivate`
 
 #### 処理内容
-- 指定されたセッションに該当する`PLAYER_SESSION`レコードをDatabaseから削除する.
 
-#### 要求データ
-[API Payload](api_payload.md)の「InvalidateSessionRequest」を参照する.
+- PlayerIDの現在所属GuildIDと`GuildID = PlayerID`の初期騎士団を取得する.
+- 初期騎士団の現在団長がPlayerID自身の場合は, PlayerIDだけを初期騎士団へ戻す.
+- 初期騎士団の現在団長が別Playerの場合は, PlayerIDを初期騎士団へ戻し, その現在団長PlayerをPlayerIDが直前まで所属していたGuildIDへ移動し, 初期騎士団の団長をPlayerIDへ変更する.
+- 所属スワップと団長更新は同一トランザクションで行う.
 
-#### レスポンス
-[API Payload](api_payload.md)の「InvalidateSessionResponse」を参照する.
+#### 要求・レスポンス
 
-### セッション確認
-
-#### メソッド名
-
-`ValidateSession`
-
-#### 処理内容
-- 指定されたSessionIDの存在, 有効期限, 指定PlayerIDとの所有関係を確認する.
-
-#### 要求データ
-[API Payload](api_payload.md)の「ValidateSessionRequest」を参照する.
-
-#### レスポンス
-[API Payload](api_payload.md)の「ValidateSessionResponse」を参照する.
+[API Payload](api_payload.md)の「LeaveGuildPrivateRequest」「LeaveGuildPrivateResponse」を参照する.
 
 ## アリーナ関連
 
@@ -271,6 +328,38 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 
 #### レスポンス
 [API Payload](api_payload.md)の「GetScheduledGuildsResponse」を参照する.
+
+### 開戦予定騎士団戦Claim
+
+#### メソッド名
+
+`ClaimScheduledGuildBattles`
+
+#### 処理内容
+
+- 指定TargetDate・StartTimeに該当し, `status=scheduled`かつ`game_server_instance_id IS NULL`の騎士団戦から最大`MaxCount`件を取得する.
+- 取得した各騎士団戦の`game_server_instance_id`を要求`GameServerInstanceID`へ更新する.
+- 取得と更新は同一トランザクションで行い, PostgreSQLの`FOR UPDATE SKIP LOCKED`を使用して複数GameServerから同時要求された場合でも同一`GuildBattleID`を複数GameServerへ割り当てない.
+
+#### 要求・レスポンス
+
+[API Payload](api_payload.md)の「ClaimScheduledGuildBattlesRequest」「ClaimScheduledGuildBattlesResponse」を参照する.
+
+### 騎士団戦所有GameServer取得
+
+#### メソッド名
+
+`GetGuildBattleAssignment`
+
+#### 処理内容
+
+- 指定GuildBattleIDの`game_server_instance_id`をDatabaseから取得する.
+- 未割当の場合は`Exists=false`を返す.
+- Public API Serverからの要求も受け付ける.
+
+#### 要求・レスポンス
+
+[API Payload](api_payload.md)の「GetGuildBattleAssignmentRequest」「GetGuildBattleAssignmentResponse」を参照する.
 
 ### 騎士団戦編成情報登録
 
@@ -403,6 +492,16 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 #### 処理内容
 
 [API Payload](api_payload.md)の「GuildBattleCreateLogPayload」を参照する.
+
+#### 参加
+
+#### メソッド名
+
+`SaveGuildBattleJoinLog`
+
+#### 処理内容
+
+[API Payload](api_payload.md)の「GuildBattleJoinLogPayload」を参照する.
 
 #### 出撃
 

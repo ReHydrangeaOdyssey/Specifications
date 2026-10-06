@@ -46,7 +46,7 @@
 | 項目 | 型 | 内容 |
 |---|---|---|
 | SpecialType | `TacticsBattleSpecialType` | 戦闘時特殊効果系列 |
-| StatusEffect | `TacticsStatEffectResult` | 攻撃・防御・速度へ同時に適用し得る効果値 |
+| Parameters | `TacticsBattleSpecialParameters` | SpecialTypeの具体効果で使用する攻撃, 防御, 速度, スキル発動率, 最大TP, スコア, CB, ヘイト, 城Lv, BP/TP回復等の数値パラメータ |
 | ApplyTarget | `TacticsBattleSpecialApplyTarget` | 特殊効果の適用箇所 |
 | Trigger | `TacticsBattleSpecialTrigger` | 特殊効果の発動条件 |
 
@@ -63,7 +63,7 @@
 | BattleSpecial | `TacticsBattleSpecialEffectResult` | `TACTICS_EFFECT_BATTLE_SPECIAL` |
 
 `TACTICS_EFFECT_ATTACK_CORRECTION`, `TACTICS_EFFECT_DEFENSE_CORRECTION`, `TACTICS_EFFECT_SPEED_CORRECTION`では`StatusEffect`を使用し, 対象となるフィールドへ効果値を設定する. 対象外フィールドは0とする.
-`TACTICS_EFFECT_BATTLE_SPECIAL`では`BattleSpecial`を使用し, 攻撃・防御・速度を`BattleSpecial.StatusEffect`へまとめて返す.
+`TACTICS_EFFECT_BATTLE_SPECIAL`では`BattleSpecial`を使用し, `TacticsBattleSpecialParameters`の各数値効果を`BattleSpecial.Parameters`へまとめて返す. `special_type`固有の真偽型挙動は`SpecialType`から判定する.
 `TACTICS_EFFECT_BP_RECOVERY`では`UintValue`を使用する.
 それ以外で浮動小数点の単一値として表現できる効果は`ScalarValue`を使用する.
 
@@ -134,6 +134,16 @@
 `ArenaPartyCharacter`の`FollowerCharacterID[2]`および`AbilityID[2]`についても, 空き要素は同じ予約済み無効値を使用する.
 `FollowerCharacterID[2]`はスロット0を「編成先キャラクターと同一レアリティ以下」, スロット1を「編成先キャラクターより低レアリティのみ」の従者枠として扱う.
 
+### AuthenticatedContext
+
+`AuthenticatedContext`はPublic API ServerがAccessToken検証成功後に生成する内部用データとする. Clientから受信しない.
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| AccountID | `AccountID` | AccessTokenの`sub`から取得した認証アカウントID |
+| PlayerID | `PlayerID` | AccessTokenの`player_id`から取得したプレイヤーID |
+| SessionID | `SessionID` | AccessTokenの`sid`から取得したRefresh Session ID |
+
 ### ApiErrorResponse
 
 | 項目 | 型 | 内容 |
@@ -144,26 +154,16 @@ PublicAPIで失敗レスポンスが必要な場合は, 個別に別構造が定
 
 ## システム
 
-### AccessTokenRequest
+### CreateAccountRequest
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| DiscordUserID | `DiscordUserID` | Botが本人確認済みのDiscord User ID. AccessTokenの本人性Bindingに使用する |
+| LoginID | `LoginID` | ログイン認証に使用するユーザーID |
+| Password | `Password` | ログイン認証に使用するPassword |
+| UserName | `UserName` | ゲーム内表示用ユーザー名 |
+| DiscordAuthorizationToken | `DiscordAuthorizationToken` | `DiscordAuthorizationRequired=true`の場合に必須. 無効な構成では空文字とし検証しない |
 
-### AccessTokenResponse
-
-| 項目 | 型 | 内容 |
-|---|---|---|
-| AccessToken | `AccessToken` | 生成されたアクセストークン |
-
-### CreatePlayerRequest
-
-| 項目 | 型 | 内容 |
-|---|---|---|
-| UserName | `UserName` | ユーザー名 |
-| AccessToken | `AccessToken` | 検証するアクセストークン |
-
-### CreatePlayerResponse
+### CreateAccountResponse
 
 | 項目 | 型 | 内容 |
 |---|---|---|
@@ -173,41 +173,54 @@ PublicAPIで失敗レスポンスが必要な場合は, 個別に別構造が定
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| PlayerID | `PlayerID` | ログイン対象PlayerID |
-| AccessToken | `AccessToken` | ログインに使用するアクセストークン |
+| LoginID | `LoginID` | ログイン認証に使用するユーザーID |
+| Password | `Password` | ログイン認証に使用するPassword |
 | ClientVersion | `Version` | Clientが使用しているゲームロジックおよびマスターデータのVersion |
+| DiscordAuthorizationToken | `DiscordAuthorizationToken` | `DiscordAuthorizationRequired=true`の場合に必須. 無効な構成では空文字とし検証しない |
 
 ### LoginResponse
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| SessionID | `SessionID` | 生成されたセッションID |
+| PlayerID | `PlayerID` | ログインしたAccountに結び付くPlayerID |
+| AccessToken | `AccessToken` | 通常PublicAPIの認証に使用する5分有効の署名付きToken |
+| RefreshToken | `RefreshToken` | AccessToken更新に使用するToken |
 
 ### LoginVersionErrorResponse
 
 | 項目 | 型 | 内容 |
 |---|---|---|
 | ErrorCode | `ApiErrorCode` | `API_ERROR_CLIENT_VERSION_MISMATCH` |
-| RequiredVersion | `Version` | GameServerが要求するVersion. ClientはこのVersionへの更新をユーザーへ促す |
+| RequiredVersion | `Version` | Public API Serverが要求するVersion. ClientはこのVersionへの更新をユーザーへ促す |
 
-### ValidateSessionPublicRequest
-
-| 項目 | 型 | 内容 |
-|---|---|---|
-| SessionID | `SessionID` | 確認するSessionID |
-| PlayerID | `PlayerID` | SessionIDの所有者として検証するPlayerID |
-
-### ValidateSessionPublicResponse
+### RefreshAccessTokenRequest
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| IsValid | `Bool` | 存在・期限・PlayerID所有関係のすべてが有効な場合true |
+| RefreshToken | `RefreshToken` | AccessToken更新に使用するRefreshToken |
+
+### RefreshAccessTokenResponse
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| AccessToken | `AccessToken` | 新しく発行されたAccessToken |
+| RefreshToken | `RefreshToken` | Rotation後の新しいRefreshToken |
+
+### LogoutRequest
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| RefreshToken | `RefreshToken` | 無効化するRefresh Sessionに対応するRefreshToken |
+
+### LogoutResponse
+
+- Logout完了とする.
 
 ### CreateGuildRequest
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| SessionID | `SessionID` | セッションID |
+| AccessToken | `AccessToken` | 認証に使用するAccessToken |
 | PlayerID | `PlayerID` | 騎士団を作成するプレイヤーID |
 | GuildName | `Name` | 作成する騎士団名. UTF-8, 最大10文字, 空文字不可, 重複可 |
 | DaytimeStartTime | `GuildBattleStartTime` | 昼開始時刻.11:30 / 12:15 / 13:00のいずれか |
@@ -221,25 +234,66 @@ PublicAPIで失敗レスポンスが必要な場合は, 個別に別構造が定
 
 作成成功時, `PlayerID`は作成された`GuildID`へ所属する.
 
-### JoinGuildRequest
+### ApplyGuildJoinRequest
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| SessionID | `SessionID` | セッションID |
-| PlayerID | `PlayerID` | 所属を変更するプレイヤーID |
-| GuildID | `GuildID` | 所属先騎士団ID |
+| AccessToken | `AccessToken` | 認証に使用するAccessToken |
+| PlayerID | `PlayerID` | 加入申請を送るPlayerID |
+| GuildID | `GuildID` | 加入申請先GuildID |
 
-### JoinGuildResponse
+### ApplyGuildJoinResponse
+
+- 加入申請登録完了とする.
+
+### ApproveGuildJoinApplicationRequest
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| GuildID | `GuildID` | 所属後の騎士団ID |
+| AccessToken | `AccessToken` | 認証に使用するAccessToken |
+| PlayerID | `PlayerID` | 加入申請の承認を行うPlayerID |
+| GuildID | `GuildID` | 加入申請先GuildID |
+| ApplicantPlayerID | `PlayerID` | 承認する加入申請のPlayerID |
+
+### ApproveGuildJoinApplicationResponse
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| GuildID | `GuildID` | 加入成立後のGuildID |
+| JoinedPlayerID | `PlayerID` | 加入したPlayerID |
+
+### SendGuildInvitationRequest
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| AccessToken | `AccessToken` | 認証に使用するAccessToken |
+| PlayerID | `PlayerID` | 招待を送る団長または副団長PlayerID |
+| GuildID | `GuildID` | 招待元GuildID |
+| InviteePlayerID | `PlayerID` | 招待対象PlayerID |
+
+### SendGuildInvitationResponse
+
+- 招待登録完了とする.
+
+### AcceptGuildInvitationRequest
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| AccessToken | `AccessToken` | 認証に使用するAccessToken |
+| PlayerID | `PlayerID` | 招待を承諾するPlayerID |
+| GuildID | `GuildID` | 招待元GuildID |
+
+### AcceptGuildInvitationResponse
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| GuildID | `GuildID` | 加入成立後のGuildID |
 
 ### LeaveGuildRequest
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| SessionID | `SessionID` | セッションID |
+| AccessToken | `AccessToken` | 認証に使用するAccessToken |
 | PlayerID | `PlayerID` | 脱退するプレイヤーID. 初期騎士団のGuildID特定にも使用する |
 
 ### LeaveGuildResponse
@@ -252,7 +306,7 @@ PublicAPIで失敗レスポンスが必要な場合は, 個別に別構造が定
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| SessionID | `SessionID` | セッションID |
+| AccessToken | `AccessToken` | 認証に使用するAccessToken |
 | PlayerID | `PlayerID` | 変更要求を行うプレイヤーID |
 | GuildID | `GuildID` | 役職を変更する騎士団ID |
 | LeaderPlayerID | `PlayerID` | 変更後の団長PlayerID |
@@ -272,7 +326,7 @@ PublicAPIで失敗レスポンスが必要な場合は, 個別に別構造が定
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| SessionID | `SessionID` | セッションID |
+| AccessToken | `AccessToken` | 認証に使用するAccessToken |
 | PlayerID | `PlayerID` | プレイヤーID |
 | FormationID | `FormationID` | 使用するフォーメーションID |
 | Characters | `ArenaPartyCharacter[]` | 編成キャラクター情報.1～5件 |
@@ -285,7 +339,7 @@ PublicAPIで失敗レスポンスが必要な場合は, 個別に別構造が定
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| SessionID | `SessionID` | セッションID |
+| AccessToken | `AccessToken` | 認証に使用するAccessToken |
 | PlayerID | `PlayerID` | プレイヤーID |
 | Mode | `ArenaMode` | 対戦モード |
 | OpponentID | `PlayerID` | 対戦相手PlayerID. `Mode=friend` の場合に使用 |
@@ -304,7 +358,7 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| ErrorCode | `ArenaBattleErrorCode` | アリーナ戦闘開始時のエラーコード |
+| ErrorCode | `ArenaBattleErrorCode` | アリーナ戦闘開始時のエラーコード. 要求元ArenaParty未登録も区別する |
 
 ## 騎士団戦
 
@@ -312,7 +366,7 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| SessionID | `SessionID` | セッションID |
+| AccessToken | `AccessToken` | 認証に使用するAccessToken |
 | PlayerID | `PlayerID` | プレイヤーID |
 | FormationID | `FormationID` | 使用するフォーメーションID |
 | Characters | `GuildBattlePartyCharacter[10]` | 編成キャラクター情報. 配列位置を0始まりの編成スロットIDとして使用 |
@@ -325,7 +379,7 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| SessionID | `SessionID` | セッションID |
+| AccessToken | `AccessToken` | 認証に使用するAccessToken |
 | PlayerID | `PlayerID` | プレイヤーID |
 | GuildID | `GuildID` | 参加要求する騎士団ID |
 | GuildBattleID | `GuildBattleID` | 参加対象の騎士団戦ID |
@@ -341,13 +395,16 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| SessionID | `SessionID` | セッションID |
+| AccessToken | `AccessToken` | 認証に使用するAccessToken |
 | PlayerID | `PlayerID` | プレイヤーID |
 | GuildBattleID | `GuildBattleID` | 対象騎士団戦ID |
 
-`GetGuildBattleStatus`は再接続時の状態復元に使用するため`RequestSequence`を要求しない.
+`GetGuildBattleStatus`は再接続時の動的状態復元に使用するため`RequestSequence`を要求しない. CharacterID, Follower, MainSkill, Ability, FormationID等の静的な編成構成はClientがローカル保持した情報から復元し, 本APIでは再取得しない.
 
 ### GetGuildBattleStatusResponse
+
+本Responseは動的状態だけを返す. CharacterID, Follower, MainSkill, Ability, FormationID等の静的編成構成はClientがローカル保持した値を使用する.
+
 
 | 項目 | 型 | 内容 |
 |---|---|---|
@@ -374,7 +431,7 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| SessionID | `SessionID` | セッションID |
+| AccessToken | `AccessToken` | 認証に使用するAccessToken |
 | PlayerID | `PlayerID` | プレイヤーID |
 | GuildBattleID | `GuildBattleID` | 対象騎士団戦ID |
 | RequestSequence | `RequestSequence` | GameServerが当該PlayerIDについて現在保持している要求シーケンス番号と一致させる値 |
@@ -404,7 +461,7 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| SessionID | `SessionID` | セッションID |
+| AccessToken | `AccessToken` | 認証に使用するAccessToken |
 | PlayerID | `PlayerID` | プレイヤーID |
 | GuildBattleID | `GuildBattleID` | 対象騎士団戦ID |
 | RequestSequence | `RequestSequence` | GameServerが当該PlayerIDについて現在保持している要求シーケンス番号と一致させる値 |
@@ -424,7 +481,7 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| SessionID | `SessionID` | セッションID |
+| AccessToken | `AccessToken` | 認証に使用するAccessToken |
 | PlayerID | `PlayerID` | プレイヤーID |
 | GuildBattleID | `GuildBattleID` | 対象騎士団戦ID |
 | RequestSequence | `RequestSequence` | GameServerが当該PlayerIDについて現在保持している要求シーケンス番号と一致させる値 |
@@ -442,7 +499,7 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| SessionID | `SessionID` | セッションID |
+| AccessToken | `AccessToken` | 認証に使用するAccessToken |
 | PlayerID | `PlayerID` | プレイヤーID |
 | GuildBattleID | `GuildBattleID` | 対象騎士団戦ID |
 | RequestSequence | `RequestSequence` | GameServerが当該PlayerIDについて現在保持している要求シーケンス番号と一致させる値 |
@@ -458,7 +515,7 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| SessionID | `SessionID` | セッションID |
+| AccessToken | `AccessToken` | 認証に使用するAccessToken |
 | PlayerID | `PlayerID` | プレイヤーID |
 | GuildBattleID | `GuildBattleID` | 対象騎士団戦ID |
 | RequestSequence | `RequestSequence` | GameServerが当該PlayerIDについて現在保持している要求シーケンス番号と一致させる値 |
@@ -473,7 +530,7 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| SessionID | `SessionID` | セッションID |
+| AccessToken | `AccessToken` | 認証に使用するAccessToken |
 | PlayerID | `PlayerID` | プレイヤーID |
 | GuildBattleID | `GuildBattleID` | 対象騎士団戦ID |
 | RequestSequence | `RequestSequence` | GameServerが当該PlayerIDについて現在保持している要求シーケンス番号と一致させる値 |
@@ -490,7 +547,7 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| SessionID | `SessionID` | セッションID |
+| AccessToken | `AccessToken` | 認証に使用するAccessToken |
 | PlayerID | `PlayerID` | プレイヤーID |
 | GuildBattleID | `GuildBattleID` | 対象騎士団戦ID |
 | RequestSequence | `RequestSequence` | GameServerが当該PlayerIDについて現在保持している要求シーケンス番号と一致させる値 |
@@ -508,7 +565,7 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| SessionID | `SessionID` | セッションID |
+| AccessToken | `AccessToken` | 認証に使用するAccessToken |
 | PlayerID | `PlayerID` | プレイヤーID |
 | GuildBattleID | `GuildBattleID` | 対象騎士団戦ID |
 | RequestSequence | `RequestSequence` | GameServerが当該PlayerIDについて現在保持している要求シーケンス番号と一致させる値 |
@@ -523,7 +580,7 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| SessionID | `SessionID` | セッションID |
+| AccessToken | `AccessToken` | 認証に使用するAccessToken |
 | PlayerID | `PlayerID` | プレイヤーID |
 | GuildBattleID | `GuildBattleID` | 対象騎士団戦ID |
 | RequestSequence | `RequestSequence` | GameServerが当該PlayerIDについて現在保持している要求シーケンス番号と一致させる値 |
@@ -538,30 +595,69 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 
 ## PrivateAPI
 
-### GetPlayerIDByDiscordUserIDRequest
+### CreateAccountPrivateRequest
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| DiscordUserID | `DiscordUserID` | PlayerIDとの本人性Bindingを検索するDiscord User ID |
+| LoginID | `LoginID` | 新規作成するLoginID |
+| Password | `Password` | Argon2idでHash化して保存するPassword |
+| UserName | `UserName` | 新規Playerのゲーム内表示名 |
 
-### GetPlayerIDByDiscordUserIDResponse
-
-| 項目 | 型 | 内容 |
-|---|---|---|
-| Exists | `Bool` | 対応するPlayerIDが存在する場合true |
-| PlayerID | `PlayerID` | `Exists=true`の場合のPlayerID. `Exists=false`では予約値0 |
-
-### CheckPlayerIDExistsRequest
+### CreateAccountPrivateResponse
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| PlayerID | `PlayerID` | 重複確認するPlayerID |
+| PlayerID | `PlayerID` | 新規生成されたPlayerID |
 
-### CheckPlayerIDExistsResponse
+### AuthenticateAccountRequest
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| Exists | `Bool` | 既に存在する場合true |
+| LoginID | `LoginID` | 認証対象LoginID |
+| Password | `Password` | 検証するPassword |
+
+### AuthenticateAccountResponse
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| PlayerID | `PlayerID` | 認証したAccountに結び付くPlayerID |
+| AccessToken | `AccessToken` | 新しく発行したAccessToken |
+| RefreshToken | `RefreshToken` | 新しく発行したRefreshToken |
+
+### RefreshAccessTokenPrivateRequest
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| RefreshToken | `RefreshToken` | 更新対象RefreshToken |
+
+### RefreshAccessTokenPrivateResponse
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| AccessToken | `AccessToken` | 新しく発行したAccessToken |
+| RefreshToken | `RefreshToken` | Rotation後の新しいRefreshToken |
+
+### LogoutPrivateRequest
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| RefreshToken | `RefreshToken` | 無効化対象RefreshToken |
+
+### LogoutPrivateResponse
+
+- Logout完了とする.
+
+### ExtendAccountSessionRequest
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| SessionID | `SessionID` | 期限を更新するRefresh Session ID |
+
+### ExtendAccountSessionResponse
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| IsValid | `Bool` | Sessionが存在し期限内で更新できた場合true |
 
 ### SaveGuildRequest
 
@@ -573,13 +669,49 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 | DaytimeStartTime | `GuildBattleStartTime` | 昼開始時刻.11:30 / 12:15 / 13:00のいずれか |
 | NighttimeStartTime | `GuildBattleStartTime` | 夜開始時刻.21:00 / 22:00 / 23:00のいずれか |
 
-### SetPlayerGuildRequest
+### SaveGuildJoinApplicationRequest
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| PlayerID | `PlayerID` | 所属を更新するPlayerID |
-| GuildID | `GuildID` | 所属先GuildID |
+| PlayerID | `PlayerID` | 申請PlayerID |
+| GuildID | `GuildID` | 申請先GuildID |
 
+### ApproveGuildJoinApplicationPrivateRequest
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| RequesterPlayerID | `PlayerID` | 承認を行うPlayerID |
+| GuildID | `GuildID` | 申請先GuildID |
+| ApplicantPlayerID | `PlayerID` | 加入させる申請PlayerID |
+
+### SaveGuildInvitationRequest
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| RequesterPlayerID | `PlayerID` | 招待を送るPlayerID |
+| GuildID | `GuildID` | 招待元GuildID |
+| InviteePlayerID | `PlayerID` | 招待対象PlayerID |
+
+### AcceptGuildInvitationPrivateRequest
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| PlayerID | `PlayerID` | 招待を承諾するPlayerID |
+| GuildID | `GuildID` | 招待元GuildID |
+
+### LeaveGuildPrivateRequest
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| PlayerID | `PlayerID` | 脱退するPlayerID |
+
+### LeaveGuildPrivateResponse
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| GuildID | `GuildID` | 脱退Playerが所属した初期GuildID |
+| SwappedPlayerID | `PlayerID` | 所属スワップを行った場合の相手PlayerID. スワップなしは0 |
+| SwappedPlayerGuildID | `GuildID` | スワップ相手の新しい所属GuildID. スワップなしは0 |
 
 ### SaveGuildLeadershipRequest
 
@@ -587,67 +719,8 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 |---|---|---|
 | RequesterPlayerID | `PlayerID` | 役職変更を要求したPlayerID. 現在の団長であることをPrivate APIで検証する |
 | GuildID | `GuildID` | 更新対象の騎士団ID |
-| LeaderPlayerID | `PlayerID` | 保存する団長PlayerID |
-| SubleaderPlayerID | `PlayerID` | 保存する副団長PlayerID |
-
-### SavePlayerIDRequest
-
-| 項目 | 型 | 内容 |
-|---|---|---|
-| PlayerID | `PlayerID` | 保存するPlayerID |
-| DiscordUserID | `DiscordUserID` | PlayerIDの本人として永続的に結び付けるDiscord User ID |
-| UserName | `UserName` | 保存するユーザー名 |
-
-### SaveSessionIDRequest
-
-| 項目 | 型 | 内容 |
-|---|---|---|
-| PlayerID | `PlayerID` | セッション所有PlayerID |
-| SessionID | `SessionID` | 保存するSessionID |
-| ExpiresAt | `SessionExpiresAt` | セッション有効期限 |
-
-### SaveSessionIDErrorResponse
-
-| 項目 | 型 | 内容 |
-|---|---|---|
-| ErrorCode | `SaveSessionIDErrorCode` | SessionID保存失敗理由. 現在定義される値は`SAVE_SESSION_ID_ERROR_SESSION_ID_CONFLICT` |
-
-### GetActiveSessionRequest
-
-| 項目 | 型 | 内容 |
-|---|---|---|
-| PlayerID | `PlayerID` | 対象PlayerID |
-
-### GetActiveSessionResponse
-
-| 項目 | 型 | 内容 |
-|---|---|---|
-| Exists | `Bool` | 有効なSessionが存在する場合true |
-| SessionID | `SessionID` | `Exists=true`の場合の有効なSessionID. `Exists=false`の場合は参照しない |
-| ExpiresAt | `SessionExpiresAt` | `Exists=true`の場合のセッション有効期限. `Exists=false`の場合は参照しない |
-
-### InvalidateSessionRequest
-
-| 項目 | 型 | 内容 |
-|---|---|---|
-| SessionID | `SessionID` | 無効化するSessionID |
-
-### InvalidateSessionResponse
-
-- 削除完了とする.
-
-### ValidateSessionRequest
-
-| 項目 | 型 | 内容 |
-|---|---|---|
-| SessionID | `SessionID` | 確認するSessionID |
-| PlayerID | `PlayerID` | 所有関係を確認するPlayerID |
-
-### ValidateSessionResponse
-
-| 項目 | 型 | 内容 |
-|---|---|---|
-| IsValid | `Bool` | Sessionレコードが存在し, 有効期限内で, 指定PlayerIDの所有である場合true. それ以外はfalse |
+| LeaderPlayerID | `PlayerID` | 保存する団長PlayerID. 対象Guild所属Playerのみ指定可能 |
+| SubleaderPlayerID | `PlayerID` | 保存する副団長PlayerID. 対象Guild所属Playerのみ指定可能かつLeaderPlayerIDと同一値不可 |
 
 ### SaveArenaPartyRequest
 
@@ -671,6 +744,34 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 | ArenaPartyRegistered | `Bool` | 対象PlayerIDにArenaPartyが登録されている場合true |
 | FormationID | `FormationID` | `PlayerExists=true`かつ`ArenaPartyRegistered=true`の場合のフォーメーションID |
 | Characters | `ArenaPartyCharacter[]` | `PlayerExists=true`かつ`ArenaPartyRegistered=true`の場合のキャラクター情報.1～5件 |
+
+### ClaimScheduledGuildBattlesRequest
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| GameServerInstanceID | `GameServerInstanceID` | Claimを要求するGameServer Instance ID |
+| TargetDate | `DateTime` | 対象日. 日付部分を使用する |
+| StartTime | `GuildBattleStartTime` | 対象開始時刻 |
+| MaxCount | `Count` | この要求でClaimする最大騎士団戦数 |
+
+### ClaimScheduledGuildBattlesResponse
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| Battles | `ScheduledGuildBattle[]` | このGameServerへ原子的に割り当てられた騎士団戦一覧 |
+
+### GetGuildBattleAssignmentRequest
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| GuildBattleID | `GuildBattleID` | 所有GameServerを取得する騎士団戦ID |
+
+### GetGuildBattleAssignmentResponse
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| Exists | `Bool` | GameServer割当が存在する場合true |
+| GameServerInstanceID | `GameServerInstanceID` | `Exists=true`の場合の所有GameServer Instance ID |
 
 ### SaveGuildBattlePartyRequest
 
@@ -916,6 +1017,15 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 | GuildID | `GuildID[2]` | 対戦する2騎士団のID |
 | InitialSnapshot | `GuildBattleInitialSnapshot` | 開戦時点の騎士団レベル, 所属メンバー, 参加者の最大BP・編成・所持アイテム等の初期状態 |
 | Version | `Version` | リプレイに使用するマスターデータおよびゲームロジックのバージョン |
+
+### GuildBattleJoinLogPayload
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| Time | `GameServerTime` | GameServerが参加要求を受信した時刻 |
+| GuildBattleID | `GuildBattleID` | 騎士団戦ID |
+| ProcessType | `GuildBattleReplayProcessType` | 処理の種類. `join` |
+| PlayerID | `PlayerID` | 参加したPlayerID |
 
 ### GuildBattleSortieLogPayload
 

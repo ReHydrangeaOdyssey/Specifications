@@ -146,7 +146,7 @@ message TacticsStageEffectData {
   oneof increase_data {
     float increase_value = 3; // 浮動小数点で表現する効果の1段階あたり増加値. 論理型CorrectionValue.
     uint32 increase_uint_value = 4; // BP固定回復等, 整数で表現する効果の1段階あたり増加値.
-    TacticsBattleSpecialParameters battle_special_increase = 5; // BATTLE_SPECIALの攻撃・防御・速度の1段階あたり増加値.
+    TacticsBattleSpecialParameters battle_special_increase = 5; // BATTLE_SPECIALの各数値パラメータに対する1段階あたり増加値.
   }
 }
 
@@ -168,7 +168,7 @@ message TacticsMasterData {
   string description = 3; // タクティクス効果説明文. 論理型Description.
   TacticsCategory category = 4; // タクティクス分類. Client側のアイコン分類にも使用する.
   uint32 tp_cost = 5; // 使用時に消費するTP.wire上はuint32, 論理型TP.
-  repeated TacticsStageEffectData stage_effects = 6; // 効果ごとの1段階あたり増加値一覧.
+  repeated TacticsStageEffectData stage_effects = 6; // 効果ごとの1段階あたり増加値一覧. HP_RECOVERYの割合型ではincrease_valueをrecovery_rateへ加算する.
   TacticsEndType end_type = 7; // 効果終了方式.
   uint32 duration_seconds = 8; // end_typeがDURATIONの場合の効果時間. 論理型DurationSeconds.
   uint32 effect_count = 9; // end_typeがCOUNTの場合の効果回数. 論理型Count.
@@ -237,8 +237,8 @@ message GuildMasterData {
 ## タクティクス特殊データ
 
 * `TACTICS_EFFECT_BP_RECOVERY`では`TacticsEffectData.uint_value`を固定BP回復値として使用する. 値は`u32`とし, 小数値を保持しない. 最大BPを超えて回復しない.
-* `TACTICS_EFFECT_HP_RECOVERY`では`TacticsEffectData.hp_recovery`を使用する. HP0全回復型はHP0のみ, 割合回復型はHP1以上のみを対象とし, いずれも最大HPを超えない.
-* `TACTICS_EFFECT_BATTLE_SPECIAL`では`TacticsEffectData.battle_special`を使用し, 特殊効果系列, 攻撃・防御・速度パラメータ, 適用箇所, 発動条件を保持する.
+* `TACTICS_EFFECT_HP_RECOVERY`では`TacticsEffectData.hp_recovery`を使用する. HP0全回復型はHP0のみ, 割合回復型はHP1以上のみを対象とし, いずれも最大HPを超えない. 割合回復型の段階補正は`recovery_rate + (段階レベル - 1) * increase_value`で算出する.
+* `TACTICS_EFFECT_BATTLE_SPECIAL`では`TacticsEffectData.battle_special`を使用し, 特殊効果系列, `TacticsBattleSpecialParameters`の各数値パラメータ, 適用箇所, 発動条件を保持する.
 * 上記以外の浮動小数点補正値は`TacticsEffectData.correction_value`を使用する.
 * 段階レベル`n`の最終効果値は`基本効果値 + (n - 1) * 1段階あたり増加値`で算出する. BP固定回復は`uint_value`と`increase_uint_value`, 通常補正・割合は`correction_value`と`increase_value`, Battle Specialは各パラメータと`battle_special_increase`を対応させて同じ式を適用する.
 

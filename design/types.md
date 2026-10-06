@@ -16,11 +16,12 @@
 
 | 論理型 | Rust | Protocol Buffers | PostgreSQL | 内容 |
 |---|---|---|---|---|
+| `AccountID` | `u64` | `uint64` | `numeric(20,0)` | 認証アカウントID |
+| `DiscordUserID` | `u64` | `uint64` | `numeric(20,0)` | Discord上のユーザーID. Discordロール追加認可時だけ使用する外部ID |
 | `PlayerID` | `u64` | `uint64` | `numeric(20,0)` | プレイヤーID |
-| `DiscordUserID` | `u64` | `uint64` | `numeric(20,0)` | Discord上のユーザーID. PlayerIDの本人性確認に使用する外部本人識別子 |
 | `GuildID` | `u64` | `uint64` | `numeric(20,0)` | 騎士団ID |
 | `GuildBattleID` | `u64` | `uint64` | `numeric(20,0)` | 騎士団戦ID |
-| `SessionID` | `u64` | `uint64` | `numeric(20,0)` | セッションID |
+| `SessionID` | `[u8; 16]` | `bytes` | `uuid` | Refresh Sessionを識別する128bitのセッションID |
 | `RecordID` | `u64` | `uint64` | `numeric(20,0)` | DB内部レコードID |
 | `CharacterID` | `u32` | `uint32` | `bigint` | キャラクターID |
 | `SkillID` | `u32` | `uint32` | `bigint` | スキルID |
@@ -42,8 +43,8 @@
 
 ### ID予約値
 
-* `PlayerID` は `0` と `u64::MAX` を予約済み無効値とし, 有効なPlayerIDとして使用しない.
-  - ClientがPlayerIDを未取得の場合の初期値は`0`とする.
+* `AccountID`および`PlayerID`は `0` と `u64::MAX` を予約済み無効値とし, 有効なIDとして使用しない.
+* `PlayerID`について, ClientがPlayerIDを未取得の場合の初期値は`0`とする.
 * 固定長配列の空きを表現するため, `CharacterID`, `SkillID`, `AbilityID` はそれぞれの基底型の最大値`u32::MAX`を予約済み無効値とし, 有効IDとして使用しない.
 * `FormationSlotID` の予約済み無効値は既定どおり`255`とする.
 
@@ -51,9 +52,14 @@
 
 | 論理型 | Rust | Protocol Buffers | PostgreSQL | 内容 |
 |---|---|---|---|---|
-| `AccessToken` | `u64` | `uint64` | `numeric(20,0)` | アクセストークン |
+| `AccessToken` | `String` | `string` | - | Ed25519署名付きJWT Compact Serialization形式の短寿命アクセストークン |
+| `DiscordAuthorizationToken` | `String` | `string` | - | Discord Role保持確認後にBot経由で発行する5分有効のEd25519署名付きJWT. Discord追加認可が無効な構成では使用しない |
+| `RefreshToken` | `[u8; 32]` | `bytes` | - | AccessToken更新に使用する32byteの暗号学的乱数Token. 平文はDatabaseへ保存しない |
+| `RefreshTokenHash` | `[u8; 32]` | `bytes` | `bytea` | `SHA-256(RefreshToken)` |
+| `Password` | `String` | `string` | - | Login時だけ送受信するPassword. Databaseへ平文保存しない |
+| `PasswordHash` | `String` | `string` | `text` | Argon2idのPasswordHash |
 | `DateTime` | `u64` | `uint64` | `timestamp` | UNIX epochからの経過マイクロ秒で表す日時 |
-| `SessionExpiresAt` | `u64` | `uint64` | `timestamp` | UNIX epochからの経過マイクロ秒で表すセッション有効期限 |
+| `SessionExpiresAt` | `u64` | `uint64` | `timestamp` | UNIX epochからの経過マイクロ秒で表すRefresh Session有効期限 |
 
 ## ゲーム内数値
 
@@ -69,6 +75,7 @@
 | `RequestSequence` | `u64` | `uint64` | `numeric(20,0)` | 騎士団戦参加プレイヤーごとの要求検証用シーケンス番号 |
 | `Seed` | `u64` | `uint64` | `numeric(20,0)` | 疑似乱数シード |
 | `Count` | `u32` | `uint32` | `bigint` | 回数/個数. 回数上限で`u32::MAX`を指定した場合は回数無制限を表す |
+| `Int32` | `i32` | `sint32` | `integer` | 符号付き32bit整数. 城Lv等の正負を持つ整数補正に使用 |
 | `Stage` | `u32` | `uint32` | `bigint` | 段階 |
 | `DurationSeconds` | `u32` | `uint32` | `bigint` | 秒単位の時間 |
 | `GameServerTime` | `u64` | `uint64` | `numeric(20,0)` | UNIX epochからの経過マイクロ秒 |
@@ -83,11 +90,13 @@
 
 | 論理型 | Rust | Protocol Buffers | PostgreSQL | 内容 |
 |---|---|---|---|---|
-| `UserName` | `String` | `string` | `varchar` | ユーザー名 |
+| `LoginID` | `String` | `string` | `varchar` | ログイン認証に使用するユーザーID |
+| `UserName` | `String` | `string` | `varchar` | ゲーム内表示用ユーザー名 |
 | `Name` | `String` | `string` | `varchar` | 名称 |
 | `Title` | `String` | `string` | `varchar` | 肩書 |
 | `Description` | `String` | `string` | `text` | 説明文 |
 | `Version` | `String` | `string` | `varchar` | 対象リプレイで使用したマスターデータとゲームロジックの組み合わせを一意に識別するセマンティックバージョニング形式のバージョン文字列 |
+| `GameServerInstanceID` | `String` | `string` | `varchar` | 稼働中GameServer Instanceを一意に識別するID |
 | `ErrorLogMessage` | `String` | `string` | `text` | エラーログ文字列 |
 | `Bool` | `bool` | `bool` | `boolean` | 真偽値 |
 
@@ -104,13 +113,14 @@ enum ArenaMode {
 
 ### ArenaBattleErrorCode
 
-アリーナ戦闘開始時の個別エラーを表す列挙型. ランダム対戦の候補なし, フレンド対戦のPlayer不存在, ArenaParty未登録を区別する.
+アリーナ戦闘開始時の個別エラーを表す列挙型. ランダム対戦の候補なし, フレンド対戦のPlayer不存在・ArenaParty未登録, 要求元PlayerのArenaParty未登録を区別する.
 
 ```proto
 enum ArenaBattleErrorCode {
   ARENA_BATTLE_ERROR_NO_OPPONENT_AVAILABLE = 0; // ランダム対戦で対戦可能な相手プレイヤーが存在しない.
   ARENA_BATTLE_ERROR_PLAYER_NOT_FOUND = 1; // フレンド対戦で指定したPlayerIDが存在しない.
-  ARENA_BATTLE_ERROR_ARENA_PARTY_NOT_REGISTERED = 2; // 指定PlayerIDは存在するがArenaPartyが未登録である.
+  ARENA_BATTLE_ERROR_ARENA_PARTY_NOT_REGISTERED = 2; // フレンド対戦で指定したOpponentIDは存在するがArenaPartyが未登録である.
+  ARENA_BATTLE_ERROR_REQUESTER_ARENA_PARTY_NOT_REGISTERED = 3; // 対戦要求元PlayerIDのArenaPartyが未登録である.
 }
 ```
 
@@ -280,7 +290,7 @@ enum TacticsBattleSpecialType {
   TACTICS_BATTLE_SPECIAL_PHALANX = 33; // ファランクス系.
   TACTICS_BATTLE_SPECIAL_FORCE_OF_WISH = 34; // フォースオブウィッシュ系.
   TACTICS_BATTLE_SPECIAL_FORCE_OF_PLAY = 35; // フォースオブプレイ系.
-  TACTICS_BATTLE_SPECIAL_FORTRESS = 36; // フォートレス系.
+  TACTICS_BATTLE_SPECIAL_FORTRESS = 36; // フォートレスオーダー系.
   TACTICS_BATTLE_SPECIAL_BLITZ = 37; // ブリッツ系.
   TACTICS_BATTLE_SPECIAL_PROVOKE = 38; // プロヴォーク系.
   TACTICS_BATTLE_SPECIAL_POINT_RISE = 39; // ポイントライズ系.
@@ -291,6 +301,9 @@ enum TacticsBattleSpecialType {
   TACTICS_BATTLE_SPECIAL_RESURRECTION = 44; // リザレクション系.
   TACTICS_BATTLE_SPECIAL_RECT_NOTE = 45; // レクトノート系.
   TACTICS_BATTLE_SPECIAL_WISE_NOTE = 46; // ワイズノート系.
+  TACTICS_BATTLE_SPECIAL_ASSAULT_ORDER = 47; // アサルトオーダー系.
+  TACTICS_BATTLE_SPECIAL_ACE_ORDER = 48; // エースオーダー系.
+  TACTICS_BATTLE_SPECIAL_SHADOW_ORDER = 49; // シャドウオーダー系.
 }
 ```
 
@@ -423,7 +436,7 @@ enum ApiErrorCode {
   API_ERROR_INVALID_ACCESS_TOKEN = 2; // AccessTokenが不正.
   API_ERROR_INVALID_USER_NAME = 3; // UserNameが不正.
   API_ERROR_INVALID_PLAYER_ID = 4; // PlayerIDが不正.
-  API_ERROR_INVALID_SESSION = 5; // Sessionが不正または期限切れ.
+  API_ERROR_INVALID_SESSION = 5; // 旧SessionID PublicAPI方式で使用していた予約済みエラー. 現行仕様では使用しない.
   API_ERROR_NO_OPPONENT_AVAILABLE = 6; // 対戦可能な相手が存在しない.
   API_ERROR_GUILD_BATTLE_JOIN_NOT_ALLOWED = 7; // 騎士団戦への参加条件を満たさない.
   API_ERROR_GUILD_BATTLE_PARTY_UPDATE_NOT_ALLOWED = 8; // 騎士団戦編成を変更できない.
@@ -444,16 +457,19 @@ enum ApiErrorCode {
   API_ERROR_INVALID_GUILD_NAME = 23; // GuildNameがUTF-8・最大10文字・空文字不可の制約を満たさない.
   API_ERROR_CLIENT_VERSION_MISMATCH = 24; // ClientVersionがGameServerの要求Versionと一致しない.
   API_ERROR_GUILD_LEADERSHIP_CHANGE_NOT_ALLOWED = 25; // 団長以外が団長・副団長変更を要求した.
-}
-```
-
-### SaveSessionIDErrorCode
-
-Private APIの`SaveSessionID`で発生し得るエラーを表す.
-
-```proto
-enum SaveSessionIDErrorCode {
-  SAVE_SESSION_ID_ERROR_SESSION_ID_CONFLICT = 0; // PLAYER_SESSION.session_idのUNIQUE制約に衝突した.
+  API_ERROR_INVALID_CREDENTIALS = 26; // LoginID不存在またはPassword不一致.
+  API_ERROR_INVALID_LOGIN_ID = 27; // LoginIDが不正.
+  API_ERROR_INVALID_PASSWORD = 28; // Passwordが不正.
+  API_ERROR_LOGIN_ID_ALREADY_EXISTS = 29; // LoginIDが既に登録済み.
+  API_ERROR_INVALID_REFRESH_TOKEN = 30; // RefreshTokenが不正または期限切れ.
+  API_ERROR_GAME_SERVER_UNAVAILABLE = 31; // 対象騎士団戦を所有するGameServerへ到達できない.
+  API_ERROR_DISCORD_AUTHORIZATION_REQUIRED = 32; // 現在の構成でDiscord追加認可が必須だがDiscordAuthorizationTokenが指定されていない.
+  API_ERROR_INVALID_DISCORD_AUTHORIZATION_TOKEN = 33; // DiscordAuthorizationTokenが不正または期限切れ.
+  API_ERROR_GUILD_JOIN_APPLICATION_NOT_FOUND = 34; // 指定された未承認加入申請が存在しない.
+  API_ERROR_GUILD_JOIN_APPROVAL_NOT_ALLOWED = 35; // 加入申請の承認権限を持たないPlayerが承認を要求した.
+  API_ERROR_GUILD_INVITATION_NOT_ALLOWED = 36; // 団長・副団長以外が招待を送信した.
+  API_ERROR_GUILD_INVITATION_NOT_FOUND = 37; // 指定Player向けの未承諾招待が存在しない.
+  API_ERROR_INVALID_GUILD_LEADERSHIP_TARGET = 38; // 団長・副団長候補が対象Guild所属ではない, または団長と副団長が同一PlayerIDである.
 }
 ```
 
@@ -655,14 +671,26 @@ message TacticsBattleState {
 }
 
 message TacticsBattleSpecialParameters {
-  float attack = 1; // 攻撃に対する増減値. 論理型CorrectionValue.
-  float defense = 2; // 防御に対する増減値. 論理型CorrectionValue.
-  float speed = 3; // 速度に対する増減値. 論理型CorrectionValue.
+  float attack = 1; // 攻撃力補正値. 論理型CorrectionValue.
+  float defense = 2; // 防御力補正値. 論理型CorrectionValue.
+  float speed = 3; // 速度補正値. 論理型CorrectionValue.
+  float skill_activation_rate = 4; // スキル発動率補正値. 論理型CorrectionValue.
+  float max_tp = 5; // 最大TP補正値. 論理型CorrectionValue.
+  float battle_score = 6; // バトルで獲得する騎士団戦スコア補正値. 論理型CorrectionValue.
+  float guild_battle_score = 7; // 騎士団戦で獲得するスコア全般の補正値. 論理型CorrectionValue.
+  float castle_break_score = 8; // キャッスルブレイク獲得スコア補正値. 論理型CorrectionValue.
+  float assault_castle_break_rate = 9; // 強襲CB発生率補正値. 論理型CorrectionValue.
+  float assault_castle_break_score = 10; // 強襲CB時獲得スコア補正値. 論理型CorrectionValue.
+  float hate = 11; // ヘイト補正値. 論理型CorrectionValue.
+  sint32 castle_level = 12; // 城Lv補正値. 正値は上昇, 負値は低下.
+  uint32 bp_recovery = 13; // 敵全滅等の発動条件成立時に回復するBP固定値.
+  uint32 tp_recovery = 14; // 発動条件成立時に回復するTP固定値.
+  float attack_count_score = 15; // 攻撃回数に応じたバトル獲得スコア増加に使用する補正値. 論理型CorrectionValue.
 }
 
 message TacticsBattleSpecialData {
   TacticsBattleSpecialType special_type = 1; // 特殊効果系列.
-  TacticsBattleSpecialParameters parameters = 2; // 同時に増減し得る攻撃・防御・速度パラメータ.
+  TacticsBattleSpecialParameters parameters = 2; // special_typeの具体効果で使用する各数値パラメータ.
   TacticsBattleSpecialApplyTarget apply_target = 3; // 効果を適用する箇所.
   TacticsBattleSpecialTrigger trigger = 4; // 効果を発動する条件.
 }
@@ -683,19 +711,12 @@ message TacticsActiveEffectState {
   TacticsEndType end_type = 8; // 継続中効果の終了方式.
 }
 
-message AccessTokenState {
-  uint64 access_token = 1; // 発行したアクセストークン. 論理型AccessToken.
-  uint64 discord_user_id = 2; // トークン発行要求元のDiscord User ID. 論理型DiscordUserID.
-  uint64 bound_player_id = 3; // 本人として結び付けたPlayerID. 新規Player作成前のみ予約値0. 論理型PlayerID.
-  uint64 expires_at = 4; // AccessToken有効期限. UNIX epochからの経過マイクロ秒. 論理型DateTime.
-  uint32 use_count = 5; // Login成功前にAccessToken検証へ成功した回数. 最大3回. 論理型Count.
-}
 ```
 
 `PartyCharacterStatus`は編成時専用の状態とし, 現在HPを保持しない. `max_hp` / `attack` / `defense`には従者補正だけを適用した値を保持する. パーティランク算出ではこの構造を使用する.
 `SkillBattleState`および`AbilityBattleState`は戦闘中だけ使用する実行時状態とし, Databaseへ永続化しない. `AbilityBattleState`の発動済み管理はAbilityID単位で行い, Effect単位では共有しない.
 `CharacterBattle` の `hp` / `attack` / `defense` は従者等の補正適用後に戦闘計算で使用する値であるため, 戦闘仕様に従い `Float32` とする. プレイヤーへ表示する際の丸めは各仕様書の表示規則に従う. `buff_debuff_state`は`buff_debuff_effect`に含まれるスキル・アビリティ由来のバフ・デバフ有無から更新する. `status_abnormalities`は状態異常ごとの経過ターンおよび毒周期カウントを保持する.
-`TacticsActiveEffectState`は騎士団戦中にGameServerが保持する継続中タクティクス効果の状態とする. DURATION型は`expires_at`へ絶対終了時刻を保持し, 現在時刻が`expires_at`以上の場合に無効化して削除する. 残り秒数を定期減算しない. COUNT型では`count_consume_trigger`を使用し, `end_type`に従って終了判定する. `TacticsBattleSpecialData`は`TACTICS_EFFECT_BATTLE_SPECIAL`の具体的な特殊効果を表す. `AccessTokenState`はGameServerメモリ上だけで保持し, Databaseへ永続化しない.
+`TacticsActiveEffectState`は騎士団戦中にGameServerが保持する継続中タクティクス効果の状態とする. DURATION型は`expires_at`へ絶対終了時刻を保持し, 現在時刻が`expires_at`以上の場合に無効化して削除する. 残り秒数を定期減算しない. COUNT型では`count_consume_trigger`を使用し, `end_type`に従って終了判定する. `TacticsBattleSpecialData`は`TACTICS_EFFECT_BATTLE_SPECIAL`の具体的な特殊効果を表す.
 
 ## 疑似乱数内部型
 
@@ -757,6 +778,7 @@ enum GuildBattleReplayProcessType {
   GUILD_BATTLE_REPLAY_HEAL = 3; // 治療処理.
   GUILD_BATTLE_REPLAY_REVIVE = 4; // 復活処理.
   GUILD_BATTLE_REPLAY_ITEM = 5; // アイテム使用処理.
+  GUILD_BATTLE_REPLAY_JOIN = 6; // 騎士団戦参加処理. RequestSequence生成による本体PRNG消費を再現する.
 }
 ```
 

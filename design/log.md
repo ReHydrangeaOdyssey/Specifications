@@ -28,6 +28,10 @@
 
 GameServer受信時刻, `GuildBattleID`, `GuildBattleReplayProcessType`, InitialSeed, GuildID[2], `GuildBattleInitialSnapshot`, Version.
 
+### 参加時
+
+GameServer受信時刻, `GuildBattleID`, `GuildBattleReplayProcessType`, PlayerID. リプレイ時はこの成立順で騎士団戦本体PRNGを1回消費し, RequestSequence生成時と同じ乱数消費を再現する.
+
 ### 出撃時
 
 GameServer受信時刻, `GuildBattleID`, `GuildBattleReplayProcessType`, Sequence, PlayerID, SelectID[5]

@@ -13,7 +13,7 @@
       - 効果の上昇は最大5段階とする.
       - 1段階あたりの効果増加値はタクティクスのマスターデータに`TacticsEffectID`・`TacticsTarget`ごとに保持する.
       - 段階レベル`n`の最終効果値は`基本効果値 + (n - 1) * 増加値`で算出する.
-      - BP固定回復は整数値同士, 通常補正・割合は浮動小数点値同士, 戦闘時特殊効果は攻撃・防御・速度の各パラメータごとに同じ式を適用する.
+      - BP固定回復は整数値同士, 通常補正・割合は浮動小数点値同士, 戦闘時特殊効果は`TacticsBattleSpecialParameters`の各数値パラメータごとに同じ式を適用する.
 
 以下のいずれかに分類される.
 
@@ -61,6 +61,7 @@
 * `TACTICS_HP_RECOVERY_POSITIVE_HP_RATE`: HP1以上のキャラクターだけを対象とし, タクティクスごとの回復割合を最大HPへ乗算して回復する. HP0のキャラクターは対象外.
 
 どちらの回復方式も最大値を超えて回復しない.
+`TACTICS_HP_RECOVERY_POSITIVE_HP_RATE`の段階レベル`n`における最終回復割合は`correction_value + (n - 1) * increase_value`として扱う. `TacticsHpRecoveryData.recovery_rate`を基本`correction_value`, `TacticsStageEffectData.increase_value`を1段階あたりの`increase_value`として使用する.
 
 ### 即時回復効果の終了方式
 
@@ -72,15 +73,67 @@
 
 ### 特殊効果系列
 
-`TacticsBattleSpecialType`として, アクセラレーター, アサルト, イレイス, エース, エクスターライズ, エクスドライブ, エッジノート, エリュシオン, エンダーブレイク, オラクル, オラトリオ, カーズ, カウンター, キャッスルウィークネス, キャッスルヴェール, クラウストルム, グラビティアサルト, クレバーノート, ジャガーノート, シャドウ, ステルス, ストリーム, スラッシャー, スロウレート, タランテラ, ディバインアクティブ, ディバインエトワール, ディバインスラスト, ディバインラピッド, バーサク, ハイド, パンツァー, ヒール, ファランクス, フォースオブウィッシュ, フォースオブプレイ, フォートレス, ブリッツ, プロヴォーク, ポイントライズ, メナス, ランページ, リヴァイブ, リコントラクト, リザレクション, レクトノート, ワイズノートの47系列を定義する. Enum値は「[型定義](../design/types.md)」を参照する.
+`TacticsBattleSpecialType`は「[型定義](../design/types.md)」のEnumを使用する. アサルトオーダー, エースオーダー, シャドウオーダーを独立したTypeとして追加し, フォートレス系列はフォートレスオーダーを表す. 以下で効果が指定されたTypeは表の意味を正本とする. 表に記載していない既存Typeの具体効果は本変更では追加定義しない.
+
+| TacticsBattleSpecialType | 名称 | 効果 |
+|---|---|---|
+| `TACTICS_BATTLE_SPECIAL_ASSAULT` | アサルト | 戦闘時, 味方パーティの攻撃力を上昇させる. |
+| `TACTICS_BATTLE_SPECIAL_ASSAULT_ORDER` | アサルトオーダー | 味方騎士団全体の攻撃力を上昇させる. |
+| `TACTICS_BATTLE_SPECIAL_ERASE` | イレイス | 敵から受ける最初の通常攻撃ダメージを0にする. |
+| `TACTICS_BATTLE_SPECIAL_ACE` | エース | 戦闘時, 味方パーティの攻撃力・防御力を上昇させる. |
+| `TACTICS_BATTLE_SPECIAL_ACE_ORDER` | エースオーダー | 味方騎士団全体の攻撃力・防御力を上昇させる. |
+| `TACTICS_BATTLE_SPECIAL_EXTERLIZE` | エクスターライズ | 攻撃回数が多いほどバトル獲得スコアを上昇させる. |
+| `TACTICS_BATTLE_SPECIAL_EX_DRIVE` | エクスドライブ | キリ番キャッスルブレイク時の獲得スコアを上昇させる. |
+| `TACTICS_BATTLE_SPECIAL_ELYSION` | エリュシオン | 強襲を無効化し, 戦闘時の攻撃力を上昇させ, 回避を発動させる. |
+| `TACTICS_BATTLE_SPECIAL_ORACLE` | オラクル | 戦闘時, 味方パーティのスキル発動率を上昇させる. |
+| `TACTICS_BATTLE_SPECIAL_ORATORIO` | オラトリオ | 強襲を無効化し, 戦闘時の攻撃力・スキル発動率を上昇させる. |
+| `TACTICS_BATTLE_SPECIAL_CURSE` | カーズ | 対戦騎士団全体のスキル発動率を低下させる. |
+| `TACTICS_BATTLE_SPECIAL_CASTLE_WEAKNESS` | キャッスルウィークネス | 対戦騎士団の城Lvを低下させる. |
+| `TACTICS_BATTLE_SPECIAL_CASTLE_VEIL` | キャッスルヴェール | 味方騎士団の城Lvを上昇させる. |
+| `TACTICS_BATTLE_SPECIAL_CLAUSTRUM` | クラウストルム | ヘイトを上昇させ, 迎撃時に攻撃力・防御力を上昇させる. |
+| `TACTICS_BATTLE_SPECIAL_GRAVITY_ASSAULT` | グラビティアサルト | 戦闘時, 味方パーティの攻撃力を上昇させ, 速度を低下させる. |
+| `TACTICS_BATTLE_SPECIAL_CLEVER_NOTE` | クレバーノート | バトルで敵を全滅させた場合に獲得スコアを上昇させ, TPを回復する. |
+| `TACTICS_BATTLE_SPECIAL_JUGGERNAUT` | ジャガーノート/煌 | バトルで敵を全滅させた場合にBPを回復する. |
+| `TACTICS_BATTLE_SPECIAL_SHADOW` | シャドウ | バトル時の強襲CB率を上昇させる. |
+| `TACTICS_BATTLE_SPECIAL_SHADOW_ORDER` | シャドウオーダー | 味方騎士団全体の強襲CB率を上昇させる. |
+| `TACTICS_BATTLE_SPECIAL_STREAM` | ストリーム | 戦闘時, 味方パーティの攻撃力・速度を上昇させる. |
+| `TACTICS_BATTLE_SPECIAL_TARANTELLA` | タランテラ | 戦闘時, 味方パーティのスキル発動率・速度を上昇させる. |
+| `TACTICS_BATTLE_SPECIAL_DIVINE_ACTIVE` | ディバインアクティブ | 戦闘時, 味方パーティのスキル発動率・最大TPを上昇させる. |
+| `TACTICS_BATTLE_SPECIAL_DIVINE_ETOILE` | ディバインエトワール | 戦闘時, 味方パーティの攻撃力・防御力・最大TPを上昇させる. |
+| `TACTICS_BATTLE_SPECIAL_DIVINE_THRUST` | ディバインスラスト | 戦闘時, 味方パーティの攻撃力・最大TPを上昇させる. |
+| `TACTICS_BATTLE_SPECIAL_DIVINE_RAPID` | ディバインラピッド | 戦闘時, 味方パーティの速度・最大TPを上昇させる. |
+| `TACTICS_BATTLE_SPECIAL_BERSERK` | バーサク | 強襲を無効化し, 戦闘時の攻撃力・防御力を上昇させる. |
+| `TACTICS_BATTLE_SPECIAL_PANZER` | パンツァー | 強襲を無効化し, 戦闘時の防御力・速度を上昇させる. |
+| `TACTICS_BATTLE_SPECIAL_FORCE_OF_PLAY` | フォースオブプレイ | 使用者自身を除く味方騎士団員のTPを小アップとして回復する. 回復量はマスターデータで保持する. |
+| `TACTICS_BATTLE_SPECIAL_FORTRESS` | フォートレスオーダー | 味方騎士団全体の防御力を上昇させる. |
+| `TACTICS_BATTLE_SPECIAL_BLITZ` | ブリッツ | 強襲CB発生率および強襲CB時の獲得スコアを上昇させる. |
+| `TACTICS_BATTLE_SPECIAL_POINT_RISE` | ポイントライズ | 獲得する騎士団戦スコアを小アップさせる. 上昇量はマスターデータで保持する. |
+| `TACTICS_BATTLE_SPECIAL_MENACE` | メナス | 対戦騎士団全体の防御力を低下させる. |
+| `TACTICS_BATTLE_SPECIAL_RAMPAGE` | ランページ | バトルで獲得する騎士団戦スコアを小アップさせる. 上昇量はマスターデータで保持する. |
+| `TACTICS_BATTLE_SPECIAL_RECONTRACT` | リコントラクト | バトルで敵を全滅させた場合にBP・TPを回復する. |
+| `TACTICS_BATTLE_SPECIAL_WISE_NOTE` | ワイズノート | バトルで敵を全滅させた場合に獲得スコアを上昇させ, BPを回復する. |
 
 ### パラメータ
 
-特殊効果は`TacticsBattleSpecialParameters`として以下3値を同時に保持できる.
+特殊効果は`TacticsBattleSpecialParameters`としてTypeごとに必要な数値を保持する. 使用しない値は0とする.
 
-* 攻撃.
-* 防御.
-* 速度.
+* 攻撃力補正.
+* 防御力補正.
+* 速度補正.
+* スキル発動率補正.
+* 最大TP補正.
+* バトル獲得スコア補正.
+* 騎士団戦獲得スコア補正.
+* キャッスルブレイク獲得スコア補正.
+* 強襲CB率補正.
+* 強襲CB獲得スコア補正.
+* ヘイト補正.
+* 城Lv補正.
+* BP固定回復量.
+* TP固定回復量.
+* 攻撃回数連動スコア補正.
+
+強襲無効, 最初の通常攻撃ダメージ0, 回避発動等の真偽型挙動は`special_type`自体の意味として判定し, 数値パラメータを使用しない.
 
 ### 適用箇所
 

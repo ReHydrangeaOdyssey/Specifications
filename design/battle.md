@@ -22,7 +22,7 @@ flowchart TD;
     UpdateStatusAbnormality[[状態異常更新]];
     UpdateTurnEndEffect[[ターン終了時処理]];
 
-    Start --> Ability --> UpdateWaitCount --> DetermineOrder --> PopQueue --> NextTurn 
+    Start --> Ability --> DetermineOrder --> PopQueue --> NextTurn 
     NextTurn--> TrunStart --> CharacterAttack --> UpdateStatusAbnormality --> UpdateTurnEndEffect --> AddWaitCount --> TrunEnd
     TrunEnd --> CheckAnnihilation
     CheckAnnihilation -- Yes --> Judgment;
@@ -32,6 +32,7 @@ flowchart TD;
     Judgment --> End
 ```
 
+戦闘開始直後は待機カウント更新を行わず, 全キャラクターの待機カウント0の状態から仕様書の初回規則に従って攻撃順を確定する. `UpdateWaitCount`は初回攻撃順確定後のターン進行でのみ使用する.
 `状態異常更新`で毒ダメージによりHPが0になった場合は, 戦闘不能時アビリティを発動せず, そのままターン終了時処理へ進む.
 同一キャラクターで同一タイミングに複数アビリティの発動条件が成立した場合は, Abilityスロット番号の小さい順に判定・処理する. 複数キャラクターで同一タイミングに成立した場合は, 戦闘計算上の速度が速い順, 同一速度ならフォーメーション内部値が小さい順, 速度・内部値とも同一ならPlayerIDの小さい順で抽選対象リストを作成して疑似乱数の抽選順で処理する.
 戦闘開始時に`SkillBattleState.activation_count=0`とし, 各`AbilityBattleState.activation_count=0`, `activated_this_turn=false`で初期化する. ターン開始時にすべての`AbilityBattleState.activated_this_turn`をfalseへ戻す. スキル発動時は`SkillBattleState.activation_count`を1増加し, Ability発動時は対応するAbilityIDの`AbilityBattleState.activation_count`を1増加して`activated_this_turn=true`とする. 最大発動回数判定は各マスターデータの`max_activation_count`と戦闘中状態の`activation_count`を比較して行う.
@@ -39,6 +40,10 @@ flowchart TD;
 通常の行動順決定で敵味方の速度・フォーメーション内部値が同一となる場合も, PlayerIDの小さい順で抽選対象リストを作成する.
 戦闘中キャラクターは`BuffDebuffState`, `BuffDebuffEffectState`, `StatusAbnormalityState[]`を保持する. スキル・アビリティによるバフ・デバフ付与時は`BuffDebuffEffectState`の実値を更新し, その有無から`BuffDebuffState`を更新する. 状態異常付与・更新時は`StatusAbnormalityState[]`を更新する. フォーメーションおよびタクティクス補正はこれらのバフ・デバフ状態へ影響しない.
 暗闇状態の攻撃成功判定に失敗した場合は, `追撃は発動済み?`の判定を行わず, 直接`追撃率 > 乱数?`へ進む. この分岐は仕様上の意図した処理とする.
+
+### TacticsBattleSpecialType適用
+
+騎士団戦の戦闘開始・行動・被弾・敵全滅処理では, 有効な`TACTICS_EFFECT_BATTLE_SPECIAL`を確認し, `special_type`ごとに「[タクティクス仕様](../specification/tactics.md#特殊効果系列)」の効果を適用する. 攻撃・防御・速度・スキル発動率・最大TP等の数値効果は`TacticsBattleSpecialParameters`の対応フィールドを使用する. 強襲無効, 最初の通常攻撃ダメージ0, 回避発動は`special_type`固有挙動として処理する.
 
 ### ダメージ乱数の消費規則
 

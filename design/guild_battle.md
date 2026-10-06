@@ -102,7 +102,7 @@ stateDiagram-v2
 
 ## シーケンス
 
-騎士団戦参加時, GameServerは`GuildBattleID`単位で`PlayerID -> RequestSequence`マップを作成する. 初期値は0で, 参加成功時に`1..=1,000,000,000`の範囲乱数を`RequestSequence`として割り当てる. 他プレイヤーとの`RequestSequence`重複は許可する. 参加後の要求は保持値と一致する`RequestSequence`のみ処理し, 成功するたびに1加算した`NextRequestSequence`をClientへ返す. 失敗時は加算しない.
+騎士団戦参加時, GameServerは`GuildBattleID`単位で`PlayerID -> RequestSequence`マップを作成する. 初期値は0で, 参加成功時に騎士団戦本体PRNGを1回消費して`next_bounded(1,000,000,000) + 1`を求め, `RequestSequence`として割り当てる. 他プレイヤーとの`RequestSequence`重複は許可する. 参加後の要求は保持値と一致する`RequestSequence`のみ処理し, 成功するたびに1加算した`NextRequestSequence`をClientへ返す. 失敗時は加算しない. JoinによるPRNG消費もリプレイ再現対象とする.
 
 相手プレイヤーの重み付き抽選へ渡す候補PlayerIDはPlayerID昇順とする.
 
@@ -148,18 +148,21 @@ sequenceDiagram
     participant DB
 
     User ->> Client: 参加ボタン押下
-    Client ->> PublicAPIServer: JoinGuildBattle(SessionID, PlayerID, GuildID, GuildBattleID)
-    PublicAPIServer ->> GameServer: JoinGuildBattle(SessionID, PlayerID, GuildID, GuildBattleID)
+    Client ->> PublicAPIServer: JoinGuildBattle(AccessToken, PlayerID, GuildID, GuildBattleID)
+    PublicAPIServer ->> GameServer: JoinGuildBattle(PlayerID, GuildID, GuildBattleID, AuthenticatedContext)
     GameServer ->> GameServer: 要求GuildBattleIDが騎士団戦中であることを確認
     GameServer ->> GameServer: 要求GuildIDが要求GuildBattleIDの対戦騎士団であることを確認
     GameServer ->> GameServer: PlayerIDの現在所属GuildIDと要求GuildIDが一致することを確認
 
     alt 両条件を満たし参加可能
-        GameServer ->> PrivateAPIServer: SaveSessionID
-        PrivateAPIServer ->> DB: セッション期限UPSERT(PlayerID, SessionID, 72時間後)
-        DB -->> PrivateAPIServer: 更新完了
-        PrivateAPIServer -->> GameServer: SaveSessionID
-        GameServer->>GameServer: PlayerIDへ初期RequestSequence(1..=1,000,000,000)を割り当て
+        GameServer ->> PrivateAPIServer: ExtendAccountSession(AuthenticatedContext.SessionID)
+        PrivateAPIServer ->> DB: ACCOUNT_SESSION期限を72時間後へ更新
+        DB -->> PrivateAPIServer: 更新結果
+        PrivateAPIServer -->> GameServer: ExtendAccountSession(IsValid)
+        GameServer->>GameServer: IsValid=trueを確認
+        GameServer->>GameServer: 騎士団戦本体PRNGでnext_bounded(1,000,000,000)+1を取得し初期RequestSequenceへ割り当て
+        GameServer->>PrivateAPIServer: SaveGuildBattleJoinLog(GuildBattleID, PlayerID)
+        PrivateAPIServer->>DB: Join成立ログ保存
         GameServer -->> PublicAPIServer: GuildBattleJoinResponse(Characters, RequestSequence)
         PublicAPIServer -->> Client: GuildBattleJoinResponse(Characters, RequestSequence)
         Client ->> User: 結果表示
@@ -177,45 +180,49 @@ sequenceDiagram
 騎士団戦開戦前処理は開戦5分前に開始する.
 対象開始時刻の騎士団は, 対戦組み合わせ生成前に加入・脱退を禁止して所属を固定する.
 所属固定後に対戦組み合わせを生成する.
+Kubernetes上で複数GameServerが稼働する場合, 対戦組み合わせ生成はLeader Electionで選出された1つのGameServerだけが行う.
+生成後の各騎士団戦は`ClaimScheduledGuildBattles`で1つのGameServerへ割り当て, 以降は割当先GameServerだけが当該騎士団戦を処理する.
 
 ```mermaid
 sequenceDiagram
     participant Bot
+    participant LeaderGameServer
     participant GameServer
     participant PrivateAPIServer
     participant DB
 
-    Note over GameServer,DB: 開戦5分前. 対象開始時刻の騎士団戦開戦前処理を開始
-    Note over GameServer,DB: 対象開始時刻の騎士団の加入・脱退を禁止し所属を固定
-    GameServer->>PrivateAPIServer: GetScheduledGuilds(TargetDate, GuildBattleStartTime)
+    Note over LeaderGameServer,DB: 開戦5分前. Leader GameServerが対象開始時刻の騎士団戦開戦前処理を開始
+    Note over LeaderGameServer,DB: 対象開始時刻の騎士団の加入・脱退を禁止し所属を固定
+    LeaderGameServer->>PrivateAPIServer: GetScheduledGuilds(TargetDate, GuildBattleStartTime)
     PrivateAPIServer->>DB: 同一日付・開始時刻の既存GUILD_BATTLEを取得
     DB-->>PrivateAPIServer: 既存ScheduledGuildBattle[]
-    PrivateAPIServer-->>GameServer: GetScheduledGuilds
+    PrivateAPIServer-->>LeaderGameServer: GetScheduledGuilds
     alt 既存データあり
-        GameServer->>GameServer: 既存ScheduledGuildBattle[]をそのまま使用
+        LeaderGameServer->>LeaderGameServer: 既存ScheduledGuildBattle[]をそのまま使用
     else 既存データなし
-        GameServer->>PrivateAPIServer: GetGuildsForBattleMatching(TargetDate, GuildBattleStartTime)
+        LeaderGameServer->>PrivateAPIServer: GetGuildsForBattleMatching(TargetDate, GuildBattleStartTime)
         PrivateAPIServer->>DB: 対象開始時刻のGuildID・所属人数一覧を取得
         DB-->>PrivateAPIServer: GuildBattleMatchCandidate[]
-        PrivateAPIServer-->>GameServer: GetGuildsForBattleMatching
-        GameServer->>GameServer: 所属0人の騎士団を除外
-        GameServer->>GameServer: GuildID昇順へ並べ替え
-        GameServer->>GameServer: 共通内部API GenerateTimeBasedSeed でマッチング用Seedを生成
-        GameServer->>GameServer: Seedを使用して騎士団一覧をシャッフルしペア生成
-        GameServer->>GameServer: PairIndex=0からGuildBattleIDを生成
-        GameServer->>PrivateAPIServer: SaveScheduledGuildBattles(TargetDate, StartTime, Battles[])
+        PrivateAPIServer-->>LeaderGameServer: GetGuildsForBattleMatching
+        LeaderGameServer->>LeaderGameServer: 所属0人の騎士団を除外
+        LeaderGameServer->>LeaderGameServer: GuildID昇順へ並べ替え
+        LeaderGameServer->>LeaderGameServer: 共通内部API GenerateTimeBasedSeed でマッチング用Seedを生成
+        LeaderGameServer->>LeaderGameServer: Seedを使用して騎士団一覧をシャッフルしペア生成
+        LeaderGameServer->>LeaderGameServer: PairIndex=0からGuildBattleIDを生成
+        LeaderGameServer->>PrivateAPIServer: SaveScheduledGuildBattles(TargetDate, StartTime, Battles[])
         PrivateAPIServer->>DB: GameServer生成済みGUILD_BATTLEをscheduledとして保存
         DB-->>PrivateAPIServer: 保存済みまたは既存ScheduledGuildBattle[]
-        PrivateAPIServer-->>GameServer: SaveScheduledGuildBattles
+        PrivateAPIServer-->>LeaderGameServer: SaveScheduledGuildBattles
     end
-    Note over GameServer,DB: 0人で組み合わせ生成対象から除外された騎士団も所属変更禁止解除対象として保持
+    Note over LeaderGameServer,DB: 0人で組み合わせ生成対象から除外された騎士団も所属変更禁止解除対象として保持
 
-    loop 生成した騎士団戦すべて
-        alt GameServerの処理容量上限に到達
-            GameServer->>Bot: 処理容量上限到達メッセージ送信
-            Note over GameServer,DB: 対象騎士団戦については何も処理せず, DB上の状態はscheduledのまま維持する
-        else 処理容量に空きあり
-            loop 対戦する2騎士団
+    GameServer->>PrivateAPIServer: ClaimScheduledGuildBattles(GameServerInstanceID, TargetDate, GuildBattleStartTime, 空き容量)
+    PrivateAPIServer->>DB: 未割当scheduled騎士団戦を原子的にClaim
+    DB-->>PrivateAPIServer: Claim済みScheduledGuildBattle[]
+    PrivateAPIServer-->>GameServer: ClaimScheduledGuildBattles
+
+    loop Claimした騎士団戦すべて
+        loop 対戦する2騎士団
                 GameServer->>PrivateAPIServer: GetGuildData(GuildID)
                 PrivateAPIServer->>DB: 騎士団レベル情報要求
                 DB-->>PrivateAPIServer: 騎士団レベル情報返答
@@ -242,10 +249,13 @@ sequenceDiagram
                         GameServer->>GameServer: 最大BP・編成・アイテム情報保管
                     else 処理失敗
                         GameServer->>GameServer: 当該PlayerIDを当該GuildBattleIDの騎士団戦データから除外
+                        GameServer->>GameServer: 当該PlayerIDをCB確率・CBC条件の計算対象から除外
                         GameServer->>GameServer: エラーログ追記
                         GameServer->>PrivateAPIServer: SaveErrorLog(GuildBattleID)
                         PrivateAPIServer->>DB: エラーログ保存
-                        GameServer->>Bot: エラーメッセージ送信
+                        opt DiscordNotificationEnabled=true
+                            GameServer->>Bot: エラーメッセージ送信
+                        end
                     end
                 end
             end
@@ -266,10 +276,11 @@ sequenceDiagram
             PrivateAPIServer->>DB: リプレイ作成ログ・開戦時スナップショット保存
             GameServer->>PrivateAPIServer: UpdateGuildBattleStatus(GuildBattleID, in_progress)
             PrivateAPIServer->>DB: GUILD_BATTLE.status更新
-        end
     end
 
-    GameServer->>Bot: 処理終了通知
+    opt DiscordNotificationEnabled=true
+        GameServer->>Bot: 処理終了通知
+    end
 ```
 
 #### 騎士団戦中
@@ -285,8 +296,8 @@ sequenceDiagram
 
     loop 30分経過するまで
         User ->> Client: 出撃ボタン押下
-        Client ->> PublicAPIServer: GuildBattleSortie(SessionID, PlayerID, GuildBattleID, RequestSequence, SelectID[5])
-        PublicAPIServer ->> GameServer: GuildBattleSortie(SessionID, PlayerID, GuildBattleID, RequestSequence, SelectID[5])
+        Client ->> PublicAPIServer: GuildBattleSortie(AccessToken, PlayerID, GuildBattleID, RequestSequence, SelectID[5])
+        PublicAPIServer ->> GameServer: GuildBattleSortie(PlayerID, GuildBattleID, RequestSequence, SelectID[5], AuthenticatedContext)
         GameServer ->> GameServer: GuildBattleID・PlayerID・RequestSequence一致確認
         GameServer ->> GameServer: 出撃可否チェック
         GameServer ->> GameServer: 騎士団戦全体Sequence加算
@@ -311,6 +322,10 @@ sequenceDiagram
     end
 ```
 
+#### Battle Specialイベント処理
+
+騎士団戦中は出撃判定, キャッスルブレイク判定, 戦闘開始, 迎撃, 敵全滅, スコア反映の各処理で有効な`TACTICS_EFFECT_BATTLE_SPECIAL`を評価する. `TacticsBattleSpecialType`ごとの具体効果は「[タクティクス仕様](../specification/tactics.md#特殊効果系列)」を正本とする. 騎士団全体効果は対象Guildの各出撃処理へ反映し, 対戦騎士団全体へのデバフは相手Guildの各出撃処理へ反映する.
+
 #### 要求処理順
 
 GameServerが受信するあらゆる要求は先に到達した順に処理する. GameServer受信時刻が異なる要求は受信時刻の早い要求を先に処理する. GameServer上で完全に同時として扱われる要求同士の順序は処理系定義とし, 疑似乱数による順序決定は行わない.
@@ -321,9 +336,10 @@ GameServerが受信するあらゆる要求は先に到達した順に処理す�
 #### 再接続・状態復元
 
 `GetGuildBattleStatus`は再接続用の状態復元APIとして扱う.
-ClientはSessionID, PlayerID, GuildBattleIDだけを送信し, GameServerは現在のRequestSequenceを要求しない.
+ClientはAccessToken, PlayerID, GuildBattleIDだけを送信し, GameServerは現在のRequestSequenceを要求しない.
 GameServerは現在HP, BP, TP, 治療・復活状態と残り時間, 出撃待機時間, タクティクス状態, アイテム残数, 両騎士団スコア, チェイン, CBC状態, 現在RequestSequenceを返す.
 `GetGuildBattleStatus`の実行ではRequestSequenceを加算しない.
+CharacterID, Follower, MainSkill, Ability, FormationID等の静的な編成構成はClientが編成確定時からローカルに保持し, 再接続時もそのローカル情報から復元する. `GetGuildBattleStatus`では静的な編成構成を再送しない.
 
 ##### タクティクス使用時
 
@@ -338,8 +354,8 @@ sequenceDiagram
 
     User->>Client: タクティクス使用
     Client->>Client: TP, 使用回数チェック
-    Client->>PublicAPIServer: UseTactics(SessionID, PlayerID, GuildBattleID, RequestSequence, TacticsID)
-    PublicAPIServer->>GameServer: UseTactics(SessionID, PlayerID, GuildBattleID, RequestSequence, TacticsID)
+    Client->>PublicAPIServer: UseTactics(AccessToken, PlayerID, GuildBattleID, RequestSequence, TacticsID)
+    PublicAPIServer->>GameServer: UseTactics(PlayerID, GuildBattleID, RequestSequence, TacticsID, AuthenticatedContext)
 
     GameServer->>GameServer: GuildBattleID・PlayerID・RequestSequence一致確認
     GameServer->>GameServer: 要求TacticsIDが編成から使用可能なタクティクスか確認
@@ -376,8 +392,8 @@ sequenceDiagram
 
     User->>Client: BP回復アイテム使用
     Client->>Client: 所持数チェック
-    Client->>PublicAPIServer: UseItem(SessionID, PlayerID, GuildBattleID, RequestSequence, ItemID)
-    PublicAPIServer->>GameServer: UseItem(SessionID, PlayerID, GuildBattleID, RequestSequence, ItemID)
+    Client->>PublicAPIServer: UseItem(AccessToken, PlayerID, GuildBattleID, RequestSequence, ItemID)
+    PublicAPIServer->>GameServer: UseItem(PlayerID, GuildBattleID, RequestSequence, ItemID, AuthenticatedContext)
 
     GameServer->>GameServer: GuildBattleID・PlayerID・RequestSequence一致確認
     GameServer->>GameServer: 所持数チェック
@@ -413,8 +429,8 @@ sequenceDiagram
     participant DB
 
     User->>Client: 治療開始
-    Client->>PublicAPIServer: StartHeal(SessionID, PlayerID, GuildBattleID, RequestSequence)
-    PublicAPIServer->>GameServer: StartHeal(SessionID, PlayerID, GuildBattleID, RequestSequence)
+    Client->>PublicAPIServer: StartHeal(AccessToken, PlayerID, GuildBattleID, RequestSequence)
+    PublicAPIServer->>GameServer: StartHeal(PlayerID, GuildBattleID, RequestSequence, AuthenticatedContext)
 
     GameServer->>GameServer: GuildBattleID・PlayerID・RequestSequence一致確認
     GameServer->>GameServer: 回復状態でないことを確認
@@ -451,8 +467,8 @@ sequenceDiagram
     participant DB
 
     User->>Client: 治療キャンセル
-    Client->>PublicAPIServer: CancelHeal(SessionID, PlayerID, GuildBattleID, RequestSequence)
-    PublicAPIServer->>GameServer: CancelHeal(SessionID, PlayerID, GuildBattleID, RequestSequence)
+    Client->>PublicAPIServer: CancelHeal(AccessToken, PlayerID, GuildBattleID, RequestSequence)
+    PublicAPIServer->>GameServer: CancelHeal(PlayerID, GuildBattleID, RequestSequence, AuthenticatedContext)
 
     GameServer->>GameServer: GuildBattleID・PlayerID・RequestSequence一致確認
     GameServer->>GameServer: 回復中状態を確認
@@ -490,8 +506,8 @@ sequenceDiagram
     participant DB
 
     User->>Client: 回復完了状態解除
-    Client->>PublicAPIServer: CompleteHeal(SessionID, PlayerID, GuildBattleID, RequestSequence)
-    PublicAPIServer->>GameServer: CompleteHeal(SessionID, PlayerID, GuildBattleID, RequestSequence)
+    Client->>PublicAPIServer: CompleteHeal(AccessToken, PlayerID, GuildBattleID, RequestSequence)
+    PublicAPIServer->>GameServer: CompleteHeal(PlayerID, GuildBattleID, RequestSequence, AuthenticatedContext)
 
     GameServer->>GameServer: GuildBattleID・PlayerID・RequestSequence一致確認
     GameServer->>GameServer: 回復完了状態を確認
@@ -523,8 +539,8 @@ sequenceDiagram
     participant DB
 
     User->>Client: 復活開始
-    Client->>PublicAPIServer: StartRevive(SessionID, PlayerID, GuildBattleID, RequestSequence)
-    PublicAPIServer->>GameServer: StartRevive(SessionID, PlayerID, GuildBattleID, RequestSequence)
+    Client->>PublicAPIServer: StartRevive(AccessToken, PlayerID, GuildBattleID, RequestSequence)
+    PublicAPIServer->>GameServer: StartRevive(PlayerID, GuildBattleID, RequestSequence, AuthenticatedContext)
 
     GameServer->>GameServer: GuildBattleID・PlayerID・RequestSequence一致確認
     GameServer->>GameServer: 使用可能かチェック
@@ -563,8 +579,8 @@ sequenceDiagram
     participant DB
 
     User->>Client: 復活キャンセル
-    Client->>PublicAPIServer: CancelRevive(SessionID, PlayerID, GuildBattleID, RequestSequence)
-    PublicAPIServer->>GameServer: CancelRevive(SessionID, PlayerID, GuildBattleID, RequestSequence)
+    Client->>PublicAPIServer: CancelRevive(AccessToken, PlayerID, GuildBattleID, RequestSequence)
+    PublicAPIServer->>GameServer: CancelRevive(PlayerID, GuildBattleID, RequestSequence, AuthenticatedContext)
 
     GameServer->>GameServer: GuildBattleID・PlayerID・RequestSequence一致確認
     GameServer->>GameServer: 復活中状態を確認
@@ -597,8 +613,8 @@ sequenceDiagram
     participant DB
 
     User->>Client: 復活完了状態解除
-    Client->>PublicAPIServer: CompleteRevive(SessionID, PlayerID, GuildBattleID, RequestSequence)
-    PublicAPIServer->>GameServer: CompleteRevive(SessionID, PlayerID, GuildBattleID, RequestSequence)
+    Client->>PublicAPIServer: CompleteRevive(AccessToken, PlayerID, GuildBattleID, RequestSequence)
+    PublicAPIServer->>GameServer: CompleteRevive(PlayerID, GuildBattleID, RequestSequence, AuthenticatedContext)
 
     GameServer->>GameServer: GuildBattleID・PlayerID・RequestSequence一致確認
     GameServer->>GameServer: 復活完了状態を確認
@@ -669,8 +685,10 @@ sequenceDiagram
                 GameServer->>GameServer: エラーログ追記
                 GameServer->>PrivateAPIServer: SaveErrorLog
                 PrivateAPIServer->>DB: エラーログ保存
-                GameServer->>Bot: エラーメッセージ送信
-                Note over GameServer,Bot: 原因調査および復旧は運営が手動で行う
+                opt DiscordNotificationEnabled=true
+                    GameServer->>Bot: エラーメッセージ送信
+                end
+                Note over GameServer: 原因調査および復旧は運営が手動で行う
             end
         end
     end
@@ -687,7 +705,7 @@ sequenceDiagram
         GameServer->>GameServer: 対象2騎士団の加入・脱退禁止を解除
         GameServer->>GameServer: 同じ開始時刻に0人除外された騎士団の加入・脱退禁止も解除
     else 再試行後も最終結果保存失敗
-        Note over GameServer: ErrorLog・Bot通知済み. 運営が原因調査し手動復旧する
+        Note over GameServer: ErrorLog保存済み. DiscordNotificationEnabled=trueの場合はBot通知済み. 運営が原因調査し手動復旧する
     end
 ```
 

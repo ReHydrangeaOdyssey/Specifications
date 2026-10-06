@@ -2,15 +2,25 @@
 
 API全体の分類は「[API仕様](api.md)」を参照する.
 
-- Client/Bot から要求を受ける.
-- GameServer に要求を中継する.
-- GameServer からの結果を Client/Bot に返す.
+- Clientから要求を受ける.
+- 認証系APIはPrivate API Serverへ中継する.
+- ゲーム系APIはGameServerへ中継する.
+- Public API Serverは認証状態およびゲーム状態を正本として保持しないstateless構成とする.
 - テスト環境では Private Network の外側に配置される.
 - 要求/レスポンスのデータ構造は[API Payload](api_payload.md)を参照する.
-- `SessionID`を要求するPublicAPIは, 処理前にSessionの存在, 有効期限, 要求`PlayerID`との所有関係をすべて検証する.
-  - いずれかが不正な場合は`ApiErrorResponse(API_ERROR_INVALID_SESSION)`を返し, 要求本体を処理しない.
+- `DiscordAuthorizationRequired=true`の場合, `CreateAccount`および`Login`は処理前にDiscordAuthorizationTokenを「[セッション仕様](session.md)」に従って検証する.
+- `AccessToken`を要求するPublicAPIは, 処理前にAccessTokenを検証する.
+  - 署名, `alg`, `iss`, `aud`, `exp`, `player_id`を「[セッション仕様](session.md)」に従って検証する.
+  - AccessToken検証のためにPrivate API ServerまたはDatabaseへ問い合わせない.
+  - AccessTokenの`player_id`と要求`PlayerID`が一致しない場合は`ApiErrorResponse(API_ERROR_INVALID_ACCESS_TOKEN)`を返し, 要求本体を処理しない.
+  - 検証成功時は`AuthenticatedContext`を生成し, GameServerへ要求と共に中継する.
 - 個別に失敗レスポンスが定義されていないPublicAPIの失敗時は`ApiErrorResponse`を使用する.
 - PublicAPIは下記「レート制限」に従って要求数を制限する. 超過時は`ApiErrorResponse(API_ERROR_RATE_LIMIT_EXCEEDED)`を返し, 要求本体を処理しない.
+- 表に記載していないPublicAPIには個別のApplication Level Rate Limitを設定しない. Ingress等で行うNetwork LevelのDoS対策は本表とは別とする.
+- `GuildBattleID`を含む要求は`GuildBattleID -> GameServerInstanceID`を解決し, 当該騎士団戦を所有するGameServerへ中継する. 解決結果はPublic API Serverのメモリへキャッシュしてよいが正本とはしない.
+  - 本番Kubernetes環境ではGameServer用EndpointSliceをwatchし, `GameServerInstanceID`に一致するPod UIDのEndpointへ直接中継する.
+  - 割当済み`GameServerInstanceID`に対応するEndpointが存在しない場合は`ApiErrorResponse(API_ERROR_GAME_SERVER_UNAVAILABLE)`を返す.
+- Application Level Rate LimitのカウンタはPublic API Pod単位で独立管理せず, 複数Pod間で同一カウント単位の結果を共有する. 共有方式はKubernetes Ingress/Gatewayまたは共有Rate Limit Storeを使用し, Public API Serverの認証状態・ゲーム状態をstatelessとする方針を崩さない.
 
 ## レート制限
 
@@ -18,81 +28,45 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 
 | 区分 | 対象PublicAPI | RPM | RPH | PRD | カウント単位 |
 |---|---|---:|---:|---:|---|
-| ログイン | `Login` | 1 | 5 | 25 | PlayerID |
-| 新規作成時のみ | `CreatePlayer` | 1 | 5 | 10 | AccessToken |
+| アカウント作成 | `CreateAccount` | 1 | 5 | 10 | LoginID |
+| ログイン | `Login` | 1 | 5 | 25 | LoginID |
 | 新規作成時のみ | `CreateGuild` | 1 | 5 | 10 | PlayerID |
 | アリーナ | `UpdateArenaParty`, `StartArenaBattle` | 2 | 50 | 100 | PlayerID |
 
 ## システム
 
-### アクセストークン要求
+### アカウント新規作成
 
 #### メソッド名
 
-`IssueAccessToken`
+`CreateAccount`
 
 #### 処理内容
 
-- `AccessTokenRequest. DiscordUserID`はBotがDiscord上で本人確認済みのユーザーIDとして受け取る.
-- Private APIの`GetPlayerIDByDiscordUserID`で既存PlayerIDを検索する.
-- アクセストークンを生成する.
-  - 有効期限は5分とする.
-  - 型は「[型定義](types.md)」の`AccessToken`を参照する.
-  - 暗号学的乱数を用いて生成する.
-  - `AccessTokenState`としてDiscordUserID, 既存PlayerID（存在しない場合は0）, 有効期限, 使用回数0をGameServerメモリ上だけに保持する.
-  - AccessTokenは本人確認済みDiscordUserIDとPlayerIDのBindingとして扱い, 別PlayerIDのLoginには使用できない.
-- GameServer起動引数へStartup Tokenを渡す方式は廃止する. Botから`IssueAccessToken`を許可する代替認証方式は未確定とし, 本仕様では定義しない.
-
-#### 要求データ
-
-[API Payload](api_payload.md)の「AccessTokenRequest」を参照する.
-
-#### 成功時レスポンス
-
-[API Payload](api_payload.md)の「AccessTokenResponse」を参照する.
-
-#### 失敗時レスポンス
-
-[API Payload](api_payload.md)の「ApiErrorResponse」を参照する. Bot認証方式は未確定のため, Bot認証失敗の具体的エラー条件は代替認証方式確定時に定義する.
-
-### 新規PlayerID要求
-
-#### メソッド名
-
-`CreatePlayer`
-
-#### 処理内容
-
-- AccessTokenを検証する.
-  - 有効期限内であることを確認する.
-  - `AccessTokenState.bound_player_id=0`であり, まだ既存PlayerIDへBindingされていないことを確認する.
-  - 検証前に`use_count >= 3`の場合は`API_ERROR_INVALID_ACCESS_TOKEN`として拒否し, 検証成功時に`use_count`を1増加する.
-- CreatePlayerではAccessTokenを無効化しない.
-- PlayerID生成後, AccessTokenに保持するDiscordUserIDを`PLAYER.discord_user_id`として保存し, `AccessTokenState.bound_player_id`へ生成したPlayerIDを設定する.
-- AccessTokenはLogin成功時に無効化する.
-- ユーザー名をチェックする.
+- LoginID, Password, UserName, DiscordAuthorizationTokenを受け取る.
+- `DiscordAuthorizationRequired=true`の場合はDiscordAuthorizationTokenを検証する. 未指定の場合は`API_ERROR_DISCORD_AUTHORIZATION_REQUIRED`, 不正または期限切れの場合は`API_ERROR_INVALID_DISCORD_AUTHORIZATION_TOKEN`を返す.
+- `DiscordAuthorizationRequired=false`の場合はDiscordAuthorizationTokenを要求しない.
+- LoginIDおよびPasswordは「[セッション仕様](session.md)」に従って検証する.
+- UserNameをチェックする.
   - 有効なUTF-8である.
   - 10文字以下である.
   - 空文字ではない.
   - ユーザー名の重複は許可する.
-- PlayerIDを生成する.
-  - `0`と`u64::MAX`は予約済み無効値のため生成対象外.
-  - Private API Serverの`CheckPlayerIDExists`で重複を確認する.
-  - 重複している場合は再生成する.
-  - 重複していないことを確認してからClientへ返す.
-- 生成したPlayerID, AccessTokenに結び付いたDiscordUserID, ユーザー名をPrivate API Server経由でDatabaseへ保存する. 新規Playerの`max_bp`は200で初期化する.
+- Private API Serverの`CreateAccount`へ要求する.
+- Private API ServerはAccountIDおよびPlayerIDを生成し, `ACCOUNT`と`PLAYER`を同一トランザクションで保存する.
+- `PLAYER.max_bp`は200で初期化する.
 
-#### 必要パラメータ
+#### 要求データ
 
-[API Payload](api_payload.md)の「CreatePlayerRequest」を参照する.
+[API Payload](api_payload.md)の「CreateAccountRequest」を参照する.
 
 #### 成功時レスポンス
 
-[API Payload](api_payload.md)の「CreatePlayerResponse」を参照する.
+[API Payload](api_payload.md)の「CreateAccountResponse」を参照する.
 
 #### 失敗時レスポンス
 
-[API Payload](api_payload.md)の「ApiErrorResponse」を参照する. AccessToken不正は`API_ERROR_INVALID_ACCESS_TOKEN`, ユーザー名不正は`API_ERROR_INVALID_USER_NAME`.
+[API Payload](api_payload.md)の「ApiErrorResponse」を参照する. Discord追加認可必須時のToken未指定は`API_ERROR_DISCORD_AUTHORIZATION_REQUIRED`, Token不正は`API_ERROR_INVALID_DISCORD_AUTHORIZATION_TOKEN`, LoginID不正は`API_ERROR_INVALID_LOGIN_ID`, Password不正は`API_ERROR_INVALID_PASSWORD`, LoginID重複は`API_ERROR_LOGIN_ID_ALREADY_EXISTS`, UserName不正は`API_ERROR_INVALID_USER_NAME`.
 
 ### ログイン要求
 
@@ -102,17 +76,14 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 
 #### 処理内容
 
-- AccessTokenを検証する.
-  - 有効期限内であることを確認する.
-  - `AccessTokenState.bound_player_id`が要求`PlayerID`と一致することを確認し, AccessTokenとPlayerIDの本人性を検証する.
-  - 検証前に`use_count >= 3`の場合は`API_ERROR_INVALID_ACCESS_TOKEN`として拒否し, 検証成功時に`use_count`を1増加する.
-- `LoginRequest.ClientVersion`とGameServerが要求する`Version`を比較する.
-  - 一致しない場合はSessionを発行せず, `LoginVersionErrorResponse`で`API_ERROR_CLIENT_VERSION_MISMATCH`と要求Versionを返す.
+- `LoginRequest.ClientVersion`とPublic API Serverが要求する`Version`を比較する.
+  - 一致しない場合は認証処理を行わず, `LoginVersionErrorResponse`で`API_ERROR_CLIENT_VERSION_MISMATCH`と要求Versionを返す.
   - Clientは本エラーを受け取った場合, ゲームデータおよびClientの更新をユーザーへ促す.
-- Login成功時にアクセストークンを無効化する.
-- セッションIDを暗号学的乱数で生成する.
-- PlayerIDとセッションIDをPrivate API Server経由でDatabaseへUPSERTする.
-- SessionIDのUNIQUE制約に衝突した場合はSessionIDを再生成して保存を再試行する.
+- `DiscordAuthorizationRequired=true`の場合はDiscordAuthorizationTokenを検証する. 未指定の場合は`API_ERROR_DISCORD_AUTHORIZATION_REQUIRED`, 不正または期限切れの場合は`API_ERROR_INVALID_DISCORD_AUTHORIZATION_TOKEN`を返す.
+- `DiscordAuthorizationRequired=false`の場合はDiscordAuthorizationTokenを要求しない.
+- Private API Serverの`AuthenticateAccount`へLoginIDとPasswordを送信する.
+- Private API ServerはPassword検証成功時に既存Refresh Sessionを無効化し, 新しいSessionID, AccessToken, RefreshTokenを生成する.
+- LoginID不存在とPassword不一致は区別せず`API_ERROR_INVALID_CREDENTIALS`として返す.
 
 #### 要求データ
 
@@ -124,37 +95,52 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 
 #### 失敗時レスポンス
 
-AccessToken不正は[API Payload](api_payload.md)の`ApiErrorResponse(API_ERROR_INVALID_ACCESS_TOKEN)`を返す. Version不一致は`LoginVersionErrorResponse`を返す.
+Discord追加認可必須時のToken未指定は`ApiErrorResponse(API_ERROR_DISCORD_AUTHORIZATION_REQUIRED)`, Token不正は`ApiErrorResponse(API_ERROR_INVALID_DISCORD_AUTHORIZATION_TOKEN)`を返す. Account認証失敗は`ApiErrorResponse(API_ERROR_INVALID_CREDENTIALS)`を返す. Version不一致は`LoginVersionErrorResponse`を返す.
 
-セッション仕様.
-
-- SessionIDの型は「[型定義](types.md)」の`SessionID`を参照する.
-- SessionIDの期限: 72時間.
-- ログイン時に期限がリセットされる.
-- 騎士団戦参加時に期限がリセットされる.
-- 複数端末からのアクセスは不可とする.
-- ClientではOPFS上に保存される.
-
-
-### セッション確認
+### AccessToken更新
 
 #### メソッド名
 
-`ValidateSession`
+`RefreshAccessToken`
 
 #### 処理内容
 
-- SessionIDの存在を確認する.
-- 有効期限内であることを確認する.
-- SessionIDが要求PlayerIDに所有されていることを確認する.
+- Private API Serverの`RefreshAccessToken`へRefreshTokenを送信する.
+- Private API ServerでRefreshTokenのHash, Session存在, 有効期限を検証する.
+- 検証成功時はRefreshTokenをRotationし, 新しいAccessTokenとRefreshTokenを返す.
+- Refresh Sessionの72時間期限は本処理では延長しない.
 
 #### 要求データ
 
-[API Payload](api_payload.md)の「ValidateSessionPublicRequest」を参照する.
+[API Payload](api_payload.md)の「RefreshAccessTokenRequest」を参照する.
 
-#### レスポンス
+#### 成功時レスポンス
 
-[API Payload](api_payload.md)の「ValidateSessionPublicResponse」を参照する.
+[API Payload](api_payload.md)の「RefreshAccessTokenResponse」を参照する.
+
+#### 失敗時レスポンス
+
+[API Payload](api_payload.md)の`ApiErrorResponse(API_ERROR_INVALID_REFRESH_TOKEN)`を返す.
+
+### ログアウト
+
+#### メソッド名
+
+`Logout`
+
+#### 処理内容
+
+- Private API Serverの`Logout`へRefreshTokenを送信する.
+- Private API ServerはRefreshTokenに対応する`ACCOUNT_SESSION`を削除する.
+- 既に発行済みのAccessTokenは自身の`exp`到達まで最大5分間有効とする.
+
+#### 要求データ
+
+[API Payload](api_payload.md)の「LogoutRequest」を参照する.
+
+#### 成功時レスポンス
+
+[API Payload](api_payload.md)の「LogoutResponse」を参照する.
 
 ### 騎士団新規作成
 
@@ -164,7 +150,7 @@ AccessToken不正は[API Payload](api_payload.md)の`ApiErrorResponse(API_ERROR_
 
 #### 処理内容
 
-- SessionIDを検証する.
+- AccessTokenを検証する.
 - GuildNameがUTF-8, 最大10文字, 空文字不可の制約を満たすことを確認する. GuildNameの重複は許可する.
 - プレイヤーの初期騎士団を新規作成する.
 - 作成する騎士団の`GuildID`には要求元`PlayerID`と同一値を使用する.
@@ -194,11 +180,14 @@ GuildNameが制約を満たさない場合は`ApiErrorResponse(API_ERROR_INVALID
 
 #### 処理内容
 
-- SessionIDを検証する.
-- 団長・副団長へ指定可能なPlayerID条件は, 現時点では未定義とする.
+- AccessTokenを検証する.
+- 変更後のLeaderPlayerIDとSubleaderPlayerIDがともに変更対象Guildへ現在所属していることを確認する.
+- LeaderPlayerIDとSubleaderPlayerIDが同一の場合は変更しない.
+- 初期騎士団に固有の追加制約は設けない.
 - GameServerからPrivate API Serverへ要求`PlayerID`を`RequesterPlayerID`として含めた`SaveGuildLeadership`を要求する.
 - Private API ServerはDatabase上の現在の`GUILD.leader_player_id`と`RequesterPlayerID`が一致する場合のみ役職を更新する.
 - 一致しない場合は`ApiErrorResponse(API_ERROR_GUILD_LEADERSHIP_CHANGE_NOT_ALLOWED)`としてClientへ返す.
+- 団長・副団長候補が対象Guild所属ではない, または同一PlayerIDの場合は`ApiErrorResponse(API_ERROR_INVALID_GUILD_LEADERSHIP_TARGET)`を返す.
 
 #### 要求データ
 
@@ -208,30 +197,85 @@ GuildNameが制約を満たさない場合は`ApiErrorResponse(API_ERROR_INVALID
 
 [API Payload](api_payload.md)の「UpdateGuildLeadershipResponse」を参照する.
 
-### 騎士団所属変更
+### 騎士団加入申請
 
 #### メソッド名
 
-`JoinGuild`
+`ApplyGuildJoin`
 
 #### 処理内容
 
-- SessionIDを検証する.
-- 指定GuildIDの所属人数が20未満であることを確認する.
-- 現在所属する騎士団および指定GuildIDが騎士団戦開戦前処理開始後から終了までの所属変更禁止期間ではないことを確認する.
-- プレイヤーの所属を指定GuildIDへ更新する.
+- AccessTokenを検証する.
+- Private APIの`SaveGuildJoinApplication`で未承認加入申請を保存する.
+- 本APIでは所属GuildIDを変更しない.
 
-#### 要求データ
+#### 要求・レスポンス
 
-[API Payload](api_payload.md)の「JoinGuildRequest」を参照する.
+[API Payload](api_payload.md)の「ApplyGuildJoinRequest」「ApplyGuildJoinResponse」を参照する.
 
-#### 成功時レスポンス
+### 騎士団加入申請承認
 
-[API Payload](api_payload.md)の「JoinGuildResponse」を参照する.
+#### メソッド名
+
+`ApproveGuildJoinApplication`
+
+#### 処理内容
+
+- AccessTokenを検証する.
+- 承認要求Playerが加入申請の承認権限を持つことをPrivate APIで確認する. 承認可能な役職条件は現時点では未定義とする.
+- 未承認の加入申請が存在することを確認する.
+- 申請Playerの現在所属Guildと加入先Guildが所属変更禁止期間ではないことを確認する.
+- Databaseトランザクション内で加入先Guildの所属人数が20未満であることを再確認し, 条件を満たす場合だけ申請Playerの所属を加入先Guildへ変更して加入申請を削除する.
+
+#### 要求・レスポンス
+
+[API Payload](api_payload.md)の「ApproveGuildJoinApplicationRequest」「ApproveGuildJoinApplicationResponse」を参照する.
 
 #### 失敗時レスポンス
 
-満員の場合は`ApiErrorResponse(API_ERROR_GUILD_FULL)`を返す. 所属変更禁止期間の場合は`ApiErrorResponse(API_ERROR_GUILD_MEMBERSHIP_CHANGE_NOT_ALLOWED)`を返す.
+所属人数が20人の場合は`API_ERROR_GUILD_FULL`, 承認権限がない場合は`API_ERROR_GUILD_JOIN_APPROVAL_NOT_ALLOWED`, 加入申請が存在しない場合は`API_ERROR_GUILD_JOIN_APPLICATION_NOT_FOUND`, 所属変更禁止期間の場合は`API_ERROR_GUILD_MEMBERSHIP_CHANGE_NOT_ALLOWED`を返す.
+
+### 騎士団招待送信
+
+#### メソッド名
+
+`SendGuildInvitation`
+
+#### 処理内容
+
+- AccessTokenを検証する.
+- 招待を送信できるのは対象Guildの団長または副団長だけとする.
+- Private APIの`SaveGuildInvitation`で招待を保存する.
+- 本APIでは招待対象Playerの所属GuildIDを変更しない.
+
+#### 要求・レスポンス
+
+[API Payload](api_payload.md)の「SendGuildInvitationRequest」「SendGuildInvitationResponse」を参照する.
+
+#### 失敗時レスポンス
+
+団長・副団長以外が要求した場合は`API_ERROR_GUILD_INVITATION_NOT_ALLOWED`を返す.
+
+### 騎士団招待承諾
+
+#### メソッド名
+
+`AcceptGuildInvitation`
+
+#### 処理内容
+
+- AccessTokenを検証する.
+- 要求Player宛ての未承諾招待が存在することを確認する.
+- 要求Playerの現在所属Guildと招待元Guildが所属変更禁止期間ではないことを確認する.
+- Databaseトランザクション内で招待元Guildの所属人数が20未満であることを再確認し, 条件を満たす場合だけ要求Playerの所属を招待元Guildへ変更して招待を削除する.
+
+#### 要求・レスポンス
+
+[API Payload](api_payload.md)の「AcceptGuildInvitationRequest」「AcceptGuildInvitationResponse」を参照する.
+
+#### 失敗時レスポンス
+
+所属人数が20人の場合は`API_ERROR_GUILD_FULL`, 招待が存在しない場合は`API_ERROR_GUILD_INVITATION_NOT_FOUND`, 所属変更禁止期間の場合は`API_ERROR_GUILD_MEMBERSHIP_CHANGE_NOT_ALLOWED`を返す.
 
 ### 騎士団脱退
 
@@ -241,13 +285,12 @@ GuildNameが制約を満たさない場合は`ApiErrorResponse(API_ERROR_INVALID
 
 #### 処理内容
 
-- SessionIDを検証する.
+- AccessTokenを検証する.
 - 現在所属している騎士団が騎士団戦開戦前処理開始後から終了までの所属変更禁止期間ではないことを確認する.
-- 現在所属している騎士団からプレイヤーを脱退させる.
 - 新しい騎士団は生成しない.
-- `GuildID = PlayerID`で既存の初期騎士団を特定する.
-- プレイヤーの所属を初期騎士団へ更新する.
-- 初期騎士団の施設レベル, 団長情報その他の騎士団データは既存値をそのまま使用する.
+- Private APIの`LeaveGuildPrivate`を呼び出し, `GuildID = PlayerID`で既存の初期騎士団を特定して所属を戻す.
+- 初期騎士団の団長が脱退Player以外へ交代済みの場合は, 脱退Playerと初期騎士団の現在団長の所属GuildIDを同一トランザクションでスワップする. 脱退Playerは自身の初期騎士団へ戻し, 初期騎士団の現在団長は脱退Playerが直前まで所属していたGuildIDへ移動する.
+- スワップ時は初期騎士団の団長を脱退Playerへ変更する.
 
 #### 要求データ
 
@@ -296,10 +339,11 @@ GuildNameが制約を満たさない場合は`ApiErrorResponse(API_ERROR_INVALID
 
 #### 処理内容
 
-- SessionID, PlayerID等の要求検証を完了する.
+- AccessToken, PlayerID等の要求検証を完了する.
 - GameServer共通内部API`GenerateTimeBasedSeed`を使用して時刻ベースSeedを生成する.
 - `Mode=random`の場合は候補PlayerIDをPlayerID昇順に並べ, 生成したSeedを用いて対戦相手を抽選する.
 - GameServerはPrivate API Server経由でDatabaseから要求元PlayerIDと対戦相手PlayerIDの両方について`GetArenaBattleData`を実行し, 双方のFormationID・編成情報を取得する.
+- 要求元PlayerIDのArenaPartyが未登録の場合は対戦処理を開始せず`ARENA_BATTLE_ERROR_REQUESTER_ARENA_PARTY_NOT_REGISTERED`を返す.
 - `Mode=friend`で指定した`OpponentID`がDatabaseに存在しない場合は`ARENA_BATTLE_ERROR_PLAYER_NOT_FOUND`を返す.
 - `Mode=friend`で指定した`OpponentID`は存在するがArenaParty未登録の場合は`ARENA_BATTLE_ERROR_ARENA_PARTY_NOT_REGISTERED`を返す.
 - 対戦相手抽選後, 戦闘開始前に同じSeedから戦闘専用の新しいPRNGを生成する. 対戦相手抽選で進んだPRNG状態は引き継がない.
@@ -317,7 +361,7 @@ GuildNameが制約を満たさない場合は`ApiErrorResponse(API_ERROR_INVALID
 
 #### エラー時レスポンス
 
-[API Payload](api_payload.md)の「ArenaBattleErrorResponse」を参照する. ランダム対戦で候補が存在しない場合は`ARENA_BATTLE_ERROR_NO_OPPONENT_AVAILABLE`, フレンド対戦でOpponentIDが存在しない場合は`ARENA_BATTLE_ERROR_PLAYER_NOT_FOUND`, OpponentIDは存在するがArenaParty未登録の場合は`ARENA_BATTLE_ERROR_ARENA_PARTY_NOT_REGISTERED`を返す.
+[API Payload](api_payload.md)の「ArenaBattleErrorResponse」を参照する. 要求元PlayerIDのArenaPartyが未登録の場合は`ARENA_BATTLE_ERROR_REQUESTER_ARENA_PARTY_NOT_REGISTERED`, ランダム対戦で候補が存在しない場合は`ARENA_BATTLE_ERROR_NO_OPPONENT_AVAILABLE`, フレンド対戦でOpponentIDが存在しない場合は`ARENA_BATTLE_ERROR_PLAYER_NOT_FOUND`, OpponentIDは存在するがArenaParty未登録の場合は`ARENA_BATTLE_ERROR_ARENA_PARTY_NOT_REGISTERED`を返す.
 
 
 ## 騎士団戦関連
@@ -325,9 +369,9 @@ GuildNameが制約を満たさない場合は`ApiErrorResponse(API_ERROR_INVALID
 騎士団戦参加後, GameServerは`GuildBattleID`ごとに`PlayerID -> RequestSequence`のマップを保持する.
 
 - 参加前の初期値は`0`とする.
-- `JoinGuildBattle`成功時に, プレイヤー固有の初期RequestSequenceを範囲乱数`1..=1,000,000,000`で生成して割り当てる. 他プレイヤーとの重複は許可する.
+- `JoinGuildBattle`成功時に, 騎士団戦本体PRNGを1回消費して`next_bounded(1,000,000,000) + 1`を求め, プレイヤー固有の初期RequestSequenceとして割り当てる. 他プレイヤーとの重複は許可する.
 - 参加後の騎士団戦PublicAPI要求は, 再接続用の`GetGuildBattleStatus`を除き`GuildBattleID`, `PlayerID`, `RequestSequence`を含む.
-- `GetGuildBattleStatus`はSessionID・PlayerID・GuildBattleIDで本人性と参加状態を検証し, 現在のRequestSequenceを含む状態一式を返す. この要求ではRequestSequenceを加算しない.
+- `GetGuildBattleStatus`はAccessToken・PlayerID・GuildBattleIDで本人性と参加状態を検証し, 現在のRequestSequenceを含む状態一式を返す. この要求ではRequestSequenceを加算しない.
 - 要求RequestSequenceがGameServer保持値と一致する場合のみ処理する.
 - 一致しない場合は`ApiErrorResponse(API_ERROR_INVALID_GUILD_BATTLE_SEQUENCE)`を返す.
 - `GetGuildBattleStatus`を除く要求が成功するたびにGameServer保持RequestSequenceを`1`加算し, 成功レスポンスの`NextRequestSequence`としてClientへ返す.
@@ -372,7 +416,7 @@ GuildNameが制約を満たさない場合は`ApiErrorResponse(API_ERROR_INVALID
   - 要求`GuildBattleID`が騎士団戦中であることを確認する.
   - 要求`GuildID`が, その`GuildBattleID`で対戦中の騎士団のいずれかであることを確認する.
   - `PlayerID`の現在所属GuildIDが要求`GuildID`と一致することを確認する.
-- 参加可能時はSessionIDの期限を72時間後へ更新する.
+- 参加可能時は`AuthenticatedContext.SessionID`に対応するRefresh Sessionの期限をPrivate API Server経由で72時間後へ更新する. Sessionが存在しない, または期限切れの場合は参加を拒否する.
 - PlayerIDへ初期RequestSequenceを割り当てる.
 
 #### 要求データ
@@ -395,7 +439,7 @@ GuildNameが制約を満たさない場合は`ApiErrorResponse(API_ERROR_INVALID
 
 #### 処理内容
 
-- SessionID, PlayerID, GuildBattleIDから参加中プレイヤーを検証する.
+- AccessToken, PlayerID, GuildBattleIDから参加中プレイヤーを検証する.
 - 再接続時にClient状態を復元するため, 現在HP, BP, TP, 治療・復活状態, 出撃待機, タクティクス状態, アイテム残数, スコア, チェイン, CBC状態, 現在RequestSequenceを取得する.
 - 本APIではRequestSequenceを加算しない.
 
