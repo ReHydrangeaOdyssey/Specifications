@@ -12,7 +12,7 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 - AccessToken署名用秘密鍵はPrivate API Serverだけが保持する.
 - Databaseとのデータ保存・取得を仲介する. ゲームロジック上の抽選・マッチング生成はGameServerが行う.
 - 要求/レスポンスのデータ構造は[API Payload](api_payload.md)を参照する.
-- 騎士団戦中のDatabase送信失敗時は同一要求を1回だけ再試行する. 再試行も失敗した場合, GameServerはDB障害発生状態へ移行し, それ以降の騎士団戦中DB送信を行わず, 本来送信するデータを`/var/lib/game-server/recovery`配下のUTF-8 JSONファイルへ保存する. 本番Kubernetes環境では同PathをGameServer専用Persistent Volumeへmountし, GameServer実行Userだけが読み書き可能とする. Recovery保存領域には運用設定で容量上限およびファイル数上限を必須設定し, 無制限に増加させない. ファイルはGameServer再起動後も保持する. 騎士団戦終了時およびGameServer起動時に残存Recoveryファイルを保存順に再送し, 全件成功時だけ対応ファイルを削除し, 途中失敗時は削除せず残す.
+- 騎士団戦中のDatabase送信失敗時は同一要求を1回だけ再試行する. Replay Workerによるリプレイログ送信も同じ規則を使用する. 再試行も失敗した場合, GameServerはDB障害発生状態へ移行し, それ以降の騎士団戦中DB送信を行わず, 本来送信するデータを`/var/lib/game-server/recovery`配下のUTF-8 JSONファイルへ保存する. Replay EventのRecovery保存はReplay Worker側で行い, 騎士団戦処理スレッドはファイルI/O完了を待機しない. 本番Kubernetes環境では同PathをGameServer専用Persistent Volumeへmountし, GameServer実行Userだけが読み書き可能とする. Recovery保存領域には運用設定で容量上限およびファイル数上限を必須設定し, 無制限に増加させない. ファイルはGameServer再起動後も保持する. 騎士団戦終了時およびGameServer起動時に残存Recoveryファイルを保存順に再送し, 全件成功時だけ対応ファイルを削除し, 途中失敗時は削除せず残す.
 - 騎士団戦中にDatabase状態を変更する要求は共通HTTP Header `X-Operation-ID`を必須とする. 値は128bit UUIDとし, 同一論理操作の初回送信, 1回再試行, Recovery再送で同じ値を使用する. Private API ServerはDatabaseトランザクション内でOperation IDの重複を検査し, 処理済みの場合は更新を再適用せず初回成功時レスポンスを返す.
 - `SaveGuildBattleResult`は専用の失敗処理を使用し, 1回再試行しても失敗した場合はErrorLogを保存し, `DiscordNotificationEnabled=true`の場合はBot通知を行った後, 運営による手動復旧対象とする.
 
@@ -552,7 +552,10 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 
 ### 騎士団戦ログ送信
 
-騎士団戦中の成立した各種処理について, GameServerからPrivate API Serverへログ送信が行われる. 各Payloadは`GuildBattleID`を含み, `GUILD_BATTLE_REPLAY_LOG`へ保存する.
+騎士団戦中の成立した各種処理について, GameServerのReplay WorkerからPrivate API Serverへリプレイログ送信が行われる. 各Payloadは`GuildBattleID`を含み, `GUILD_BATTLE_REPLAY_LOG`へ保存する.
+通常の騎士団戦要求処理スレッドはPrivate API Serverへのリプレイログ保存完了を待機しない. 処理成立時はReplay EventをReplayQueueへ追加し, Replay Workerが成立順に送信する.
+騎士団戦作成ログだけは開戦時初期状態の保存を保証するため同期保存し, 保存成功後に`GUILD_BATTLE.status=in_progress`へ遷移する.
+ReplayQueueおよびDatabase送信失敗時の扱いは「[ログ仕様](log.md)」および「騎士団戦DB送信失敗時」に従う.
 
 #### 騎士団戦作成
 

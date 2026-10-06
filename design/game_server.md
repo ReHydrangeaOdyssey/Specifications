@@ -24,6 +24,17 @@
 * GameServerは自身が使用する`Version`を保持し, 戦闘計算およびリプレイログへ使用する. Login時のClientVersion検証はPublic API Serverが行う.
 
 
+## ログ・メトリクス処理
+
+* 騎士団戦のログ・Metric・Trace処理は「[ログ仕様](log.md)」に従う.
+* 騎士団戦専用スレッドは, 正常な要求ごとのApplication Log出力, JSON Serialize, ファイル書き込み, `stdout` / `stderr`書き込み, 外部Telemetry送信を直接行わない.
+* 処理成立時のReplay Eventは状態反映および`RequestSequence`更新後にReplayQueueへ追加し, Replay Workerがファイル書き込みおよびPrivate API Serverへの保存を行う.
+* ReplayQueueとSystem Log Queueは分離する.
+* 正常なゲームルール拒否は要求単位のLogを生成せず, Memory上のMetricへ集約する.
+* `RequestSequence`不一致および不正ID等のSecurity EventはMemory上で集約し, 最初の発生および一定期間ごとのSummaryを非同期Log Queueへ追加する.
+* 本番環境の詳細TraceはSamplingを行い, GameServer内部の戦闘計算関数単位では常時Spanを生成しない.
+
+
 ## Database Recoveryファイルの起動時処理
 
 * GameServerは起動時に`/var/lib/game-server/recovery`を走査する.

@@ -519,7 +519,7 @@ erDiagram
 
 ## 騎士団戦DB送信失敗時
 
-騎士団戦中のDatabase更新・ログ保存要求が失敗した場合は, 同一要求を1回だけ再試行する. 再試行も失敗した場合, GameServerはDB障害発生状態へ移行し, それ以降の騎士団戦中DB送信を停止して送信予定データをローカル保存する.
+騎士団戦中のDatabase更新・ログ保存要求が失敗した場合は, 同一要求を1回だけ再試行する. リプレイログ保存要求はReplay Workerから非同期送信し, 騎士団戦処理スレッドはDatabase保存完了を待機しない. 再試行も失敗した場合, GameServerはDB障害発生状態へ移行し, それ以降の騎士団戦中DB送信を停止して送信予定データをローカル保存する.
 ローカル保存は`/var/lib/game-server/recovery`配下のUTF-8 JSONファイルとして行う. 本番Kubernetes環境では同PathをGameServer専用Persistent Volumeへmountし, GameServer再起動後も保持する.
 Recoveryファイル名は`guild_battle_<GuildBattleID>_<GameServerInstanceID>.json`とする. ファイル内には元のPrivate API名, Operation ID, 要求Payload, 保存順序を保持する.
 騎士団戦終了時にローカル保存データを保存順にDatabaseへ再送する. GameServer起動時にもRecoveryディレクトリを走査し, 残存ファイルを保存順に再送する. 再送中に1件でも失敗した場合はファイルを残し, 全件成功した場合だけ対応ファイルを削除する.

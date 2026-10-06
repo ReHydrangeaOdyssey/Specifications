@@ -126,7 +126,7 @@ architecture-beta
 * KubernetesではNetworkPolicyを使用し, Internetから到達可能な対象をIngress/Public API Serverだけに制限する. GameServer, Private API Server, DatabaseをInternetへ直接公開しない. Discord BotはDiscordとの通信に必要な外向き通信, GameServerおよびPrivate API Serverからの運営通知受信, `DiscordAuthorizationRequired=true`時のPrivate API Server `RevokeDiscordSessions`呼び出しだけを許可する.
 * Discord Botの本番配置先は本仕様では固定しない. Discordへ接続可能で, GameServerおよびPrivate API Serverからの運営通知を受信可能かつ必要時にPrivate API ServerへmTLS接続可能な運営管理下環境へ配置する.
 * Public API ServerおよびGameServer Podはnon-root Userで実行し, privilege escalationを禁止し, Linux Capabilityをすべてdropし, `RuntimeDefault` seccompを使用する.
-* Public API ServerおよびGameServer Podはroot filesystemをread-onlyとする. `./log`は必要なComponentだけ専用Writable Volumeとしてmountする. GameServerのDatabase障害時保存だけは`/var/lib/game-server/recovery`へmountした専用Persistent Volumeへの書き込みを許可する.
+* Public API ServerおよびGameServer Podはroot filesystemをread-onlyとする. System/Access/Security Logは`stdout` / `stderr`へ出力し, Container RuntimeおよびNode上のログ収集Agentが非同期に収集する. 騎士団戦リプレイログ用の`./log/guild_battle`だけを必要なGameServerへ専用Writable Volumeとしてmountする. GameServerのDatabase障害時保存は`/var/lib/game-server/recovery`へmountした専用Persistent Volumeへの書き込みを許可する.
 * Public API ServerのKubernetes ServiceAccountには, GameServer用EndpointSliceの`get`, `list`, `watch`に必要な最小権限だけを付与する.
 * GameServerのKubernetes ServiceAccountには, 騎士団戦マッチング用Leader Electionで使用するLeaseの取得・作成・更新に必要な最小権限だけを付与する.
 * Kubernetes APIを使用しないPodではServiceAccount Tokenを自動mountしない. Public API ServerおよびGameServerでも上記権限以外を付与しない.

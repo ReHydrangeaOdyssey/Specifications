@@ -164,8 +164,7 @@ sequenceDiagram
             GameServer->>GameServer: 現在保持しているRequestSequenceを取得. 騎士団戦本体PRNGは消費しない
         else 初回Join
             GameServer->>GameServer: 騎士団戦本体PRNGでnext_bounded(1,000,000,000)+1を取得し初期RequestSequenceへ割り当て
-            GameServer->>PrivateAPIServer: SaveGuildBattleJoinLog(GuildBattleID, PlayerID)
-            PrivateAPIServer->>DB: Join成立ログ保存
+            GameServer->>GameServer: Join成立Replay EventをReplayQueueへ追加
         end
         GameServer -->> PublicAPIServer: GuildBattleJoinResponse(Characters, RequestSequence)
         PublicAPIServer -->> Client: GuildBattleJoinResponse(Characters, RequestSequence)
@@ -330,8 +329,7 @@ sequenceDiagram
 
         GameServer ->> GameServer: チェイン処理
 
-        GameServer ->> PrivateAPIServer: SaveGuildBattleSortieLog
-        PrivateAPIServer ->> DB: ログ送信(GuildBattleID, Time, PlayerID)
+        GameServer ->> GameServer: 出撃成立Replay EventをReplayQueueへ追加
     end
 ```
 
@@ -344,6 +342,12 @@ sequenceDiagram
 GameServerが受信するあらゆる要求は先に到達した順に処理する. GameServer受信時刻が異なる要求は受信時刻の早い要求を先に処理する. GameServer上で完全に同時として扱われる要求同士の順序は処理系定義とし, 疑似乱数による順序決定は行わない.
 
 出撃要求についても同じ規則を使用する. Clientは出撃要求送信後から処理結果応答受信まで通信中として追加操作送信を抑止するため, GameServer側に出撃処理中・処理待ちを表す独立状態は持たせない.
+
+#### ログ・Metric
+
+騎士団戦のログ・Metric・Trace処理は「[ログ仕様](log.md)」に従う.
+正常に成立した各操作は状態反映および`RequestSequence`更新後にReplay EventをReplayQueueへ追加する. Replay Workerによるファイル書き込み・Private API Server送信・Database保存は要求処理スレッドと非同期に行う.
+正常なゲームルール拒否は要求単位のApplication Logへ出力せずMetricへ集約する. `RequestSequence`不一致, 不正CharacterID, 不正TacticsID等は要求ごとに同期ログ出力せずMemory上で集約する.
 
 
 #### 再接続・状態復元
@@ -382,8 +386,7 @@ sequenceDiagram
         GameServer-->>PublicAPIServer: UseTactics
         PublicAPIServer-->>Client: UseTactics
 
-        GameServer ->> PrivateAPIServer: SaveGuildBattleTacticsLog
-        PrivateAPIServer ->> DB: ログ送信(GuildBattleID, Time, PlayerID, TacticsID)
+        GameServer ->> GameServer: タクティクス使用成立Replay EventをReplayQueueへ追加
     else 使用不可
         GameServer-->>PublicAPIServer: UseTactics
         PublicAPIServer-->>Client: UseTactics
@@ -421,8 +424,7 @@ sequenceDiagram
         GameServer-->>PublicAPIServer: UseItem
         PublicAPIServer-->>Client: UseItem
 
-        GameServer ->> PrivateAPIServer: SaveGuildBattleItemLog
-        PrivateAPIServer ->> DB: ログ送信(GuildBattleID, Time, PlayerID, ItemID)
+        GameServer ->> GameServer: アイテム使用成立Replay EventをReplayQueueへ追加
     else 使用不可
         GameServer-->>PublicAPIServer: UseItem
         PublicAPIServer-->>Client: UseItem
@@ -455,8 +457,7 @@ sequenceDiagram
         GameServer-->>PublicAPIServer: StartHeal
         PublicAPIServer-->>Client: StartHeal
 
-        GameServer ->> PrivateAPIServer: SaveGuildBattleHealLog
-        PrivateAPIServer ->> DB: ログ送信(GuildBattleID, Time, PlayerID, HealState)
+        GameServer ->> GameServer: 治療状態変更Replay EventをReplayQueueへ追加
 
         Note over GameServer: 回復待機時間経過
 
@@ -499,8 +500,7 @@ sequenceDiagram
         GameServer-->>PublicAPIServer: CancelHeal
         PublicAPIServer-->>Client: CancelHeal
 
-        GameServer ->> PrivateAPIServer: SaveGuildBattleHealLog
-        PrivateAPIServer ->> DB: ログ送信(GuildBattleID, Time, PlayerID, HealState)
+        GameServer ->> GameServer: 治療状態変更Replay EventをReplayQueueへ追加
     else キャンセル不可
         GameServer-->>PublicAPIServer: CancelHeal
         PublicAPIServer-->>Client: CancelHeal
@@ -532,8 +532,7 @@ sequenceDiagram
         GameServer-->>PublicAPIServer: CompleteHeal 
         PublicAPIServer-->>Client: CompleteHeal
 
-        GameServer ->> PrivateAPIServer: SaveGuildBattleHealLog
-        PrivateAPIServer ->> DB: ログ送信(GuildBattleID, Time, PlayerID, HealState)
+        GameServer ->> GameServer: 治療状態変更Replay EventをReplayQueueへ追加
     else 完了不可
         GameServer-->>PublicAPIServer: CompleteHeal
         PublicAPIServer-->>Client: CompleteHeal
@@ -566,8 +565,7 @@ sequenceDiagram
         GameServer-->>PublicAPIServer: StartRevive
         PublicAPIServer-->>Client: StartRevive
 
-        GameServer ->> PrivateAPIServer: SaveGuildBattleReviveLog
-        PrivateAPIServer ->> DB: ログ送信(GuildBattleID, Time, PlayerID, ReviveState)
+        GameServer ->> GameServer: 復活状態変更Replay EventをReplayQueueへ追加
 
         Note over GameServer: パーティランクに応じた復活待機時間経過
 
@@ -605,8 +603,7 @@ sequenceDiagram
         GameServer-->>PublicAPIServer: CancelRevive
         PublicAPIServer-->>Client: CancelRevive
 
-        GameServer ->> PrivateAPIServer: SaveGuildBattleReviveLog
-        PrivateAPIServer ->> DB: ログ送信(GuildBattleID, Time, PlayerID, ReviveState)
+        GameServer ->> GameServer: 復活状態変更Replay EventをReplayQueueへ追加
     else キャンセル不可
         GameServer-->>PublicAPIServer: CancelRevive
         PublicAPIServer-->>Client: CancelRevive
@@ -639,8 +636,7 @@ sequenceDiagram
         GameServer-->>PublicAPIServer: CompleteRevive
         PublicAPIServer-->>Client: CompleteRevive
 
-        GameServer ->> PrivateAPIServer: SaveGuildBattleReviveLog
-        PrivateAPIServer ->> DB: ログ送信(GuildBattleID, Time, PlayerID, ReviveState)
+        GameServer ->> GameServer: 復活状態変更Replay EventをReplayQueueへ追加
     else 完了不可
         GameServer-->>PublicAPIServer: CompleteRevive
         PublicAPIServer-->>Client: CompleteRevive
@@ -649,9 +645,9 @@ sequenceDiagram
 
 ### Database送信失敗時
 
-騎士団戦中にDatabaseへの送信が失敗した場合は, 同一送信を1回だけ再試行する. 再試行も失敗した場合, GameServerは当該騎士団戦についてDB障害発生状態へ移行する.
+騎士団戦中にDatabaseへの送信が失敗した場合は, 同一送信を1回だけ再試行する. Replay Workerによるリプレイログ送信も同じ規則を使用する. 再試行も失敗した場合, GameServerは当該騎士団戦についてDB障害発生状態へ移行する.
 
-DB障害発生状態では, それ以降の騎士団戦中Database送信を行わず, 本来送信するデータをGameServerローカルのファイルへ保存する.
+DB障害発生状態では, それ以降の騎士団戦中Database送信を行わず, 本来送信するデータをGameServerローカルのファイルへ保存する. Replay EventのRecovery保存はReplay Worker側で行い, 騎士団戦処理スレッドはファイルI/O完了を待機しない.
 保存形式はUTF-8 JSONとし, 保存先は`/var/lib/game-server/recovery`とする. 本番Kubernetes環境では同PathをGameServer専用Persistent Volumeへmountする.
 ファイル名は`guild_battle_<GuildBattleID>_<GameServerInstanceID>.json`とし, 各送信予定データについてPrivate API名, `X-Operation-ID`, 要求Payload, 保存順序を保持する.
 ローカルファイルはGameServer再起動後も保持する.
