@@ -97,14 +97,6 @@ enum TacticsBattleSpecialType {
   TACTICS_BATTLE_SPECIAL_SHADOW_ORDER = 49;
 }
 
-enum TacticsBattleSpecialApplyTarget {
-  TACTICS_BATTLE_SPECIAL_APPLY_ALLY_GUILD = 0;
-  TACTICS_BATTLE_SPECIAL_APPLY_ENEMY_GUILD = 1;
-  TACTICS_BATTLE_SPECIAL_APPLY_BATTLE_ALLY_PARTY = 2;
-  TACTICS_BATTLE_SPECIAL_APPLY_BATTLE_ENEMY_PARTY = 3;
-  TACTICS_BATTLE_SPECIAL_APPLY_CASTLE_BREAK = 4;
-}
-
 enum TacticsBattleSpecialTrigger {
   TACTICS_BATTLE_SPECIAL_TRIGGER_NONE = 0;
   TACTICS_BATTLE_SPECIAL_TRIGGER_BATTLE = 1;
@@ -119,6 +111,7 @@ enum TacticsTarget {
   TACTICS_TARGET_OPPONENT_PARTY = 1;
   TACTICS_TARGET_ALLY_GUILD = 2;
   TACTICS_TARGET_ENEMY_GUILD = 3;
+  TACTICS_TARGET_CASTLE_BREAK = 4;
 }
 
 enum TacticsEndType {
@@ -290,15 +283,13 @@ message TacticsBattleSpecialParameters {
 message TacticsBattleSpecialData {
   TacticsBattleSpecialType special_type = 1;
   TacticsBattleSpecialParameters parameters = 2;
-  TacticsBattleSpecialApplyTarget apply_target = 3;
-  TacticsBattleSpecialTrigger trigger = 4;
+  TacticsBattleSpecialTrigger trigger = 3;
 }
 
 message TacticsBattleSpecialEffectResult {
   TacticsBattleSpecialType special_type = 1;
   TacticsBattleSpecialParameters parameters = 2;
-  TacticsBattleSpecialApplyTarget apply_target = 3;
-  TacticsBattleSpecialTrigger trigger = 4;
+  TacticsBattleSpecialTrigger trigger = 3;
 }
 
 message TacticsEffectResultData {
@@ -631,6 +622,7 @@ message UseTacticsResponse {
   uint32 remaining_count = 2;
   repeated TacticsEffectResult effects = 3;
   uint64 next_request_sequence = 4;
+  uint64 seed = 5;
 }
 
 message UseItemRequest {

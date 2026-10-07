@@ -740,8 +740,7 @@ message TacticsBattleSpecialParameters {
 message TacticsBattleSpecialData {
   TacticsBattleSpecialType special_type = 1; // 特殊効果系列.
   TacticsBattleSpecialParameters parameters = 2; // special_typeの具体効果で使用する各数値パラメータ.
-  reserved 3; // 旧apply_target. 効果対象は外側のTacticsEffectData.targetへ統一する.
-  TacticsBattleSpecialTrigger trigger = 4; // 効果を発動する条件.
+  TacticsBattleSpecialTrigger trigger = 3; // 効果を発動する条件.
 }
 
 message TacticsHpRecoveryData {
