@@ -3,61 +3,59 @@
 ### テスト環境
 
 ```mermaid
-architecture-beta
-    service internet(internet)[Internet]
+flowchart LR
+    subgraph USER["User / Internet - Untrusted"]
+        client["Game Client"]
+        internet["Internet"]
+        discord["Discord"]
+        client --> internet
+    end
 
-    group my_network[Home Network]
-        service my_home_router(server)[Router] in my_network
-        service my_home_l2_sw(server)[L2SW] in my_network
+    subgraph HOME["Home Network"]
+        router["Router"]
+        l2sw["L2 Switch"]
 
-        group main_server(server)[Server] in my_network
+        subgraph HOST["Main Server"]
+            public_api["Public API Server<br/>Internet-facing Edge API"]
 
-            group bot_container[Optional Container] in main_server
-                service bot_server(server)[Discord Bot] in bot_container
-                service operations_tool(server)[Operations Tool] in bot_container
+            subgraph PRIVATE["Private Container Network"]
+                game["GameServer"]
+                coordinator["GuildBattleCoordinator"]
+                private_api["Private API Server<br/>Auth / Guild Domain / DB API"]
+                db[("Database")]
+                storage[("Storage")]
+            end
 
-            group public_api_container[Container] in main_server
-                service public_api_server(server)[GameAPIServer] in public_api_container
+            subgraph OPS["Optional Operations Container"]
+                bot["Discord Bot"]
+                ops["Operations Tool"]
+            end
+        end
+    end
 
-            group private_network[Private Network] in main_server
-                group private_api_container[Container] in private_network
-                    service private_api_server(server)[DBAPIServer AuthServer] in private_api_container
+    internet -->|"Public API<br/>HTTP/2 + TLS 1.3 / Protobuf"| router
+    router --> l2sw
+    l2sw -->|"Public API traffic"| public_api
 
-                group game_container[Container] in private_network
-                    service game_server(server)[GameServer] in game_container
+    public_api -->|"mTLS<br/>Account / Guild"| private_api
+    public_api -->|"mTLS<br/>Arena / GuildBattle"| game
 
-                group coordinator_container[Container] in private_network
-                    service guild_battle_coordinator(server)[GuildBattleCoordinator] in coordinator_container
+    coordinator -->|"mTLS Control API<br/>capacity / preload"| game
+    coordinator -->|"mTLS<br/>matching / assignment"| private_api
+    game -->|"mTLS<br/>Private API calls / persistence"| private_api
 
-                group db_container[Container] in private_network
-                    service db(database)[Database] in db_container
-                    service disk2(disk)[Storage] in db_container
+    private_api -->|"DB connection<br/>only DB ingress path"| db
+    db --- storage
 
-    group user_network[User Network]
-        service user(server)[User] in user_network
+    game -->|"mTLS notification"| bot
+    coordinator -->|"mTLS notification"| bot
+    private_api -->|"mTLS notification"| bot
+    bot -->|"mTLS<br/>RevokeDiscordSessions only"| private_api
+    ops -->|"mTLS operations API"| private_api
+    ops -->|"mTLS coordinator operations"| coordinator
 
-    internet:B -- T:my_home_router
-    internet:B -- T:user
-
-    my_home_router:B -- T:my_home_l2_sw
-    my_home_l2_sw:B -- T:public_api_server
-    my_home_l2_sw:B -- T:bot_server
-
-    game_server:R --> L:bot_server
-    guild_battle_coordinator:R --> L:bot_server
-    private_api_server:R --> L:bot_server
-    bot_server:B --> T:private_api_server
-    operations_tool:B --> T:private_api_server
-    operations_tool:B --> T:guild_battle_coordinator
-
-    public_api_server:B --> T: game_server
-    public_api_server:B --> T: private_api_server
-    guild_battle_coordinator:R --> L:game_server
-    guild_battle_coordinator:B --> T:private_api_server
-    game_server:B --> T: private_api_server
-    private_api_server:B --> T: db
-
-    db:B -- T:disk2
+    bot -->|"Discord service connection"| internet
+    internet --> discord
 ```
 
 
@@ -95,56 +93,73 @@ GuildBattleCoordinatorはKubernetes上で`replicas=1`の専用Workloadとして�
 Private API ServerとDatabaseはKubernetes上のPublic API Server, GameServerおよびGuildBattleCoordinatorとは分離した単一Server上で稼働する.
 
 ```mermaid
-architecture-beta
-    service internet(internet)[Internet]
+flowchart LR
+    subgraph EXTERNAL["External / Untrusted Network"]
+        client["Game Client"]
+        internet["Internet"]
+        discord_platform["Discord"]
+        client --> internet
+    end
 
-    group k8s[Game Kubernetes Cluster]
-        service ingress(server)[Ingress LoadBalancer] in k8s
+    subgraph K8S["Game Kubernetes Cluster - NetworkPolicy enforced"]
+        ingress["Ingress / LoadBalancer<br/>Public ingress point"]
+        public_service["Public API Service"]
+        public_pods["Public API Pods A..N<br/>stateless Edge API"]
 
-        group public_api_group[Public API Pods] in k8s
-            service public_api_a(server)[GameAPIServer A] in public_api_group
-            service public_api_b(server)[GameAPIServer B] in public_api_group
+        arena_service["GameServer Service<br/>Arena routing"]
+        game_pods["GameServer Pods A..N<br/>stateful battle runtime"]
+        coordinator["GuildBattleCoordinator Pod<br/>replicas=1 / Recreate"]
 
-        group game_group[GameServer Pods] in k8s
-            service game_a(server)[GameServer A] in game_group
-            service game_b(server)[GameServer B] in game_group
+        k8s_api["Kubernetes API Server"]
+        scale_controller["Dedicated GameServer<br/>Scale Controller"]
+        game_workload["GameServer Workload<br/>replica target"]
+        game_storage[("GameServer writable volumes<br/>replay log / recovery PV")]
+    end
 
-        group coordinator_group[Coordinator Pod] in k8s
-            service guild_battle_coordinator_prod(server)[GuildBattleCoordinator] in coordinator_group
+    subgraph DATA["Private Data Server - not Internet-facing"]
+        private_api["Private API Server<br/>Auth / Guild Domain / DB API"]
+        db[("Database")]
+        disk[("Storage")]
+    end
 
-    group data_server[Private Data Server]
-        service private_api(server)[DBAPIServer AuthServer] in data_server
-        service db(database)[Database] in data_server
-        service disk(disk)[Storage] in data_server
+    subgraph OPS["Optional Operations Environment"]
+        bot["Discord Bot"]
+        operations_tool["Operations Tool"]
+    end
 
-    group operations[Optional Operations Component]
-        service bot(server)[Discord Bot] in operations
-        service operations_tool_prod(server)[Operations Tool] in operations
+    internet -->|"Public API<br/>HTTP/2 + TLS 1.3 / Protobuf"| ingress
+    ingress -->|"request size limit<br/>CreateAccount/Login source-IP rate limit<br/>routing"| public_service
+    public_service --> public_pods
 
-    internet:B --> T:ingress
-    ingress:B --> T:public_api_a
-    ingress:B --> T:public_api_b
+    public_pods -->|"mTLS<br/>Account / Guild"| private_api
+    public_pods -->|"mTLS<br/>Arena: normal Service routing"| arena_service
+    arena_service --> game_pods
+    public_pods -->|"mTLS<br/>GuildBattle: owner Pod by Pod UID"| game_pods
 
-    game_a:R --> L:bot
-    game_b:R --> L:bot
-    guild_battle_coordinator_prod:R --> L:bot
-    private_api:R --> L:bot
-    bot:L --> R:private_api
-    operations_tool_prod:L --> R:private_api
-    operations_tool_prod:L --> R:guild_battle_coordinator_prod
+    coordinator -->|"mTLS Control API<br/>capacity / preload"| game_pods
+    coordinator -->|"mTLS<br/>battle creation / matching / assignment"| private_api
+    game_pods -->|"mTLS<br/>Private API calls / persistence"| private_api
 
-    public_api_a:B --> T:game_a
-    public_api_a:R --> L:private_api
-    public_api_b:B --> T:game_b
-    public_api_b:R --> L:private_api
+    private_api -->|"DB connection<br/>only permitted DB client"| db
+    db --- disk
+    game_pods ---|"writable volume"| game_storage
 
-    guild_battle_coordinator_prod:L --> R:game_a
-    guild_battle_coordinator_prod:L --> R:game_b
-    guild_battle_coordinator_prod:B --> T:private_api
-    game_a:R --> L:private_api
-    game_b:R --> L:private_api
-    private_api:B --> T:db
-    db:B -- T:disk
+    public_pods -.->|"EndpointSlice<br/>get / list / watch"| k8s_api
+    coordinator -.->|"EndpointSlice<br/>get / list / watch"| k8s_api
+    coordinator -.->|"scale-out request"| scale_controller
+    scale_controller -.->|"scale subresource"| k8s_api
+    k8s_api -.->|"replica control"| game_workload
+    game_workload -.-> game_pods
+
+    game_pods -->|"mTLS notification"| bot
+    coordinator -->|"mTLS notification"| bot
+    private_api -->|"mTLS notification"| bot
+    bot -->|"mTLS<br/>RevokeDiscordSessions only"| private_api
+    operations_tool -->|"mTLS operations API"| private_api
+    operations_tool -->|"mTLS coordinator operations"| coordinator
+
+    bot -->|"Discord service connection"| internet
+    internet --> discord_platform
 ```
 
 * Public API ServerはInternet-facing Edge APIとし, 認証状態, Guild状態およびゲーム状態を正本として保持しないstateless構成とする. Database/GameServer状態を使用するDomain ruleは判定せず, Account/Guild系はPrivate API Server, Arena/GuildBattle系はGameServerへ中継する. Podが削除されても永続状態を失わない. 詳細は「[Public API責務境界](../server/public_api_responsibility.md)」を参照する.
