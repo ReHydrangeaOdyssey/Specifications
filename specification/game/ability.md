@@ -87,12 +87,18 @@
 
 ### 固定ダメージ増加
 
-`ABILITY_EFFECT_FIXED_DAMAGE_INCREASE`は, 発動対象のスキルが固定ダメージとして扱われる場合だけ適用する. 固定ダメージへ`AbilityMasterData.effect_data.correction.correction_value`を固定値として加算する.
-現行の「[スキル仕様](skill.md)」には固定ダメージスキルを識別するデータ構造および固定ダメージ値の保持方法が定義されていないため, その定義が追加されるまでは適用対象スキルの判定方法を未確定とする.
+`ABILITY_EFFECT_FIXED_DAMAGE_INCREASE`は, 発動対象の攻撃スキルの`SkillMasterData.damage_value_type`が`SKILL_DAMAGE_VALUE_TYPE_FIXED`の場合だけ適用する. 固定ダメージ値として使用する`SkillMasterData.correction_value`へ`AbilityMasterData.effect_data.correction.correction_value`を固定値として加算する.
+割合ダメージスキルには本効果を適用しない.
 
 ### 回復
 
-`ABILITY_EFFECT_HEAL`の具体的な適用対象・回復式・適用位置は未確定とする.
+`ABILITY_EFFECT_HEAL`の回復量は以下とする.
+
+```
+回復量 = 最大HP * (1 + AbilityMasterData.effect_data.correction.correction_value)
+```
+
+適用対象および戦闘フロー上の適用位置は今回の仕様では指定されていないため, その2点は未確定のままとする.
 
 ### かばう
 
@@ -105,7 +111,7 @@
 ### ひきつけ
 
 `ABILITY_EFFECT_DRAW_AGGRO`は攻撃対象リスト取得前に判定する. `AbilityMasterData.activation_rate`による発動条件を満たした場合, 当該攻撃の攻撃範囲を決定する起点を`ABILITY_EFFECT_DRAW_AGGRO`を発動したキャラクターへ変更してから攻撃対象リストを取得する.
-複数キャラクターが同時に`ABILITY_EFFECT_DRAW_AGGRO`の発動候補となった場合に, 最終的な起点をどのキャラクターにするかの競合規則は現時点では未定義とする.
+複数キャラクターが同時に`ABILITY_EFFECT_DRAW_AGGRO`の発動候補となった場合は, フォーメーション内部番号の小さい順に候補リストを作成し, 「[疑似乱数](../../design/game/pseudorandom.md)」の「抽選」で1キャラクターだけを選ぶ. 発動確率判定は選ばれた1キャラクターについてだけ行い, 不成立の場合に別候補の再抽選・再判定は行わない.
 
 ### 追撃
 

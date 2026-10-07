@@ -137,6 +137,8 @@ Characterが参照するSkill / Ability / Tacticsの存在確認は4系統をす
 
 最低限以下を確認する.
 
+* `target_side`が有効な`SkillTargetSide`である.
+* `SKILL_EFFECT_ATTACK`では`damage_value_type`が有効な`SkillDamageValueType`である.
 * `SKILL_EFFECT_HEAL`では`effect_data.heal`を使用し, `correction_value`を回復量として使用しない.
 * 状態異常付与Skillでは`effect_data.status_abnormality`を使用する.
 * BUFF / DEBUFFでは`effect_data.stat_correction`を使用する.
@@ -147,6 +149,16 @@ Characterが参照するSkill / Ability / Tacticsの存在確認は4系統をす
 * 回数無制限は`u32::MAX`を使用する.
 
 `oneof effect_data`にEffectIDと無関係なVariantが設定されている場合は生成エラーとする.
+
+`SkillEffectID × SkillTargetRange`は以下だけを許可し, 表にない組み合わせは生成エラーとする.
+
+| SkillEffectID | 許可するSkillTargetRange |
+|---|---|
+| `SKILL_EFFECT_BUFF` | `SKILL_TARGET_RANGE_ALL`, `SKILL_TARGET_RANGE_SINGLE` |
+| `SKILL_EFFECT_DEBUFF` | `SKILL_TARGET_RANGE_ALL`, `SKILL_TARGET_RANGE_SINGLE` |
+| `SKILL_EFFECT_STATUS_ABNORMALITY` | `SKILL_TARGET_RANGE_ALL`, `SKILL_TARGET_RANGE_SINGLE` |
+| `SKILL_EFFECT_HEAL` | `SKILL_TARGET_RANGE_ALL`, `SKILL_TARGET_RANGE_SINGLE` |
+| `SKILL_EFFECT_ATTACK` | `SKILL_TARGET_RANGE_ALL`, `SKILL_TARGET_RANGE_RANDOM`, `SKILL_TARGET_RANGE_VERTICAL_COLUMN`, `SKILL_TARGET_RANGE_HORIZONTAL_ROW`, `SKILL_TARGET_RANGE_X_SHAPE`, `SKILL_TARGET_RANGE_CROSS_SHAPE` |
 
 ## Ability Validation
 
@@ -209,10 +221,13 @@ Characterが参照するSkill / Ability / Tacticsの存在確認は4系統をす
 ### Battle Special
 
 * `special_type`が有効な`TacticsBattleSpecialType`である.
-* `apply_target`が有効な`TacticsBattleSpecialApplyTarget`である.
+* Battle Specialの効果対象は外側の`TacticsEffectData.target`だけを使用し, 有効な`TacticsTarget`である. Battle Special専用の別Target値は保持しない.
 * `trigger`が有効な`TacticsBattleSpecialTrigger`である.
 * 使用しないParameterは0とする.
 * `ERASE`等の真偽挙動だけで成立するTypeに不要な数値を必須化しない.
+
+* `TacticsMasterData.use_condition`が有効な`TacticsUseCondition`である.
+* `TACTICS_BATTLE_SPECIAL_RESURRECTION`を含むタクティクスは`TACTICS_USE_CONDITION_ALL_ANNIHILATED`を設定する.
 
 具体的な数値式が仕様上未確定の効果について, Pipeline側で独自の値変換を行わない.
 

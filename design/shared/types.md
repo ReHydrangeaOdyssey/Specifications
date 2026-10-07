@@ -144,6 +144,29 @@ enum SkillEffectID {
 }
 ```
 
+### SkillDamageValueType
+
+`SkillDamageValueType`は攻撃スキルのダメージ値形式を表す.
+
+```proto
+enum SkillDamageValueType {
+  SKILL_DAMAGE_VALUE_TYPE_RATE = 0; // correction_valueを攻撃力へ乗算する割合ダメージ.
+  SKILL_DAMAGE_VALUE_TYPE_FIXED = 1; // correction_valueを固定ダメージ値として使用する.
+}
+```
+
+### SkillTargetSide
+
+`SkillTargetSide`はスキルが対象候補とする陣営を表す.
+
+```proto
+enum SkillTargetSide {
+  SKILL_TARGET_SIDE_ALLY = 0; // 味方パーティを対象候補とする.
+  SKILL_TARGET_SIDE_ENEMY = 1; // 敵パーティを対象候補とする.
+  SKILL_TARGET_SIDE_SELF = 2; // 発動キャラクター自身だけを対象候補とする.
+}
+```
+
 ### StatusAbnormalityID
 
 `StatusAbnormalityID`は状態異常の種類を表す.
@@ -313,20 +336,6 @@ enum TacticsBattleSpecialType {
 }
 ```
 
-### TacticsBattleSpecialApplyTarget
-
-戦闘時特殊効果を適用する箇所を表す.
-
-```proto
-enum TacticsBattleSpecialApplyTarget {
-  TACTICS_BATTLE_SPECIAL_APPLY_ALLY_GUILD = 0; // 味方騎士団へ適用する.
-  TACTICS_BATTLE_SPECIAL_APPLY_ENEMY_GUILD = 1; // 相手騎士団へ適用する.
-  TACTICS_BATTLE_SPECIAL_APPLY_BATTLE_ALLY_PARTY = 2; // 戦闘時の味方パーティへ適用する.
-  TACTICS_BATTLE_SPECIAL_APPLY_BATTLE_ENEMY_PARTY = 3; // 戦闘時の相手パーティへ適用する.
-  TACTICS_BATTLE_SPECIAL_APPLY_CASTLE_BREAK = 4; // キャッスルブレイク処理へ適用する.
-}
-```
-
 ### TacticsBattleSpecialTrigger
 
 戦闘時特殊効果の発動条件を表す.
@@ -389,7 +398,7 @@ enum AbilityTurnTiming {
 
 ### TacticsTarget
 
-タクティクス効果対象を表す.
+`TacticsTarget`は通常効果と`TACTICS_EFFECT_BATTLE_SPECIAL`で共通使用するタクティクス効果対象を表す. Battle Special専用の別Target Enumは持たない.
 
 ```proto
 enum TacticsTarget {
@@ -397,6 +406,18 @@ enum TacticsTarget {
   TACTICS_TARGET_OPPONENT_PARTY = 1; // 出撃後に戦闘へ入った時点の対戦相手パーティを対象とする. 使用時点で特定Playerへ固定しない.
   TACTICS_TARGET_ALLY_GUILD = 2; // 味方騎士団を対象とする.
   TACTICS_TARGET_ENEMY_GUILD = 3; // 敵騎士団を対象とする.
+  TACTICS_TARGET_CASTLE_BREAK = 4; // キャッスルブレイク処理を対象とする.
+}
+```
+
+### TacticsUseCondition
+
+`TacticsUseCondition`はタクティクス使用要求そのものの成立条件を表す.
+
+```proto
+enum TacticsUseCondition {
+  TACTICS_USE_CONDITION_NONE = 0; // 追加の使用条件なし.
+  TACTICS_USE_CONDITION_ALL_ANNIHILATED = 1; // 使用プレイヤーのパーティが全滅している場合だけ使用可能.
 }
 ```
 
@@ -689,6 +710,11 @@ message TacticsBattleState {
   uint32 tp_cost = 2; // タクティクス使用時に消費するTP.wire上はuint32, 論理型TP.
 }
 
+message GuildBattlePlayerRuntimeState {
+  uint32 attack_count = 1; // 当該騎士団戦で出撃に成功した累計回数. 初期値0. 論理型Count.
+  uint64 acquired_score = 2; // 当該騎士団戦で当該Playerが個別に取得した累計スコア. 初期値0. 論理型Score.
+}
+
 message TacticsBattleSpecialParameters {
   float attack = 1; // 攻撃力補正値. 論理型CorrectionValue.
   float defense = 2; // 防御力補正値. 論理型CorrectionValue.
@@ -700,13 +726,13 @@ message TacticsBattleSpecialParameters {
   float castle_break_score = 8; // キャッスルブレイク獲得スコア補正値. 論理型CorrectionValue.
   float assault_castle_break_rate = 9; // 強襲CB発生率補正値. 論理型CorrectionValue.
   float assault_castle_break_score = 10; // 強襲CB時獲得スコア補正値. 論理型CorrectionValue.
-  float hate = 11; // ヘイト補正値. 論理型CorrectionValue.
+  float hate = 11; // 被弾重みへ加算するヘイト補正値. CLAUSTRUMで使用する. 論理型CorrectionValue.
   sint32 castle_level = 12; // 城Lv補正値. 正値は上昇, 負値は低下.
   uint32 bp_recovery = 13; // 敵全滅等の発動条件成立時に回復するBP固定値.
   uint32 tp_recovery = 14; // 発動条件成立時に回復するTP固定値.
   float attack_count_score = 15; // 攻撃回数に応じたバトル獲得スコア増加に使用する補正値. 論理型CorrectionValue.
   float castle_break_score_limit = 16; // キリ番キャッスルブレイクのスコア上限増加値. 論理型CorrectionValue.
-  float hp_recovery_value = 17; // 生存キャラクターHP回復量. 値をそのまま回復量として使用する. 論理型CorrectionValue.
+  float hp_recovery_value = 17; // 生存キャラクターHP回復量. 値をそのまま加算し, 最終HPを0以上最大HP以下へクランプする. 論理型CorrectionValue.
   float revive_rate = 18; // 戦闘不能キャラクター復帰判定で使用する発動確率. 論理型Rate.
   float attack_target_rate = 19; // 攻撃対象として選択される確率への補正値. HIDE / PROVOKEで使用する. 論理型CorrectionValue.
 }
@@ -714,7 +740,7 @@ message TacticsBattleSpecialParameters {
 message TacticsBattleSpecialData {
   TacticsBattleSpecialType special_type = 1; // 特殊効果系列.
   TacticsBattleSpecialParameters parameters = 2; // special_typeの具体効果で使用する各数値パラメータ.
-  TacticsBattleSpecialApplyTarget apply_target = 3; // 効果を適用する箇所.
+  reserved 3; // 旧apply_target. 効果対象は外側のTacticsEffectData.targetへ統一する.
   TacticsBattleSpecialTrigger trigger = 4; // 効果を発動する条件.
 }
 

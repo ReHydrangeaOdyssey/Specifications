@@ -40,7 +40,8 @@
 * Endpointが存在するGameServerへmTLSで`GetGameServerCapacity`を要求する.
 * `AcceptNewGuildBattle=true`かつ`AvailableGuildBattleCount > 0`のGameServerだけを新規割当候補とする.
 * `draining`状態のGameServerへ新しい騎士団戦を割り当てない.
-* 複数の割当候補が存在する場合も各GameServerの`AvailableGuildBattleCount`を超えて割り当てない. 候補間の選択順は運用設定とし, 推奨初期順序を`Ready判定 → 負荷判定 → Capacity使用率 → 最終割当時刻 → InstanceID`とする. 左側の判定・比較を優先し, 同値の場合に次の項目を使用する. GameServer内部の戦闘ロジックには影響させない. 負荷判定に使用する具体的な観測値・閾値は別途運用設定とし, 本仕様では推測して固定しない.
+* 複数の割当候補が存在する場合も各GameServerの`AvailableGuildBattleCount`を超えて割り当てない. 候補間の選択順は運用設定とし, 推奨初期順序を`Ready判定 → 負荷判定 → Capacity使用率 → 最終割当時刻 → InstanceID`とする. 左側の判定・比較を優先し, 同値の場合に次の項目を使用する. GameServer内部の戦闘ロジックには影響させない.
+* 負荷判定は`GetGameServerCapacityResponse.AvailableGuildBattleThreadCount`を使用し, 騎士団戦に使用していない空き専用スレッド数が多いGameServerを優先する. 同数の場合は次の`Capacity使用率`比較へ進む.
 * 物理Worker NodeのCPU・Memory配置先は`GuildBattleCoordinator`が決定しない. GameServer PodをどのWorker Nodeへ配置するかはKubernetes Schedulerへ任せる.
 
 ## 騎士団戦割当

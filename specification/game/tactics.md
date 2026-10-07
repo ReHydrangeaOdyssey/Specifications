@@ -165,20 +165,21 @@
 * 戦闘不能キャラクター復帰発動率.
 
 強襲無効, 最初の通常攻撃ダメージ0, 回避発動等の真偽型挙動は`special_type`自体の意味として判定し, 数値パラメータを使用しない.
-`ENDER_BREAK`のキリ番CB最大値補正は`castle_break_score_limit`, `HEAL`のHP回復量は`hp_recovery_value`, `REVIVE` / `RESURRECTION`の復帰判定は`revive_rate`, `HIDE` / `PROVOKE`の攻撃対象選択確率補正は`attack_target_rate`を使用する. `PHALANX`の強襲CB率低下は`assault_castle_break_rate`を低下方向へ適用する.
-`HEAL`は生存している対象キャラクターについて`回復量 = hp_recovery_value`とし, その値をそのままHP回復量として使用する. `hp_recovery_value`適用後に最大HPを超えた場合の扱いは, 今回提示された仕様では定義されていないため未確定とする.
-`REVIVE`および`RESURRECTION`で`revive_rate`による復帰判定に成功したキャラクターは, 復帰時の現在HPを最大HPと同じ値にする.
+`ENDER_BREAK`のキリ番CB最大値補正は`castle_break_score_limit`, `HEAL`のHP回復量は`hp_recovery_value`, `REVIVE` / `RESURRECTION`の復帰判定は`revive_rate`, `HIDE` / `PROVOKE`の攻撃対象選択確率補正は`attack_target_rate`を使用する. `CLAUSTRUM`の`hate`は攻撃対象の被弾重み補正として扱う. `PHALANX`の強襲CB率低下は`assault_castle_break_rate`を低下方向へ適用する.
+`HEAL`は生存している対象キャラクターについて`回復量 = hp_recovery_value`とし, `現在HP = clamp(現在HP + 回復量, 0, 最大HP)`で反映する.
+`REVIVE`および`RESURRECTION`は対象キャラクターごとに`revive_rate`による復帰判定を1回行う. 判定に成功したキャラクターは復帰時の現在HPを最大HPと同じ値にする.
 `ERASE`は`TacticsActiveEffectState.erase_consumed=false`で開始し, 敵から受ける最初の通常攻撃ダメージを0にした時点で`erase_consumed=true`へ更新する. `erase_consumed=true`の間は以後の通常攻撃ダメージを0にしない.
 
-### 適用箇所
+Battle Specialの効果対象は通常タクティクスと同じ`TacticsTarget`だけで表現し, Battle Special専用の別Target Enumは使用しない. `TACTICS_TARGET_CASTLE_BREAK`はキャッスルブレイク処理を対象とする.
 
-`TacticsBattleSpecialApplyTarget`で以下を識別する.
+### 使用条件
 
-* 味方騎士団.
-* 相手騎士団.
-* 戦闘時味方パーティ.
-* 戦闘時相手パーティ.
-* キャッスルブレイク時.
+`TacticsUseCondition`でタクティクス使用要求の追加条件を表す.
+
+* `TACTICS_USE_CONDITION_NONE`: 追加条件なし.
+* `TACTICS_USE_CONDITION_ALL_ANNIHILATED`: 使用プレイヤーのパーティが全滅している場合だけ使用可能.
+
+`TACTICS_BATTLE_SPECIAL_RESURRECTION`を含むタクティクスは`TACTICS_USE_CONDITION_ALL_ANNIHILATED`を設定する. GameServerはTP・使用回数を消費する前に使用条件を検証し, 条件を満たさない場合は使用不可として拒否する.
 
 ### 発動条件
 
@@ -202,6 +203,26 @@
   - タクティクス使用時に特定の相手PlayerIDを固定する意味ではない.
 * 味方騎士団.
 * 敵騎士団.
+* キャッスルブレイク処理.
+
+## Battle Specialのイベント適用
+
+`bp_recovery`および`tp_recovery`を使用するBattle Specialは, 出撃処理が成功して完了した時点で当該Specialの`trigger`条件を評価し, 条件を満たしている場合に回復を反映する. BPは最大BP, TPはその時点の最大TPを超えないようにクランプする.
+
+`TACTICS_BATTLE_SPECIAL_ELYSION`, `TACTICS_BATTLE_SPECIAL_ORATORIO`, `TACTICS_BATTLE_SPECIAL_BERSERK`, `TACTICS_BATTLE_SPECIAL_PANZER`の強襲無効効果は, 通常の強襲キャッスルブレイク確率判定に入る直前に評価する. 強襲無効効果中の場合は強襲キャッスルブレイク判定を行わず殲滅へ進む.
+
+`TACTICS_BATTLE_SPECIAL_ELYSION`の回避効果は通常攻撃だけへ適用する. Abilityの回避判定とは別条件として, Ability回避判定の後に`回避効果中か?`を評価する. スキルには適用しない.
+
+`TACTICS_BATTLE_SPECIAL_HIDE`, `TACTICS_BATTLE_SPECIAL_PROVOKE`, `TACTICS_BATTLE_SPECIAL_CLAUSTRUM`の対象選択補正は「[騎士団戦仕様の被弾確率](guild_battle.md#被弾確率)」で被弾重みへ反映する. HIDEは低下方向, PROVOKEとCLAUSTRUMは上昇方向として扱う.
+
+`TACTICS_BATTLE_SPECIAL_EXTERLIZE`のため, GameServerは各Playerについて騎士団戦単位の`attack_count`と`acquired_score`を保持する. `attack_count`は成功した出撃1回につき1加算し, `acquired_score`はその成功出撃で当該Playerが取得したスコアを加算する. どちらも騎士団戦開始時の初期値は0とする. `attack_count_score`をこれらの値へどの式で適用するかは現時点の仕様では定義しない.
+
+## タクティクス固有乱数
+
+ランダム要素を持つタクティクスの使用が成立した場合, GameServerは当該騎士団戦の現在の疑似乱数生成器から`next_u32()`を1回取得し, `u64`へ拡張した値を当該使用の`Seed`とする. その後`Random::new(Seed)`でタクティクス固有の疑似乱数生成器を生成し, 当該タクティクスのランダム結果にはこの生成器だけを使用する. Clientも`UseTacticsResponse.Seed`から同じ疑似乱数生成器を生成して結果を再現する. ランダム要素を使用しないタクティクスでは`Seed=0`を返す. ランダム要素を使用する場合でも生成値として0は取り得るため, ランダム要素の有無はTactics MasterDataから判定し, `Seed`値だけでは判定しない.
+
+現時点で`UseTactics`成立時にタクティクス固有乱数を使用するBattle Specialは`TACTICS_BATTLE_SPECIAL_REVIVE`と`TACTICS_BATTLE_SPECIAL_RESURRECTION`とする.
+`REVIVE` / `RESURRECTION`は上記タクティクス固有疑似乱数生成器を使用し, 対象キャラクターごとに1回ずつ復帰判定する. 対象キャラクターを判定へ渡す順序は現時点の仕様では未定義とし, 実装側で任意の順序を固定しない.
 
 ## 効果時間
 

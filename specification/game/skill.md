@@ -21,7 +21,9 @@
 
 スキル固有の挙動は「[マスターデータ](../../design/game/master_data.md)」のスキル構造で保持する.
 
+* 対象陣営は`SkillTargetSide`で保持し, 味方パーティ・敵パーティ・発動者自身のいずれかを明示する.
 * 対象範囲は`SkillTargetRange`で保持する.
+* 攻撃スキルのダメージ値形式は`SkillDamageValueType`で保持し, 割合ダメージと固定ダメージを識別する.
 * 単体対象の優先条件は`SkillTargetConditionID`で保持する.
   - `SKILL_TARGET_CONDITION_NONE`: 条件なし.
   - `SKILL_TARGET_CONDITION_BUFFED`: `BuffDebuffState`が`BUFF`または`BUFF_DEBUFF`の対象を優先する.
@@ -85,15 +87,23 @@
 
 ## 威力
 
-### 基本威力
+### ダメージ値形式
+
+攻撃スキルは`SkillMasterData.damage_value_type`でダメージ値形式を識別する.
+
+* `SKILL_DAMAGE_VALUE_TYPE_RATE`: `SkillMasterData.correction_value`を攻撃力へ乗算するスキル補正として使用する.
+* `SKILL_DAMAGE_VALUE_TYPE_FIXED`: `SkillMasterData.correction_value`を固定ダメージ値として使用する. 攻撃力・防御力による補正および`1.0～1.03`のダメージ乱数は適用しない. `ABILITY_EFFECT_FIXED_DAMAGE_INCREASE`が発動した場合はこの固定ダメージ値へ当該アビリティの`correction_value`を加算する.
+
+ダメージの上限はない.
+
+### 割合ダメージ
 
 #### 騎士団戦
 
-ダメージの上限はない.
 詳細は[戦闘](battle.md)の「騎士団戦攻撃者攻撃力」を参照する.
 
 ```
-スキル補正 = 各スキルに応じた威力補正
+スキル補正 = SkillMasterData.correction_value
 
 最小ダメージ = 250
 ダメージ = <騎士団戦攻撃者攻撃力> * スキル補正 - <騎士団戦攻撃対象防御力> / 3
@@ -101,12 +111,10 @@
 ダメージ = max(ダメージ, 最小ダメージ)
 ```
 
-### アリーナ
-
-ダメージの上限はない.
+#### アリーナ
 
 ```
-スキル補正 = 各スキルに応じた威力補正
+スキル補正 = SkillMasterData.correction_value
 
 最小ダメージ = 250
 ダメージ = <アリーナ攻撃者攻撃力> * スキル補正 - <アリーナ攻撃対象防御力> / 3
@@ -114,7 +122,17 @@
 ダメージ = max(ダメージ, 最小ダメージ)
 ```
 
-各対象・各HITごとにダメージ乱数を個別に1回取得する. 複数対象攻撃では対象ごとに, 複数HIT攻撃ではHITごとに`1.0～1.03`の乱数を取得し, 同じ乱数値を複数対象・複数HITで共有しない.
+割合ダメージでは各対象・各HITごとにダメージ乱数を個別に1回取得する. 複数対象攻撃では対象ごとに, 複数HIT攻撃ではHITごとに`1.0～1.03`の乱数を取得し, 同じ乱数値を複数対象・複数HITで共有しない.
+
+### 固定ダメージ
+
+```
+固定ダメージ = SkillMasterData.correction_value
+固定ダメージ増加 = 発動したABILITY_EFFECT_FIXED_DAMAGE_INCREASEのAbilityMasterData.effect_data.correction.correction_value
+ダメージ = 固定ダメージ + 固定ダメージ増加
+```
+
+固定ダメージでは攻撃力・防御力, 最小ダメージ250, `1.0～1.03`のダメージ乱数を使用しない.
 
 ## 効果
 
@@ -135,9 +153,33 @@
 バフおよびデバフスキルは`max_activation_count = 1`とする.
 それ以外は`max_activation_count = u32::MAX`とし, 回数無制限として扱う.
 
-## 対象範囲
+## 対象
 
-バフ, デバフ, 状態異常, 回復スキルの攻撃範囲は以下に分かれる.
+### 対象陣営
+
+`SkillTargetSide`で対象候補を確定する.
+
+* `SKILL_TARGET_SIDE_ALLY`: 味方パーティを対象候補とする.
+* `SKILL_TARGET_SIDE_ENEMY`: 敵パーティを対象候補とする.
+* `SKILL_TARGET_SIDE_SELF`: 発動キャラクター自身だけを対象候補とする.
+
+対象候補を確定した後, `SkillTargetRange`に従って対象範囲を決定する.
+
+### SkillEffectID × SkillTargetRange
+
+許可する組み合わせは以下だけとする. 表にない組み合わせはマスターデータ不正とする.
+
+| SkillEffectID | 許可するSkillTargetRange |
+|---|---|
+| `SKILL_EFFECT_BUFF` | `SKILL_TARGET_RANGE_ALL`, `SKILL_TARGET_RANGE_SINGLE` |
+| `SKILL_EFFECT_DEBUFF` | `SKILL_TARGET_RANGE_ALL`, `SKILL_TARGET_RANGE_SINGLE` |
+| `SKILL_EFFECT_STATUS_ABNORMALITY` | `SKILL_TARGET_RANGE_ALL`, `SKILL_TARGET_RANGE_SINGLE` |
+| `SKILL_EFFECT_HEAL` | `SKILL_TARGET_RANGE_ALL`, `SKILL_TARGET_RANGE_SINGLE` |
+| `SKILL_EFFECT_ATTACK` | `SKILL_TARGET_RANGE_ALL`, `SKILL_TARGET_RANGE_RANDOM`, `SKILL_TARGET_RANGE_VERTICAL_COLUMN`, `SKILL_TARGET_RANGE_HORIZONTAL_ROW`, `SKILL_TARGET_RANGE_X_SHAPE`, `SKILL_TARGET_RANGE_CROSS_SHAPE` |
+
+### 対象範囲
+
+バフ, デバフ, 状態異常, 回復スキルの対象範囲は以下に分かれる.
 
 * 全体.
 * 単体.
@@ -180,6 +222,11 @@
 | 奥 |  | 〇 |  |
 | 中央 | 〇 | 〇 | 〇 |
 | 手前 |  | 〇 |  |
+
+## アビリティ効果との関係
+
+スキル発動時は`ABILITY_EFFECT_AVOIDANCE`, `ABILITY_EFFECT_COUNTER`, `ABILITY_EFFECT_COVER`, `ABILITY_EFFECT_DRAW_AGGRO`, `ABILITY_EFFECT_PURSUIT`を無視する. これらの回避, 反撃, かばう, ひきつけ, 追撃処理は通常攻撃にだけ適用する.
+`ABILITY_EFFECT_FIXED_DAMAGE_INCREASE`は固定ダメージスキル専用の加算効果として例外的にスキルダメージへ適用する.
 
 ## 成功率
 

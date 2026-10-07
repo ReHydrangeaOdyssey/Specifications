@@ -66,6 +66,8 @@ message SkillMasterData {
   SkillTargetRange target_range = 7; // スキルの対象範囲.
   SkillTargetConditionData target_condition = 8; // 単体対象で使用する優先対象条件.
   uint32 max_activation_count = 9; // 1戦闘中に発動可能な最大回数. 論理型Count. u32::MAXは回数無制限を表す.
+  SkillDamageValueType damage_value_type = 14; // 攻撃スキルのダメージ値形式. 攻撃以外では参照しない.
+  SkillTargetSide target_side = 15; // スキルの対象候補となる陣営.
 
   oneof effect_data {
     SkillRandomAttackData random_attack = 10; // ランダム攻撃スキルで使用する固有データ.
@@ -173,6 +175,7 @@ message TacticsMasterData {
   uint32 effect_count = 9; // end_typeがCOUNTの場合の効果回数. 論理型Count.
   TacticsCountConsumeTrigger count_consume_trigger = 10; // end_typeがCOUNTの場合に残り回数を消費するイベント.
   repeated TacticsEffectData effects = 11; // タクティクスが持つ基本効果一覧.
+  TacticsUseCondition use_condition = 12; // 使用要求時に満たす必要がある追加条件.
 }
 
 ```
@@ -193,6 +196,8 @@ Player, Guild, 所属, 役職等の実行時可変データは加工済みマス
 
 単体対象条件が`SKILL_TARGET_CONDITION_STATUS_ABNORMALITY`の場合は, `SkillTargetConditionData.status_abnormality_id`から対象とする具体的な状態異常を特定する.
 回復量はすべて割合で保持し, `SkillHealData.heal_rate`は対象の最大HPに対する割合とする. `SkillEffectID=SKILL_EFFECT_HEAL`では`heal_rate`を使用し, `SkillMasterData.correction_value`は使用しない.
+`SkillMasterData.target_side`で味方パーティ・敵パーティ・自身のどれを対象候補とするかを明示する. `SkillEffectID`と`SkillTargetRange`の許可組み合わせは「[スキル仕様](../../specification/game/skill.md#skilleffectid--skilltargetrange)」を正とする.
+攻撃スキルでは`SkillMasterData.damage_value_type`を必須解釈し, `SKILL_DAMAGE_VALUE_TYPE_RATE`では`correction_value`を攻撃力へ乗算する補正値, `SKILL_DAMAGE_VALUE_TYPE_FIXED`では固定ダメージ値として使用する.
 
 ## アビリティ固有データの共有体
 
@@ -202,7 +207,7 @@ Player, Guild, 所属, 役職等の実行時可変データは加工済みマス
 
 * `TACTICS_EFFECT_BP_RECOVERY`では`TacticsEffectData.uint_value`を固定BP回復値として使用する. 値は`u32`とし, 小数値を保持しない. 最大BPを超えて回復しない.
 * `TACTICS_EFFECT_HP_RECOVERY`では`TacticsEffectData.hp_recovery`を使用する. HP0全回復型はHP0のみ, 割合回復型はHP1以上のみを対象とし, いずれも最大HPを超えない. 割合回復型の段階補正は`recovery_rate + (段階レベル - 1) * increase_value`で算出する.
-* `TACTICS_EFFECT_BATTLE_SPECIAL`では`TacticsEffectData.battle_special`を使用し, 特殊効果系列, `TacticsBattleSpecialParameters`の各数値パラメータ, 適用箇所, 発動条件を保持する.
+* `TACTICS_EFFECT_BATTLE_SPECIAL`では`TacticsEffectData.battle_special`を使用し, 特殊効果系列, `TacticsBattleSpecialParameters`の各数値パラメータ, 発動条件を保持する. 効果対象はBattle Special内部へ重複保持せず, 外側の`TacticsEffectData.target`だけを使用する.
 * 上記以外の浮動小数点補正値は`TacticsEffectData.correction_value`を使用する.
 * 段階レベル`n`の最終効果値は`基本効果値 + (n - 1) * 1段階あたり増加値`で算出する. BP固定回復は`uint_value`と`increase_uint_value`, 通常補正・割合は`correction_value`と`increase_value`, Battle Specialは各パラメータと`battle_special_increase`を対応させて同じ式を適用する.
 * `TacticsStageEffectData.effect_index`は同じ`TacticsMasterData.effects`の0始まりIndexを指す. `effects[effect_index].effect_id`と`TacticsStageEffectData.effect_id`, `effects[effect_index].target`と`TacticsStageEffectData.target`は一致必須とし, 不一致はマスターデータ不正とする. 同一`effect_id + target`を複数持つ場合でも`effect_index`で対象効果を一意に識別する.

@@ -521,8 +521,11 @@ GuildNameが制約を満たさない場合は`ApiErrorResponse(API_ERROR_INVALID
 GameServer側のチェック.
 
 - 要求TacticsIDが当該プレイヤーの騎士団戦編成キャラクターから使用可能になっているタクティクスであること.
+- `TacticsUseCondition`を満たしていること. `TACTICS_USE_CONDITION_ALL_ANNIHILATED`は使用プレイヤーのパーティが全滅している場合だけ成立する.
 - TP.
 - 使用回数.
+
+使用条件を満たさない場合は使用不可として拒否し, TP・使用回数・RequestSequenceを変更しない. ランダム要素を持つタクティクスではGameServerが騎士団戦の現在の疑似乱数生成器から1値を取得して`Seed`とし, そのSeedから生成したタクティクス固有疑似乱数生成器でランダム結果を決定する.
 
 #### 要求データ
 
@@ -530,7 +533,7 @@ GameServer側のチェック.
 
 #### 使用可能時レスポンス
 
-[API Payload](api_payload.md)の「UseTacticsResponse」を参照する.
+[API Payload](api_payload.md)の「UseTacticsResponse」を参照する. ランダム要素を使用した場合は再現用`Seed`, 使用しない場合は`Seed=0`を返す.
 
 #### 使用不可時レスポンス
 

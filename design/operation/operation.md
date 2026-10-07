@@ -37,7 +37,7 @@
 | Source IP Rate Limit閾値 | 認証系合計20 requests/min/IP, burst 5 | `CreateAccount`と`Login`の合計 |
 | Recovery領域 | 2 GiB / 1,000 files / GameServer Instance | `/var/lib/game-server/recovery` |
 
-GameServer割当候補の「負荷判定」に使用する具体的な観測値および閾値は本修正内容では指定されていないため, 本書では追加定義しない. `Capacity使用率`はGameServerが返すCapacity情報に基づく比較項目とする.
+GameServer割当候補の「負荷判定」は, `GetGameServerCapacityResponse.AvailableGuildBattleThreadCount`で返す「騎士団戦に使用していない空き専用スレッド数」を使用する. 空き専用スレッド数が多い候補を優先し, 同数の場合は次の`Capacity使用率`比較へ進む. `Capacity使用率`はGameServerが返すCapacity情報に基づく比較項目とする.
 
 ## 運営確認に使用する識別子
 

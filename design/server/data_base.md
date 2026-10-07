@@ -152,6 +152,8 @@ erDiagram
         Count max_activation_count
         CorrectionValue correction_value
         SkillTargetRange target_range
+        SkillTargetSide target_side
+        SkillDamageValueType damage_value_type
         SkillTargetConditionID target_condition_id
         StatusAbnormalityID target_condition_status_abnormality_id
         Count random_hit_count
@@ -209,6 +211,7 @@ erDiagram
         DurationSeconds duration
         Count effect_count
         TacticsCountConsumeTrigger count_consume_trigger
+        TacticsUseCondition use_condition
     }
 
     TACTICS_STAGE_EFFECT {
@@ -262,7 +265,6 @@ erDiagram
     TACTICS_BATTLE_SPECIAL_EFFECT {
         RecordID tactics_effect_id PK, FK
         TacticsBattleSpecialType special_type
-        TacticsBattleSpecialApplyTarget apply_target
         TacticsBattleSpecialTrigger trigger
         CorrectionValue attack
         CorrectionValue defense
@@ -326,9 +328,9 @@ erDiagram
 
 ```
 
-`SKILL.activation_rate`は基本スキル発動率`0.2`へ加算する値とする. `SKILL.max_activation_count`は1戦闘中の最大発動回数とし, `u32::MAX`は回数無制限を表す. `SKILL`の効果別フィールドは加工済み`SkillMasterData.effect_data`の`oneof`に対応して格納する. 該当しない効果別フィールドは未使用とし, DatabaseではNULLを許可する. `SKILL.target_condition_status_abnormality_id`は`target_condition_id=SKILL_TARGET_CONDITION_STATUS_ABNORMALITY`の場合のみ使用する. `SKILL.heal_rate`は対象の最大HPに対する回復割合とし, `SKILL.effect_id=SKILL_EFFECT_HEAL`では`SKILL.correction_value`を使用しない.
+`SKILL.activation_rate`は基本スキル発動率`0.2`へ加算する値とする. `SKILL.max_activation_count`は1戦闘中の最大発動回数とし, `u32::MAX`は回数無制限を表す. `SKILL.target_side`は味方パーティ・敵パーティ・自身の対象候補を表す. `SKILL.damage_value_type`は攻撃スキルの`correction_value`が割合補正か固定ダメージ値かを識別する. `SKILL`の効果別フィールドは加工済み`SkillMasterData.effect_data`の`oneof`に対応して格納する. 該当しない効果別フィールドは未使用とし, DatabaseではNULLを許可する. `SKILL.target_condition_status_abnormality_id`は`target_condition_id=SKILL_TARGET_CONDITION_STATUS_ABNORMALITY`の場合のみ使用する. `SKILL.heal_rate`は対象の最大HPに対する回復割合とし, `SKILL.effect_id=SKILL_EFFECT_HEAL`では`SKILL.correction_value`を使用しない.
 `SKILL.effect_id`は「[型定義](../shared/types.md)」の`SkillEffectID`, `ABILITY.effect_id`は`AbilityEffectID`, `TACTICS_EFFECT.effect_id`は`TacticsEffectID`を使用する. これら3つは相互に別の列挙型とする. `ABILITY.condition_id`は発動条件を保持し, 具体値が必要な場合だけ`ABILITY_CONDITION_VALUE.condition_value`を使用する. `ABILITY_CONDITION_VALUE.turn_timing`は`ABILITY_CONDITION_EVERY_N_TURNS`の場合に評価タイミングを保持し, それ以外では使用しない. `ABILITY`の効果固有値は加工済み`AbilityMasterData.effect_data`の`oneof`に対応する詳細テーブルへ格納する. `no_parameter`を使用するAbilityEffectIDでは効果詳細テーブルを使用しない. `ABILITY_EFFECT_STATUS.status`は`ABILITY_EFFECT_AVOIDANCE`で攻撃回避を表す場合にNULLを許可し, 状態異常回避および`ABILITY_EFFECT_STATUS_ABNORMALITY_ATTACK`では対象または付与する`StatusAbnormalityID`を保持する. 発動条件値と効果詳細は独立して保持するため同時に存在できる.
-同一`TacticsEffectID`系列の効果値はすべて加算する. 段階レベル`n`の最終効果値は`基本効果値 + (n - 1) * 増加値`で算出する. `TACTICS_STAGE_EFFECT.target_tactics_effect_id`は段階補正対象となる`TACTICS_EFFECT.id`を一意に指定する. 加工済みマスター生成時は同一Tactics内の`TACTICS_EFFECT`を`TACTICS_EFFECT.id`昇順へ並べ, 対象行のIndexを`TacticsStageEffectData.effect_index`へ変換する. `TACTICS_STAGE_EFFECT.effect_id`および`target`は対象`TACTICS_EFFECT`と一致必須とする. `TACTICS_STAGE_EFFECT.increase_value`は浮動小数点効果, `increase_uint_value`はBP固定回復等の整数効果に使用する. `TACTICS_EFFECT_BATTLE_SPECIAL`の段階上昇量は`TACTICS_STAGE_BATTLE_SPECIAL_EFFECT`へ`TacticsBattleSpecialParameters`に対応する各数値として保持する. `TACTICS_EFFECT.correction_value`は浮動小数点効果, `TACTICS_EFFECT.uint_value`はBP固定回復等の整数効果に使用する. `TACTICS_EFFECT_HP_RECOVERY`は`TACTICS_HP_RECOVERY_EFFECT`, `TACTICS_EFFECT_BATTLE_SPECIAL`は`TACTICS_BATTLE_SPECIAL_EFFECT`へ効果固有値を保持する. 使用しない値列はNULLとする. `TACTICS.end_type=TACTICS_END_TYPE_COUNT`の場合は`TACTICS.count_consume_trigger`で残り回数を消費するイベントを指定する.
+同一`TacticsEffectID`系列の効果値はすべて加算する. 段階レベル`n`の最終効果値は`基本効果値 + (n - 1) * 増加値`で算出する. `TACTICS_STAGE_EFFECT.target_tactics_effect_id`は段階補正対象となる`TACTICS_EFFECT.id`を一意に指定する. 加工済みマスター生成時は同一Tactics内の`TACTICS_EFFECT`を`TACTICS_EFFECT.id`昇順へ並べ, 対象行のIndexを`TacticsStageEffectData.effect_index`へ変換する. `TACTICS_STAGE_EFFECT.effect_id`および`target`は対象`TACTICS_EFFECT`と一致必須とする. `TACTICS_STAGE_EFFECT.increase_value`は浮動小数点効果, `increase_uint_value`はBP固定回復等の整数効果に使用する. `TACTICS_EFFECT_BATTLE_SPECIAL`の段階上昇量は`TACTICS_STAGE_BATTLE_SPECIAL_EFFECT`へ`TacticsBattleSpecialParameters`に対応する各数値として保持する. `TACTICS_EFFECT.correction_value`は浮動小数点効果, `TACTICS_EFFECT.uint_value`はBP固定回復等の整数効果に使用する. `TACTICS_EFFECT_HP_RECOVERY`は`TACTICS_HP_RECOVERY_EFFECT`, `TACTICS_EFFECT_BATTLE_SPECIAL`は`TACTICS_BATTLE_SPECIAL_EFFECT`へ効果固有値を保持する. Battle Specialの効果対象は`TACTICS_EFFECT.target`を唯一の正本とし, `TACTICS_BATTLE_SPECIAL_EFFECT`へ別Target列を持たない. 使用しない値列はNULLとする. `TACTICS.end_type=TACTICS_END_TYPE_COUNT`の場合は`TACTICS.count_consume_trigger`で残り回数を消費するイベントを指定する. `TACTICS.use_condition`はタクティクス使用要求時の追加条件を保持する.
 
 
 `FORMATION` / `FORMATION_POSITION`および`ITEM`はDatabase上の固定参照データとして保持するが, `ProcessedMasterData`には含めない. 騎士団・Player・所属・役職などの実行時可変データも`ProcessedMasterData`には含めない.

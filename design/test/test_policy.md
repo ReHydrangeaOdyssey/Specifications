@@ -66,6 +66,7 @@ Database, Public API Server, Private API Server, GameServer, GuildBattleCoordina
 * GuildBattle編成登録, Preload, 参加, 出撃, Tactics, Item, 治療, 復活, 終了.
 * `membership_locked`中のGuild所属変更拒否.
 * GameServer割当とPreload開始.
+* 複数の割当候補では`AvailableGuildBattleThreadCount`が多いGameServerを負荷判定で優先し, 同数の場合にCapacity使用率比較へ進む.
 * `PRELOAD_FAILED`への遷移.
 * `RetryPreloadFailedGuildBattle`による同一ペア再Preload.
 * `RematchPreloadFailedGuildBattles`による再抽籤後の再割当.
@@ -86,6 +87,7 @@ Database, Public API Server, Private API Server, GameServer, GuildBattleCoordina
 * 出撃ごとの戦闘専用PRNGを同一Sequenceから再生成できる.
 * Skillの対象抽選, Ability同順位抽選, Formation競合抽選, Character抽選が同一Seedで一致する.
 * PRNGを使用しない処理によってPRNG状態が変化しない.
+* ランダム要素を持つタクティクス使用時にGuildBattle本体PRNGを1回だけ消費してSeedを生成し, 以後の固有抽選がSeedから生成した専用PRNGだけを消費する.
 
 ### Replayテスト
 
@@ -164,6 +166,8 @@ GuildBattle Replayは「[リプレイProtocol Buffers定義](../system/guild_bat
 * 対象ごと, HITごとにダメージ乱数を個別取得する.
 * ランダム攻撃では候補リストをFormation内部番号順で固定し, 各HITで対象を削除しない.
 * BUFF / DEBUFFの最大発動回数1を保持する.
+* `SkillEffectID × SkillTargetRange`の許可組み合わせ以外をMasterData Pipelineで拒否する.
+* `SkillTargetSide`で味方・敵・自身を一意に指定できることを確認する.
 
 ### Ability
 
@@ -176,9 +180,11 @@ GuildBattle Replayは「[リプレイProtocol Buffers定義](../system/guild_bat
 * AbilityによるBUFF / DEBUFFをSkillと同じ`BuffDebuffEffectState`へ反映する.
 * `ABILITY_EFFECT_DAMAGE_INCREASE`は通常攻撃だけへ適用し, `correction_value`乗算後に通常攻撃最大ダメージ上限99,999を適用する.
 * `ABILITY_EFFECT_COVER`は攻撃対象リスト取得後に候補をフォーメーション内部番号順で抽選し, 発動時は元対象の計算値を使用したダメージを対象数分だけかばうキャラクターへ反映する.
-* `ABILITY_EFFECT_DRAW_AGGRO`は攻撃対象リスト取得前に発動し, 発動キャラクターを攻撃範囲の起点として対象リストを生成する.
-
-`ABILITY_EFFECT_HEAL`は適用対象・回復式・適用位置が未確定のため結果値を固定するテストを作成しない. `ABILITY_EFFECT_FIXED_DAMAGE_INCREASE`は固定ダメージスキルの識別方法がSkill仕様へ追加されるまで適用対象を固定しない. `ABILITY_EFFECT_DRAW_AGGRO`の複数保持時競合規則も未確定のため, 複数候補時の最終起点を固定するテストを作成しない.
+* `ABILITY_EFFECT_DRAW_AGGRO`は攻撃対象リスト取得前に候補をフォーメーション内部番号順へ並べ, 1キャラクターだけを抽選してその候補だけ発動率判定する. 不成立時に再抽選しない.
+* `ABILITY_EFFECT_FIXED_DAMAGE_INCREASE`は`SKILL_DAMAGE_VALUE_TYPE_FIXED`の攻撃スキルだけへ加算し, RATE型へ適用しない.
+* `ABILITY_EFFECT_HEAL`の回復量式が`最大HP * (1 + アビリティの回復割合)`になることを確認する. 適用対象と戦闘フロー上の適用位置は未定義のため, その部分の統合テスト期待値は固定しない.
+* 攻撃スキルは回避, 反撃, COVER, DRAW_AGGRO, 追撃のAbility処理を通らない.
+* ELYSIONの回避効果はAbility回避判定後に通常攻撃だけへ適用し, スキルには適用しない.
 
 ### Tactics
 
@@ -187,10 +193,17 @@ GuildBattle Replayは「[リプレイProtocol Buffers定義](../system/guild_bat
 * 同一系列の効果値を加算し, 異なる系列の系列内合計を乗算する.
 * 速度補正だけは系列に関係なく全効果値を加算する.
 * `TACTICS_EFFECT_BATTLE_SPECIAL`の数値パラメータは`TacticsBattleSpecialType`を系列として統合する.
-* `TACTICS_BATTLE_SPECIAL_HEAL`のHP回復量に`hp_recovery_value`の値をそのまま使用する.
-* `TACTICS_BATTLE_SPECIAL_REVIVE`および`TACTICS_BATTLE_SPECIAL_RESURRECTION`の復帰成功時に現在HPを最大HPと同じ値へ設定する.
+* `TACTICS_BATTLE_SPECIAL_HEAL`は`hp_recovery_value`をそのまま加算し, 回復後HPを0以上最大HP以下へクランプする.
+* `TACTICS_BATTLE_SPECIAL_REVIVE`および`TACTICS_BATTLE_SPECIAL_RESURRECTION`は対象キャラクターごとに1回復帰判定し, 成功時に現在HPを最大HPと同じ値へ設定する.
+* `TACTICS_USE_CONDITION_ALL_ANNIHILATED`を満たさないRESURRECTION要求は使用不可とし, TP・使用回数・RequestSequenceを変更しない.
+* ランダム要素を持つタクティクスは騎士団戦RandomからSeedを1回生成し, Seedから生成したタクティクス固有Randomだけで固有ランダム結果を決定する. 同じSeedと同じ対象順序を与えたClient/Serverで結果が一致することを確認する. ランダム要素なしではSeed=0を確認する.
+* HIDE / PROVOKE / CLAUSTRUMが被弾重み式へ反映され, NaN・Infinity・-Infinityと最小/最大clampが仕様式どおりになることを確認する.
+* 強襲無効効果中は通常の`CB発生?`判定を行わず殲滅へ進む.
+* 出撃成功ごとにPlayerの`attack_count`を1加算し, 今回取得スコアを`acquired_score`へ加算する. 開戦時は双方0であることを確認する.
+* Battle SpecialのBP/TP回復は出撃完了時にTrigger条件成立を確認して反映し, 最大値へクランプする.
+* Public APIへ現在HPを整数で返す場合は小数点以下を切り捨てる.
 
-`TACTICS_BATTLE_SPECIAL_HEAL`で回復後HPが最大HPを超える場合の扱いは未確定のため, その境界だけは期待値を固定しない.
+`TACTICS_BATTLE_SPECIAL_EXTERLIZE.parameters.attack_count_score`を`attack_count` / `acquired_score`へ適用する具体式と, `REVIVE` / `RESURRECTION`の対象キャラクター判定順序は未定義のため, その部分の期待値は固定しない.
 
 ## Arenaテスト
 

@@ -232,15 +232,19 @@
 
 ```
 基本被弾重み = 100
-タクティクス補正 = マスターデータに定義された`TACTICS_EFFECT_OPPONENT_SORTIE_SELECTION_RATE_CORRECTION`系列のタクティクス効果値合計
+最小被弾重み = 1
+被弾率UPタクティクス = `TACTICS_EFFECT_OPPONENT_SORTIE_SELECTION_RATE_CORRECTION`の上昇方向の有効値 + `TACTICS_BATTLE_SPECIAL_PROVOKE.parameters.attack_target_rate` + `TACTICS_BATTLE_SPECIAL_CLAUSTRUM.parameters.hate`
+被弾率DOWNタクティクス = `TACTICS_EFFECT_OPPONENT_SORTIE_SELECTION_RATE_CORRECTION`の低下方向の有効値 + `TACTICS_BATTLE_SPECIAL_HIDE.parameters.attack_target_rate`
+タクティクス補正 = 被弾率UPタクティクス + 被弾率DOWNタクティクス
 補正計算値 = 100 * タクティクス補正
 補正計算値がNaNの場合は0とする
 補正計算値がInfinityまたは-Infinityの場合は99,999とする
-符号付き被弾重み = 100 + 補正計算値 as i32
-符号付き被弾重みが0以下の場合は1にクランプする
+符号付き被弾重み = max(100 + 補正計算値 as i32, 最小被弾重み)
 被弾重み = 符号付き被弾重み as u32
-被弾重み = clamp(被弾重み, 1, 1,000,000)
+被弾重み = clamp(被弾重み, 最小被弾重み, 1,000,000)
 ```
+
+低下方向の効果値は負値として`タクティクス補正`へ加算する. 同じ方向・計算項目へ複数系列が作用する場合は「[タクティクス効果値の統合規則](tactics.md#効果値の統合規則)」に従う.
 
 
 ### 戦闘
@@ -249,6 +253,8 @@
 * 詳細は[戦闘](battle.md)を参照する.
 
 ### 殲滅スコア
+
+各Playerは騎士団戦ごとに`attack_count`と`acquired_score`を保持し, どちらも開戦時に0で初期化する. 殲滅またはキャッスルブレイクとして出撃処理が成功した場合, 出撃完了時に`attack_count`を1加算し, 当該出撃で当該Playerが取得したスコアを`acquired_score`へ加算する. `TACTICS_BATTLE_SPECIAL_EXTERLIZE.parameters.attack_count_score`を`attack_count`および`acquired_score`へ適用する具体的なスコア式は現時点では未定義とする.
 
 最終結果が「[pt](guild_battle.md#事前用語説明)」となる.
 オーバーキルによるダメージは含まれない.
@@ -327,7 +333,12 @@ for キャラクター in 「出撃」時の選択キャラクター {
 強襲キャッスルブレイクの場合は, `タクティクススコア補正`の系列統合対象へ`TACTICS_EFFECT_BATTLE_SPECIAL.parameters.assault_castle_break_score`を追加する.
 
 
+出撃処理の結果が確定した後, 出撃完了時を発動タイミングとするBattle SpecialのBP/TP回復条件を評価する. 条件を満たす有効効果について`bp_recovery`または`tp_recovery`を加算し, BPは最大BP, TPはその時点の最大TPへクランプする.
+
+
 ### キャッスルブレイク確率
+
+`TACTICS_BATTLE_SPECIAL_ELYSION`, `TACTICS_BATTLE_SPECIAL_ORATORIO`, `TACTICS_BATTLE_SPECIAL_BERSERK`, `TACTICS_BATTLE_SPECIAL_PANZER`の強襲無効効果が有効な場合, 通常の強襲キャッスルブレイク確率判定を行わず殲滅へ進む. CBC発生中, CBC発生条件成立, キリ番による確定キャッスルブレイクはこの通常強襲判定より前に判定される.
 
 開戦前PreloadでいずれかのPlayer取得に失敗したGuildを含む対戦は開戦しない. そのため, キャッスルブレイク確率およびCBC条件の計算にはPreloadが正常完了した対戦だけが到達する.
 

@@ -5,6 +5,8 @@
 各項目の型は「[型定義](../shared/types.md)」を参照する.
 Public APIのProtocol Buffers field numberおよびwire schemaは「[public_api.proto](../system/public_api.proto)」を正とする. 本書は各Payloadの意味・固定長・利用条件を正とし, `.proto`と不一致がある場合は意味・制約を本書で確認した上でfield number/wire型を`.proto`へ合わせる.
 
+Public APIで内部`Float32`の現在HPを論理型`HP`（`uint32`）として返す場合は, 小数点以下を切り捨ててから変換する. HPはゲーム処理側で0以上へクランプした値を使用する.
+
 `ArenaMode`は「[型定義](../shared/types.md)」を参照する.
 
 ### CharacterHP
@@ -48,8 +50,9 @@ Public APIのProtocol Buffers field numberおよびwire schemaは「[public_api.
 |---|---|---|
 | SpecialType | `TacticsBattleSpecialType` | 戦闘時特殊効果系列 |
 | Parameters | `TacticsBattleSpecialParameters` | SpecialTypeの具体効果で使用する攻撃, 防御, 速度, スキル発動率, 最大TP, スコア, CB, ヘイト, 城Lv, BP/TP回復等の数値パラメータ |
-| ApplyTarget | `TacticsBattleSpecialApplyTarget` | 特殊効果の適用箇所 |
 | Trigger | `TacticsBattleSpecialTrigger` | 特殊効果の発動条件 |
+
+Battle Specialの効果対象は外側の`TacticsEffectResult.Target`（`TacticsTarget`）を使用し, Battle Special専用のTargetフィールドは持たない.
 
 ### TacticsEffectResultData
 
@@ -507,6 +510,7 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 | RemainingCount | `Count` | 使用後の残り使用可能回数 |
 | Effects | `TacticsEffectResult[]` | 発生した効果一覧. 効果数はこの配列長から判定する |
 | NextRequestSequence | `RequestSequence` | 要求成功後の次要求シーケンス番号 |
+| Seed | `Seed` | ランダム要素を持つタクティクスの固有疑似乱数生成器を再現するSeed. ランダム要素を使用しない場合は0 |
 
 ### UseItemRequest
 
@@ -839,6 +843,7 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 | AcceptNewGuildBattle | `Bool` | 新しい騎士団戦を割当可能な場合true. `draining`ではfalse |
 | OwnedGuildBattleCount | `Count` | 現在所有している未完了騎士団戦数 |
 | AvailableGuildBattleCount | `Count` | 現在追加で割当可能な騎士団戦数. `AcceptNewGuildBattle=false`の場合0 |
+| AvailableGuildBattleThreadCount | `Count` | 現在1件も騎士団戦を担当していない騎士団戦専用スレッド数 |
 
 ### StartGuildBattlePreloadRequest
 

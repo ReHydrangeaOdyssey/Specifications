@@ -56,8 +56,9 @@ flowchart TD;
 
 `ABILITY_EFFECT_DAMAGE_INCREASE`は通常攻撃ダメージへ適用し, 通常攻撃最大ダメージ上限99,999の適用前に`correction_value`を倍率として乗算する. 追撃・反撃・スキルダメージには適用しない.
 `ABILITY_EFFECT_COVER`は攻撃対象リスト取得後に候補選択と発動判定を1回行い, 発動した場合はその取得済みリストの各対象について対象側の計算値を使用したダメージをかばうキャラクターへ反映する.
-`ABILITY_EFFECT_DRAW_AGGRO`は攻撃対象リスト取得前に発動判定を行い, 発動した場合は攻撃範囲の起点を発動キャラクターへ変更してから対象リストを作成する.
-`ABILITY_EFFECT_FIXED_DAMAGE_INCREASE`は固定ダメージスキルに対する加算効果として仕様化済みだが, 現行Skill MasterDataに固定ダメージスキルの識別方法がないため, スキルダメージフローへはまだ挿入しない. `ABILITY_EFFECT_HEAL`も適用対象・回復式・適用位置が未確定のためフローへ挿入しない.
+`ABILITY_EFFECT_DRAW_AGGRO`は攻撃対象リスト取得前に候補をフォーメーション内部番号の小さい順に並べ, その候補リストから1キャラクターだけを抽選する. 発動確率判定は選ばれた1キャラクターについてだけ行い, 成立した場合は攻撃範囲の起点を当該キャラクターへ変更してから対象リストを作成する. 不成立時に別候補を再抽選しない.
+`ABILITY_EFFECT_FIXED_DAMAGE_INCREASE`は`SkillMasterData.damage_value_type == SKILL_DAMAGE_VALUE_TYPE_FIXED`の攻撃スキルへ適用し, 固定ダメージへAbilityの`correction_value`を加算する.
+`ABILITY_EFFECT_HEAL`の回復量は`最大HP * (1 + アビリティの回復割合)`で確定している. 適用対象と戦闘フロー上の適用位置は現時点の仕様では未定義のため, その部分だけはフローへ挿入しない.
 
 ```mermaid
 flowchart TD;
@@ -122,23 +123,28 @@ flowchart TD;
 ```mermaid
 flowchart TD;
     Start[スキルダメージ計算開始];
+    DamageType{damage_value_type};
     Mode{騎士団戦?};
     GuildAttack[騎士団戦攻撃者攻撃力を算出];
     GuildDefense[騎士団戦攻撃対象防御力を算出];
     ArenaAttack[アリーナ攻撃者攻撃力を算出];
     ArenaDefense[アリーナ攻撃対象防御力を算出];
-    Correction[SkillMasterData.correction_valueをスキル補正として取得];
+    Correction[SkillMasterData.correction_valueを割合補正として取得];
     Base[ダメージ = 攻撃力 * スキル補正 - 防御力 / 3];
     Random[対象・HITごとに1.0以上1.03以下の乱数を取得];
     RandomDamage[ダメージ = ダメージ * 乱数];
     Min[ダメージ = max ダメージ, 250];
+    Fixed[ダメージ = SkillMasterData.correction_value];
+    FixedIncrease[発動したFIXED_DAMAGE_INCREASEのcorrection_valueを加算];
     Apply[HP反映時に小数点以下を切り捨てて減算し, HPを0未満にしない];
     End[スキルダメージ計算終了];
 
-    Start --> Mode;
+    Start --> DamageType;
+    DamageType -- RATE --> Mode;
     Mode -- Yes --> GuildAttack --> GuildDefense --> Correction;
     Mode -- No --> ArenaAttack --> ArenaDefense --> Correction;
     Correction --> Base --> Random --> RandomDamage --> Min --> Apply --> End;
+    DamageType -- FIXED --> Fixed --> FixedIncrease --> Apply;
 ```
 
 ### ダメージ乱数の消費規則
@@ -148,6 +154,7 @@ flowchart TD;
 ### キャラクター行動
 
 `ActivateSkill`は前述の「スキル発動」フローを呼び出す. 攻撃スキルの場合はその内部で「スキルダメージ計算フロー」を使用する.
+スキル発動時は`ABILITY_EFFECT_AVOIDANCE`, `ABILITY_EFFECT_COUNTER`, `ABILITY_EFFECT_COVER`, `ABILITY_EFFECT_DRAW_AGGRO`, `ABILITY_EFFECT_PURSUIT`を無視し, 通常攻撃側の回避・反撃・かばう・ひきつけ・追撃フローへ入らない.
 
 ```mermaid
 flowchart TD;
@@ -201,15 +208,18 @@ flowchart TD;
     CheckAvoidance{回避率 > 乱数?};
     CheckAvoidanceDisable{回避無効化率 > 乱数?};
     AvoidanceAbility[回避アビリティ発動];
+    CheckTacticsAvoidance{回避効果中か?};
 
     PopAttackRange --> CheckActivatedAvoidance
-    CheckActivatedAvoidance -- Yes --> CheckBlindness;
+    CheckActivatedAvoidance -- Yes --> CheckTacticsAvoidance;
     CheckActivatedAvoidance -- No --> CheckAvoidance;
     CheckAvoidance -- Yes --> CheckAvoidanceDisable;
-    CheckAvoidance -- No --> CheckBlindness;
-    CheckAvoidanceDisable -- Yes --> CheckBlindness;
+    CheckAvoidance -- No --> CheckTacticsAvoidance;
+    CheckAvoidanceDisable -- Yes --> CheckTacticsAvoidance;
     CheckAvoidanceDisable -- No --> AvoidanceAbility;
     AvoidanceAbility --> CheckActivatedCounter
+    CheckTacticsAvoidance -- Yes --> CheckActivatedCounter;
+    CheckTacticsAvoidance -- No --> CheckBlindness;
 
     CheckBlindness{暗闇状態?};
     CheckBlindnessAttack{攻撃成功?};
@@ -275,7 +285,8 @@ flowchart TD;
 
 
 `ABILITY_EFFECT_COVER`の候補抽選は取得済み攻撃対象リスト単位で1回だけ行う. 発動した場合もダメージ計算上の攻撃対象はリスト内の元キャラクターとし, HP減算先だけをかばうキャラクターへ変更する. リストに複数対象がある場合は各対象について個別にダメージを算出し, その回数だけかばうキャラクターへ反映する.
-`ABILITY_EFFECT_DRAW_AGGRO`が発動した場合は対象リスト取得前に起点だけを変更する. 複数キャラクターが同時に発動候補となった場合の起点競合規則は仕様未定義のため, 実装で任意に決定しない.
+`ABILITY_EFFECT_DRAW_AGGRO`が複数候補の場合はフォーメーション内部番号の小さい順に候補を並べて1キャラクターだけを抽選し, 選ばれた候補だけ発動率判定を行う. 成功時は対象リスト取得前に起点だけを変更し, 失敗時に別候補を再抽選しない.
+`TACTICS_BATTLE_SPECIAL_ELYSION`の回避効果は通常攻撃にだけ適用し, Ability回避処理の後に独立した`回避効果中か?`判定を行う. 効果中の場合は当該通常攻撃を回避したものとして反撃判定へ進む.
 
 戦闘フロー内の回避率, 状態異常回避率, 回避無効化率, 状態異常付与率, 追撃率, 反撃率, 反撃無効化率は, 対応するアビリティの`AbilityMasterData.activation_rate`を使用する.
 

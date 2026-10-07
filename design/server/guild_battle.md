@@ -276,6 +276,9 @@ sequenceDiagram
             PublicAPIServer ->> Client: GuildBattleSortie(NextRequestSequence)
         end
 
+        GameServer ->> GameServer: 出撃完了条件を満たすBattle SpecialのBP/TP回復を評価・反映
+        GameServer ->> GameServer: GuildBattlePlayerRuntimeState.attack_count += 1
+        GameServer ->> GameServer: GuildBattlePlayerRuntimeState.acquired_score += 今回取得スコア
         GameServer ->> GameServer: チェイン処理
 
         GameServer ->> GameServer: 出撃成立Replay EventをReplayQueueへ追加
@@ -284,7 +287,7 @@ sequenceDiagram
 
 #### Battle Specialイベント処理
 
-騎士団戦中は出撃判定, キャッスルブレイク判定, 戦闘開始, 迎撃, 敵全滅, スコア反映の各処理で有効な`TACTICS_EFFECT_BATTLE_SPECIAL`を評価する. `TacticsBattleSpecialType`ごとの具体効果は「[タクティクス仕様](../../specification/game/tactics.md#特殊効果系列)」を正本とする. 騎士団全体効果は対象Guildの各出撃処理へ反映し, 対戦騎士団全体へのデバフは相手Guildの各出撃処理へ反映する.
+騎士団戦中は出撃判定, キャッスルブレイク判定, 戦闘開始, 迎撃, 敵全滅, スコア反映, 出撃完了の各処理で有効な`TACTICS_EFFECT_BATTLE_SPECIAL`を評価する. `TacticsBattleSpecialType`ごとの具体効果は「[タクティクス仕様](../../specification/game/tactics.md#特殊効果系列)」を正本とする. 騎士団全体効果は対象Guildの各出撃処理へ反映し, 対戦騎士団全体へのデバフは相手Guildの各出撃処理へ反映する. `bp_recovery` / `tp_recovery`を使用する効果は出撃が成功して完了した時点でTrigger条件を評価し, 条件成立時に回復する.
 
 #### 要求処理順
 
@@ -325,15 +328,23 @@ sequenceDiagram
 
     GameServer->>GameServer: GuildBattleID・PlayerID・RequestSequence一致確認
     GameServer->>GameServer: 要求TacticsIDが編成から使用可能なタクティクスか確認
+    GameServer->>GameServer: TacticsUseConditionを確認
     GameServer->>GameServer: TP, 使用回数チェック
 
     alt 使用可能
         GameServer->>GameServer: 使用可能回数, TP処理
+        alt ランダム要素あり
+            GameServer->>GameServer: 騎士団戦の現在Random.next_u32()をSeedとして取得
+            GameServer->>GameServer: Random::new(Seed)でタクティクス固有Randomを生成
+            GameServer->>GameServer: タクティクス固有Randomでランダム結果を決定
+        else ランダム要素なし
+            GameServer->>GameServer: Seed = 0
+        end
         GameServer->>GameServer: タクティクス固有効果を適用
         GameServer->>GameServer: 継続効果はend_type・count_consume_triggerを含むTacticsActiveEffectStateとして保持
         GameServer->>GameServer: 成功した要求のRequestSequenceを1加算
-        GameServer-->>PublicAPIServer: UseTactics
-        PublicAPIServer-->>Client: UseTactics
+        GameServer-->>PublicAPIServer: UseTactics(Seed)
+        PublicAPIServer-->>Client: UseTactics(Seed)
 
         GameServer ->> GameServer: タクティクス使用成立Replay EventをReplayQueueへ追加
     else 使用不可
@@ -342,7 +353,10 @@ sequenceDiagram
     end
     
     Client->>Client: TP, 使用回数更新
+    Client->>Client: ランダム要素ありの場合はSeedからRandomを生成して同じランダム結果を再現
 ```
+
+`TACTICS_USE_CONDITION_ALL_ANNIHILATED`を満たさない要求は`API_ERROR_TACTICS_NOT_AVAILABLE`として拒否し, TP・使用可能回数・RequestSequenceを変更しない. `REVIVE` / `RESURRECTION`は対象キャラクターごとにタクティクス固有Randomを用いて1回ずつ確率判定する. 対象キャラクターの判定順序は現時点の仕様では未定義とし, 実装側で任意の順序を固定しない.
 
 ##### 回復アイテム使用時
 

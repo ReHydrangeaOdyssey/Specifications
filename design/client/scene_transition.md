@@ -39,7 +39,7 @@ stateDiagram-v2
 
 ### ホーム
 
--![home_image](../../images/home.png)
+![home_image](../../images/home.png)
 
 
 ### 騎士団戦
