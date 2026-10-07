@@ -6,7 +6,7 @@
 * `DiscordAuthorizationRequired=true`の場合, Account新規作成およびLoginにはDiscord Botが発行した`DiscordAuthorizationToken`を必須とする. 現在の運用では`DiscordAuthorizationRequired=true`とする.
 * `DiscordAuthorizationRequired=false`の場合, Discord Botを導入せずにAccount新規作成およびLoginを行える.
 * `DiscordAuthorizationRequired=true`で作成したAccountは`DiscordAuthorizationToken.sub`のDiscordUserIDをAccountへBindingし, Login時は同一DiscordUserIDのTokenだけを許可する.
-* `DiscordNotificationEnabled=true`の場合, GameServerおよびPrivate API Serverから運営向け通知をDiscord Botへ送信する. `false`の場合はBot通知を行わず, ErrorLog等の既存処理だけを行う.
+* `DiscordNotificationEnabled=true`の場合, GameServer, GuildBattleCoordinatorおよびPrivate API Serverから運営向け通知をDiscord Botへ送信する. `false`の場合はBot通知を行わず, ErrorLog等の既存処理だけを行う.
 * `ACCOUNT`と`PLAYER`は分離し, 認証主体を`ACCOUNT`, ゲーム上の主体を`PLAYER`とする.
 * 1つのAccountに同時に保持できる有効なRefresh Sessionは1つだけとする.
 * 新規Login成功時は既存Refresh Sessionを無効化してから新しいSessionを作成する.

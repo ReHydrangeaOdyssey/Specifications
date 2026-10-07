@@ -424,9 +424,9 @@ erDiagram
 ```
 
 
-`GUILD_BATTLE.game_server_instance_id`は未割当時NULLを許可する. 騎士団戦処理を開始するGameServerはPrivate API経由で未割当の騎士団戦を原子的に割当し, 割当成功時に自身の`GameServerInstanceID`を保存する. 既に他GameServerへ割当済みの場合は上書きしない. `status`, `start_at`, `game_server_instance_id`を使用する割当検索にIndexを設定する.
+`GUILD_BATTLE.game_server_instance_id`は未割当時NULLを許可する. GuildBattleCoordinatorはPrivate API経由で未割当の騎士団戦を選択したGameServerへ原子的に割当し, 割当成功時に対象`GameServerInstanceID`を保存する. GameServer自身は未割当騎士団戦を自己割当しない. 既に他GameServerへ割当済みの場合は上書きしない. `status`, `start_at`, `game_server_instance_id`を使用する割当検索にIndexを設定する.
 `SaveScheduledGuildBattles`保存時に`start_at`を`TargetDate`と`GuildBattleStartTime`からJSTで生成し, `end_at = start_at + 30分`として保存する. `initial_seed`は開戦前Preload完了まではNULLを許可し, Preload成功後にGameServerが生成したSeedを`SaveGuildBattleInitialSeed`で保存する.
-`GUILD_BATTLE_EXCLUDED_GUILD`はマッチング生成時に所属0人のため除外したGuildを対象日・開始時刻単位で保持する. 除外一覧は割当済みGameServerへ返し, 当該時間帯の所属ロック解除処理で使用する. 対象時間帯の処理完了後は削除する.
+`GUILD_BATTLE_EXCLUDED_GUILD`はマッチング生成時に所属0人のため除外したGuildを対象日・開始時刻単位で保持する. GameServerは当該時間帯の所属ロック解除処理時にPrivate APIの`GetGuildBattleExcludedGuilds`で取得する. 対象時間帯の処理完了後は削除する.
 Public API Serverは騎士団戦要求を中継する際に`GuildBattleID`から`game_server_instance_id`を取得できる. Public API Serverは取得結果をローカルキャッシュしてよいが, キャッシュは正本として扱わない.
 
 ## アリーナ

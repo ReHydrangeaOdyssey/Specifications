@@ -804,17 +804,52 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| GameServerInstanceID | `GameServerInstanceID` | 割当を要求するGameServer Instance ID |
-| TargetDate | `DateTime` | 対象日. 日付部分を使用する |
-| StartTime | `GuildBattleStartTime` | 対象開始時刻 |
-| MaxCount | `Count` | この要求で割り当てる最大騎士団戦数 |
+| GameServerInstanceID | `GameServerInstanceID` | GuildBattleCoordinatorが割当先として選択したGameServer Instance ID |
+| GuildBattleID | `GuildBattleID[]` | 対象GameServerへ割り当てる`scheduled`かつ未割当の騎士団戦ID一覧. 件数は対象GameServerの`AvailableGuildBattleCount`以下とする |
 
 ### AssignScheduledGuildBattlesResponse
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| Battles | `ScheduledGuildBattle[]` | このGameServerへ原子的に割り当てられた騎士団戦一覧 |
-| ExcludedGuildID | `GuildID[]` | 同一TargetDate・StartTimeで所属0人のため除外されたGuildID一覧. GuildID昇順 |
+| Battles | `ScheduledGuildBattle[]` | 条件一致により指定GameServerへ原子的に割り当てられた騎士団戦一覧 |
+
+### ReleaseScheduledGuildBattleAssignmentsRequest
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| GameServerInstanceID | `GameServerInstanceID` | 割当解除対象として確認する現在のGameServer Instance ID |
+| GuildBattleID | `GuildBattleID[]` | 割当解除を要求する`scheduled`騎士団戦ID一覧 |
+
+### ReleaseScheduledGuildBattleAssignmentsResponse
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| ReleasedGuildBattleID | `GuildBattleID[]` | 条件一致により実際に未割当へ戻した騎士団戦ID一覧 |
+
+### GetGameServerCapacityRequest
+
+- 要求データなし.
+
+### GetGameServerCapacityResponse
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| GameServerInstanceID | `GameServerInstanceID` | 応答したGameServer Instance ID |
+| AcceptNewGuildBattle | `Bool` | 新しい騎士団戦を割当可能な場合true. `draining`ではfalse |
+| OwnedGuildBattleCount | `Count` | 現在所有している未完了騎士団戦数 |
+| AvailableGuildBattleCount | `Count` | 現在追加で割当可能な騎士団戦数. `AcceptNewGuildBattle=false`の場合0 |
+
+### StartGuildBattlePreloadRequest
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| Battles | `ScheduledGuildBattle[]` | GuildBattleCoordinatorが当該GameServerへ割当済みとしてPreload開始を要求する騎士団戦一覧 |
+
+### StartGuildBattlePreloadResponse
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| AcceptedGuildBattleID | `GuildBattleID[]` | 自身への割当を確認し, 新規Preload対象または既存Preload対象として受理した騎士団戦ID一覧 |
 
 ### GetGuildBattleAssignmentRequest
 
@@ -899,7 +934,7 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 |---|---|---|
 | TargetDate | `DateTime` | 対象日. JSTの日付部分を使用する |
 | StartTime | `GuildBattleStartTime` | 固定開戦時刻 |
-| Battles | `ScheduledGuildBattle[]` | GameServerが生成した保存対象の騎士団戦一覧 |
+| Battles | `ScheduledGuildBattle[]` | GuildBattleCoordinatorが生成した保存対象の騎士団戦一覧 |
 
 ### SaveScheduledGuildBattlesResponse
 
@@ -926,6 +961,27 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 | 項目 | 型 | 内容 |
 |---|---|---|
 | Battles | `ScheduledGuildBattle[]` | 指定時刻に開戦予定の騎士団戦一覧 |
+
+### GetGuildBattleCoordinationStateRequest
+
+- 要求データなし.
+
+### GetGuildBattleCoordinationStateResponse
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| Battles | `GuildBattleCoordinationState[]` | `status=scheduled`の騎士団戦生成・割当状態一覧. `StartAt`, GuildBattleID昇順 |
+
+### GuildBattleCoordinationState
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| Battle | `ScheduledGuildBattle` | 対象騎士団戦IDと対戦GuildID |
+| StartAt | `DateTime` | Database上の開戦予定時刻 |
+| EndAt | `DateTime` | Database上の終了予定時刻 |
+| Status | `GuildBattleStatus` | Database上の現在状態. 本レスポンスでは`scheduled` |
+| HasAssignment | `Bool` | `game_server_instance_id`がNULLでない場合true |
+| GameServerInstanceID | `GameServerInstanceID` | `HasAssignment=true`の場合の割当先GameServer Instance ID |
 
 ### GetGuildBattleFormationRequest
 
@@ -1029,7 +1085,7 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 | 項目 | 型 | 内容 |
 |---|---|---|
 | GuildBattleID | `GuildBattleID[]` | 再抽籤対象の`PRELOAD_FAILED`騎士団戦ID一覧. GuildBattleID昇順 |
-| Battles | `ScheduledGuildBattle[]` | GameServerが再抽籤したペア一覧. GuildBattleIDは対象IDを再利用する |
+| Battles | `ScheduledGuildBattle[]` | GuildBattleCoordinatorが再抽籤したペア一覧. GuildBattleIDは対象IDを再利用する |
 
 ### RematchPreloadFailedGuildBattlesResponse
 
@@ -1058,14 +1114,14 @@ Private APIは再抽籤を行わない. `GuildBattleID[]`と`Battles[]`のID集�
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| GameServerInstanceID | `GameServerInstanceID` | 再割当先の空きGameServer |
-| GuildBattleID | `GuildBattleID[]` | 再割当する未割当騎士団戦ID一覧 |
+| GuildBattleID | `GuildBattleID[]` | GuildBattleCoordinatorへ再割当を要求する未割当騎士団戦ID一覧 |
 
 ### RetryUnassignedGuildBattleAssignmentResponse
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| Battles | `ScheduledGuildBattle[]` | 実際に再割当できた騎士団戦一覧 |
+| AssignedGuildBattleID | `GuildBattleID[]` | 空きGameServerへ再割当できた騎士団戦ID一覧 |
+| UnassignedGuildBattleID | `GuildBattleID[]` | 空き容量不足等により未割当のまま残った騎士団戦ID一覧 |
 
 ### DeleteUnassignedGuildBattlesRequest
 

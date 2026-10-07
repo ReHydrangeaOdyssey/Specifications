@@ -96,6 +96,10 @@ Token本体およびPasswordは記録しない.
 
 以下は発生時にLog Eventを追加する.
 
+* GuildBattleCoordinator起動・終了.
+* 騎士団戦マッチング生成開始・完了・失敗.
+* 騎士団戦GameServer割当・未割当.
+* GameServer水平スケーリング要求・失敗.
 * GameServer起動・終了.
 * GameServerの`ready`・`draining`遷移.
 * 騎士団戦割当・開始・終了・解放.
@@ -135,6 +139,8 @@ Metric更新はMemory上のCounterまたはHistogram更新で完結させ, 騎�
 * API要求数.
 * API拒否数および拒否理由.
 * 進行中騎士団戦数.
+* 未割当`scheduled`騎士団戦数.
+* GuildBattleCoordinatorが検出している割当可能GameServer数.
 * GameServerが所有する騎士団戦数.
 * 騎士団戦要求処理時間.
 * `RequestSequence`不一致件数.

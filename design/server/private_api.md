@@ -4,13 +4,13 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 
 - Private Network 内に配置される.
 - 認証・Account・騎士団戦ルーティング関連要求はPublic API Serverから受ける.
-- Database保存・取得要求はGameServerから受ける.
+- Database保存・取得要求はGameServerおよびGuildBattleCoordinatorから受ける.
 - `DiscordAuthorizationRequired=true`の場合, Discord BotからはRole喪失時の`RevokeDiscordSessions`だけを受け付ける.
-- Public API Server, GameServerおよびDiscord BotとPrivate API Server間の通信はmTLSを必須とし, 双方が信頼済みCAによる証明書を検証する. Clientからの直接接続を受け付けない.
-- mTLS証明書のService Identityを検証し, Public API Serverからは認証・Account・騎士団戦ルーティング関連API, GameServerからはゲームデータ関連API, Discord Botからは`RevokeDiscordSessions`だけを受け付ける. 運営用APIはmTLSで識別した運営Componentからだけ受け付ける.
+- Public API Server, GameServer, GuildBattleCoordinatorおよびDiscord BotとPrivate API Server間の通信はmTLSを必須とし, 双方が信頼済みCAによる証明書を検証する. Clientからの直接接続を受け付けない.
+- mTLS証明書のService Identityを検証し, Public API Serverからは認証・Account・騎士団戦ルーティング関連API, GameServerからはゲームデータ関連API, GuildBattleCoordinatorからは騎士団戦生成・割当・再抽籤に必要なAPI, Discord Botからは`RevokeDiscordSessions`だけを受け付ける. 運営用APIはmTLSで識別した運営Componentからだけ受け付ける.
 - Databaseへ直接接続できるApplication ComponentはPrivate API Serverだけとする.
 - AccessToken署名用秘密鍵はPrivate API Serverだけが保持する.
-- Databaseとのデータ保存・取得を仲介する. ゲームロジック上の抽選・マッチング生成はGameServerが行う.
+- Databaseとのデータ保存・取得を仲介する. Arenaの抽選はGameServer, 騎士団戦のマッチング生成はGuildBattleCoordinatorが行う.
 - 要求/レスポンスのデータ構造は[API Payload](api_payload.md)を参照する.
 - 騎士団戦中のDatabase送信失敗時は同一要求を1回だけ再試行する. Replay Workerによるリプレイログ送信も同じ規則を使用する. 再試行も失敗した場合, GameServerはDB障害発生状態へ移行し, それ以降の騎士団戦中DB送信を行わず, 本来送信するデータを`/var/lib/game-server/recovery`配下のUTF-8 JSONファイルへ保存する. Replay EventのRecovery保存はReplay Worker側で行い, 騎士団戦処理スレッドはファイルI/O完了を待機しない. 本番Kubernetes環境では同PathをGameServer専用Persistent Volumeへmountし, GameServer実行Userだけが読み書き可能とする. Recovery保存領域には運用設定で容量上限およびファイル数上限を必須設定し, 無制限に増加させない. ファイルはGameServer再起動後も保持する. 騎士団戦終了時およびGameServer起動時に残存Recoveryファイルを保存順に再送し, 全件成功時だけ対応ファイルを削除し, 途中失敗時は削除せず残す.
 - 騎士団戦中にDatabase状態を変更する要求は共通HTTP Header `X-Operation-ID`を必須とする. 値は128bit UUIDとし, 同一論理操作の初回送信, 1回再試行, Recovery再送で同じ値を使用する. Private API ServerはDatabaseトランザクション内でOperation IDの重複を検査し, 処理済みの場合は更新を再適用せず初回成功時レスポンスを返す.
@@ -347,7 +347,7 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 #### 処理内容
 
 - 指定`TargetDate`・`StartTime`を設定している通常騎士団について, GuildIDと現在の所属人数をDatabaseから取得する. システムダミーGuildID `0`は通常マッチング候補から除外して返さない.
-- 抽選, 0人除外, 並び替え, Seed生成, ペア生成, GuildBattleID生成は行わない. これらのマッチングロジックはGameServerが行う.
+- 抽選, 0人除外, 並び替え, Seed生成, ペア生成, GuildBattleID生成は行わない. これらのマッチングロジックはGuildBattleCoordinatorが行う.
 
 #### 要求・レスポンス
 
@@ -407,7 +407,7 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 
 #### 処理内容
 
-- GameServerが生成した`ScheduledGuildBattle[]`を`GUILD_BATTLE`へ`scheduled`として保存する.
+- GuildBattleCoordinatorが生成した`ScheduledGuildBattle[]`を`GUILD_BATTLE`へ`scheduled`として保存する.
 - `start_at`は`TargetDate`と`StartTime`をJSTとして結合した時刻を保存する.
 - `end_at`は`start_at + 30分`を保存する.
 - `initial_seed`はこの時点では未生成のためNULLとする.
@@ -433,22 +433,71 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 #### レスポンス
 [API Payload](api_payload.md)の「GetScheduledGuildsResponse」を参照する.
 
+### 騎士団戦Coordinator状態取得
+
+#### メソッド名
+
+`GetGuildBattleCoordinationState`
+
+#### 呼び出し元
+
+- mTLSで認証済みのGuildBattleCoordinatorだけが呼び出せる.
+
+#### 処理内容
+
+- `status=scheduled`の`GUILD_BATTLE`について, GuildBattleID, 対戦GuildID, `start_at`, `end_at`, `status`, `game_server_instance_id`を取得する.
+- `start_at`, GuildBattleID昇順で返す.
+- 固定開始時刻から生成した通常対戦だけでなく, `RetryPreloadFailedGuildBattle`で任意の`RestartAt`へ変更された対戦も対象とする.
+- 状態変更は行わない.
+- GuildBattleCoordinatorの起動時および定期Reconcileに使用する.
+
+#### 要求・レスポンス
+
+[API Payload](api_payload.md)の「GetGuildBattleCoordinationStateRequest」「GetGuildBattleCoordinationStateResponse」を参照する.
+
 ### 開戦予定騎士団戦割当
 
 #### メソッド名
 
 `AssignScheduledGuildBattles`
 
+#### 呼び出し元
+
+- 通常処理ではmTLSで認証済みのGuildBattleCoordinatorだけが呼び出せる.
+
 #### 処理内容
 
-- 指定TargetDate・StartTimeに該当し, `status=scheduled`かつ`game_server_instance_id IS NULL`の騎士団戦から最大`MaxCount`件を取得する.
-- 取得した各騎士団戦の`game_server_instance_id`を要求`GameServerInstanceID`へ更新する.
-- 取得と更新は同一トランザクションで行い, PostgreSQLの`FOR UPDATE SKIP LOCKED`を使用して複数GameServerから同時要求された場合でも同一`GuildBattleID`を複数GameServerへ割り当てない.
-- 同一TargetDate・StartTimeの`GUILD_BATTLE_EXCLUDED_GUILD`一覧も応答へ含め, 割当先GameServerへ0人除外Guild一覧を渡す.
+- 要求`GuildBattleID[]`について`status=scheduled`かつ`game_server_instance_id IS NULL`であることを確認する.
+- 条件を満たす各騎士団戦の`game_server_instance_id`をGuildBattleCoordinatorが選択した要求`GameServerInstanceID`へ更新する.
+- 取得と更新は同一トランザクションで行い, 同一`GuildBattleID`を複数GameServerへ割り当てない.
+- PostgreSQLの行Lockを使用し, 運営による手動復旧処理等と競合した場合も同一`GuildBattleID`を重複割当しない.
+- すでに割当済み, または`scheduled`以外の対象は更新せず応答`Battles`へ含めない.
 
 #### 要求・レスポンス
 
 [API Payload](api_payload.md)の「AssignScheduledGuildBattlesRequest」「AssignScheduledGuildBattlesResponse」を参照する.
+
+### 開戦予定騎士団戦割当解除
+
+#### メソッド名
+
+`ReleaseScheduledGuildBattleAssignments`
+
+#### 呼び出し元
+
+- mTLSで認証済みのGuildBattleCoordinatorだけが呼び出せる.
+
+#### 処理内容
+
+- 要求`GuildBattleID[]`のうち`status=scheduled`かつ`game_server_instance_id`が要求`GameServerInstanceID`と一致する騎士団戦だけを対象とする.
+- 対象`GUILD_BATTLE.game_server_instance_id`をNULLへ更新して未割当へ戻す.
+- `in_progress`, `resolving`, `completed`, `preload_failed`の騎士団戦は変更しない.
+- GuildID, `membership_locked`, `initial_seed`および騎士団戦結果は変更しない.
+- 更新は同一トランザクションで行う.
+
+#### 要求・レスポンス
+
+[API Payload](api_payload.md)の「ReleaseScheduledGuildBattleAssignmentsRequest」「ReleaseScheduledGuildBattleAssignmentsResponse」を参照する.
 
 ### 騎士団戦所有GameServer取得
 
@@ -460,7 +509,7 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 
 - 指定GuildBattleIDの`game_server_instance_id`をDatabaseから取得する.
 - 未割当の場合は`Exists=false`を返す.
-- Public API Serverからの要求も受け付ける.
+- Public API Server, GameServerおよびGuildBattleCoordinatorからの要求を受け付ける.
 
 #### 要求・レスポンス
 
@@ -591,11 +640,11 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 
 #### 処理内容
 
-- 本APIは抽籤を行わない. 抽籤ロジックと疑似乱数消費はGameServer側で行う.
+- 本APIは抽籤を行わない. 抽籤ロジックと疑似乱数消費はGuildBattleCoordinator側で行う.
 - 要求されたGuildBattleIDがすべて`GUILD_BATTLE_STATUS_PRELOAD_FAILED`であることを確認する.
 - 要求のGuildBattleID集合と`Battles[]`のGuildBattleID集合が一致することを確認する.
-- 同一トランザクションで各対象`GUILD_BATTLE.guild_a_id` / `guild_b_id`をGameServer生成済みペアへ更新し, `status=scheduled`, `game_server_instance_id=NULL`へ戻す.
-- 問題解決後に運営が再抽籤を選択した場合だけGameServerから呼び出す.
+- 同一トランザクションで各対象`GUILD_BATTLE.guild_a_id` / `guild_b_id`をGuildBattleCoordinator生成済みペアへ更新し, `status=scheduled`, `game_server_instance_id=NULL`へ戻す.
+- 問題解決後に運営が再抽籤を選択した場合だけGuildBattleCoordinatorから呼び出す.
 
 #### 要求・レスポンス
 
@@ -622,26 +671,6 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 #### 要求・レスポンス
 
 [API Payload](api_payload.md)の「RetryPreloadFailedGuildBattleRequest」「RetryPreloadFailedGuildBattleResponse」を参照する.
-
-### 未割当騎士団戦の運営再割当
-
-#### メソッド名
-
-`RetryUnassignedGuildBattleAssignment`
-
-#### 呼び出し元
-
-- mTLSで認証済みの運営Componentだけが呼び出せる.
-
-#### 処理内容
-
-- 指定`GuildBattleID[]`について`status=scheduled`かつ`game_server_instance_id IS NULL`であることを確認する.
-- 指定`GameServerInstanceID`へ条件を満たす対象を同一トランザクションで割り当てる.
-- すでに割当済み, または`scheduled`以外の対象は更新しない.
-
-#### 要求・レスポンス
-
-[API Payload](api_payload.md)の「RetryUnassignedGuildBattleAssignmentRequest」「RetryUnassignedGuildBattleAssignmentResponse」を参照する.
 
 ### 未割当騎士団戦の運営削除
 
