@@ -69,12 +69,19 @@
 * 開戦前処理開始時に, 対象日・開始時刻を設定している騎士団の`GUILD.membership_locked`を`true`へ更新して加入および脱退を禁止し, 所属を固定する. 所属変更禁止状態の正本はDatabaseとする.
 * 所属固定後に対戦組み合わせを生成する.
 * 対戦組み合わせ生成時は, 対象日・開始時刻ごとに, その開始時刻を設定している騎士団を抽出する.
-* 所属プレイヤーが0人の騎士団は対戦組み合わせ生成対象から除外する.
-  - 除外した騎士団も同じ開始時刻の騎士団戦終了処理時に加入・脱退禁止を解除する.
+* 所属プレイヤーが0人の騎士団は対戦組み合わせ生成対象から除外し, 除外GuildID一覧をDatabaseへ保存する.
+  - 除外したGuild一覧は同じ開始時刻の騎士団戦を割り当てられたGameServerへPrivate APIで渡す.
+  - 除外後の通常候補が0件の場合は騎士団戦を生成せず, 除外Guildの所属変更禁止を即時解除する. この状態はエラーとしてError Logへ保存し, `DiscordNotificationEnabled=true`の場合はBotへ通知する.
+  - 通常候補が存在する場合, 除外Guildの所属変更禁止は当該開始時刻の騎士団戦終了処理で解除する.
 * 抽出した騎士団一覧をGuildID昇順に並べる.
 * GameServer共通の時刻ベースSeed生成処理でマッチング用Seedを生成する.
 * GuildID昇順の騎士団一覧に, マッチング用Seedを使用して「[疑似乱数](../../design/game/pseudorandom.md)」の「[抽選](../../design/game/pseudorandom.md#抽選)」を適用し, シャッフル後の先頭から2騎士団ずつ順にペアを作成する.
-* 抽出数が奇数の場合, 最後の1騎士団は事前に作成したダミープレイヤーの初期騎士団を対戦相手とする.
+* 抽出数が奇数の場合, 最後の1騎士団はシステムダミー騎士団を対戦相手とする.
+  - ダミーPlayerIDは`0`, ダミーGuildIDは`0`とする.
+  - ダミー編成はCharacterID昇順の先頭10体を使用する.
+  - ダミーPlayerの最大BPは500, 所持Itemはなしとする.
+  - ダミーGuildの城・武器庫・食糧庫・鍛冶屋・兵法所・酒場Levelはすべて100とする.
+  - ダミーPlayer/Guildは通常Arena候補および通常騎士団戦マッチング候補から除外する.
 * `GuildBattleID`は`u64`で, `<日付(YYYYMMDD)8桁><開始時刻(GuildBattleStartTimeのEnum値)3桁><作成したペアの要素番号8桁>`を10進数として連結した値とする.
   - 数式では`GuildBattleID = YYYYMMDD * 10^11 + GuildBattleStartTimeEnumValue * 10^8 + PairIndex`とする.
   - `GuildBattleStartTimeEnumValue`は3桁, `PairIndex`は8桁として0埋めした表現に相当する.
@@ -85,13 +92,20 @@
 * 開戦前Preloadでいずれか1人のPlayerデータ取得に失敗した場合, そのPlayerが所属するGuildを含む当該1対戦だけを取りやめる. 他の騎士団戦は継続する.
 * 取りやめた対戦は`GUILD_BATTLE_STATUS_PRELOAD_FAILED`へ遷移し, `in_progress`へ遷移しない.
 * GameServerはErrorLogを保存し, `DiscordNotificationEnabled=true`の場合はBotへPreload失敗を通知する. その後の再開・再抽籤・中止は運営判断とする.
+* 問題解決後に運営が同一ペアで再開する場合は, `RetryPreloadFailedGuildBattle`で新しい開始時刻を指定して`scheduled`かつ未割当へ戻し, 通常の割当と開戦前Preloadを再実行する.
 * 問題解決後に運営が再抽籤を選択した場合, GameServerが対象GuildをGuildID昇順へ並べ, 共通時刻ベースSeedを新たに生成してShuffleする. `PRELOAD_FAILED`のGuildBattleIDを昇順に並べ, 生成したペアを順に割り当てる.
-* 再抽籤結果はPrivate APIの`RematchPreloadFailedGuildBattles`で保存し, 対象対戦を`scheduled`かつ未Claimへ戻す. 再抽籤後は通常のClaim処理と開戦前Preloadを改めて実行する.
+* 再抽籤結果はPrivate APIの`RematchPreloadFailedGuildBattles`で保存し, 対象対戦を`scheduled`かつ未割当へ戻す. 再抽籤後は通常の割当処理と開戦前Preloadを改めて実行する.
 * 運営が再抽籤せず中止すると判断した場合は, 対象Guildの`GUILD.membership_locked`を`false`へ戻して所属変更禁止を解除する.
 
 ## 勝敗条件
 タイムアップ時に最も合計「[pt](guild_battle.md#事前用語説明)」が高いほうが勝ちとなる.
 「[pt](guild_battle.md#事前用語説明)」が同じ場合は引き分け扱いとする.
+
+### 勝敗数更新対象
+
+* 通常Playerは当該騎士団戦で1回以上出撃が成立したPlayerだけを勝敗数更新対象とする.
+* ダミーPlayerID `0`は出撃回数にかかわらず勝敗数更新対象とする.
+* 引き分けの場合は勝敗数を更新しない.
 
 ## 制約
 

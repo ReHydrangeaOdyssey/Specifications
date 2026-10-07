@@ -14,6 +14,7 @@ architecture-beta
 
             group bot_container[Optional Container] in main_server
                 service bot_server(server)[Discord Bot] in bot_container
+                service operations_tool(server)[Operations Tool] in bot_container
 
             group public_api_container[Container] in main_server
                 service public_api_server(server)[GameAPIServer] in public_api_container
@@ -42,6 +43,7 @@ architecture-beta
     game_server:R --> L:bot_server
     private_api_server:R --> L:bot_server
     bot_server:B --> T:private_api_server
+    operations_tool:B --> T:private_api_server
 
     public_api_server:B --> T: game_server
     public_api_server:B --> T: private_api_server
@@ -64,9 +66,10 @@ architecture-beta
 * Public API ServerとGameServer間の通信はmTLSを必須とする. 双方は信頼済みCAによる相手証明書を検証し, 証明書検証に失敗した接続を受け付けない.
 * Public API ServerとPrivate API Server間の通信はmTLSを必須とする. 双方は信頼済みCAによる相手証明書を検証し, 証明書検証に失敗した接続を受け付けない.
 * GameServerとPrivate API Server間の通信はmTLSを必須とする. 双方は信頼済みCAによる相手証明書を検証し, 証明書検証に失敗した接続を受け付けない.
+* 運営ComponentからPrivate API Serverへの運用API通信はmTLSを必須とする. Private API Serverは運営用Service Identityを検証し, 運営API以外を許可しない.
 * `DiscordNotificationEnabled=true`の場合, GameServerまたはPrivate API ServerからDiscord Botへ送信する運営通知通信はmTLSを必須とする. Discord Botは通知送信元のService Identityを検証する.
 * `DiscordAuthorizationRequired=true`の場合, Discord BotからPrivate API Serverの`RevokeDiscordSessions`へ送信するRole喪失通知もmTLSを必須とする. Private API ServerはDiscord BotのService Identityを検証し, Discord Botから他のPrivate APIを受け付けない.
-* mTLS証明書はPublic API Server, GameServer, Private API ServerおよびDiscord Botを識別可能なService Identityを持つ. 接続先Serverは証明書のService Identityに基づき呼び出し可能なAPIを制限する.
+* mTLS証明書はPublic API Server, GameServer, Private API Server, Discord Botおよび運営Componentを識別可能なService Identityを持つ. 接続先Serverは証明書のService Identityに基づき呼び出し可能なAPIを制限する.
 * Databaseへ直接接続できるのはPrivate API Serverだけとする. Public API ServerおよびGameServerからDatabaseへ直接接続しない.
 * 認証用秘密鍵, Database認証情報, Discord Bot Token, TLS秘密鍵等の秘密情報をソースコードおよび公開リポジトリへ保存しない.
 * AccessToken署名用秘密鍵はPrivate API Serverだけが保持する. DiscordAuthorizationToken署名用秘密鍵はDiscord Botだけが保持する. Public API Serverは各Tokenの検証用公開鍵だけを保持する.
@@ -99,6 +102,7 @@ architecture-beta
 
     group operations[Optional Operations Component]
         service bot(server)[Discord Bot] in operations
+        service operations_tool_prod(server)[Operations Tool] in operations
 
     internet:B --> T:ingress
     ingress:B --> T:public_api_a
@@ -108,6 +112,7 @@ architecture-beta
     game_b:R --> L:bot
     private_api:R --> L:bot
     bot:L --> R:private_api
+    operations_tool_prod:L --> R:private_api
 
     public_api_a:B --> T:game_a
     public_api_a:R --> L:private_api
@@ -129,6 +134,7 @@ architecture-beta
 * Public API ServerおよびGameServer Podはroot filesystemをread-onlyとする. System/Access/Security Logは`stdout` / `stderr`へ出力し, Container RuntimeおよびNode上のログ収集Agentが非同期に収集する. 騎士団戦リプレイログ用の`./log/guild_battle`だけを必要なGameServerへ専用Writable Volumeとしてmountする. GameServerのDatabase障害時保存は`/var/lib/game-server/recovery`へmountした専用Persistent Volumeへの書き込みを許可する.
 * Public API ServerのKubernetes ServiceAccountには, GameServer用EndpointSliceの`get`, `list`, `watch`に必要な最小権限だけを付与する.
 * GameServerのKubernetes ServiceAccountには, 騎士団戦マッチング用Leader Electionで使用するLeaseの取得・作成・更新に必要な最小権限だけを付与する.
+* GameServer水平スケーリングは専用Controllerを介して行う. GameServer Pod自身へDeployment/StatefulSetのreplica変更権限を付与しない. Controllerだけに対象GameServer Workloadのscale変更に必要な最小権限を付与する.
 * Kubernetes APIを使用しないPodではServiceAccount Tokenを自動mountしない. Public API ServerおよびGameServerでも上記権限以外を付与しない.
 * Kubernetes Secretへ保存するmTLS秘密鍵等はetcd Encryption at Restを有効化したClusterで管理し, Secretの参照権限を対象ServiceAccountだけに限定する.
 * Public API Serverの水平スケールは通常のreplica増減を許可する. Public APIのApplication Level Rate Limitカウンタを各Podのローカルメモリだけで独立管理しない. 複数Pod間で同一カウント単位の制限結果が共有される構成とする.

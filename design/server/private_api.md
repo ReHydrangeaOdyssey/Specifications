@@ -7,7 +7,7 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 - Database保存・取得要求はGameServerから受ける.
 - `DiscordAuthorizationRequired=true`の場合, Discord BotからはRole喪失時の`RevokeDiscordSessions`だけを受け付ける.
 - Public API Server, GameServerおよびDiscord BotとPrivate API Server間の通信はmTLSを必須とし, 双方が信頼済みCAによる証明書を検証する. Clientからの直接接続を受け付けない.
-- mTLS証明書のService Identityを検証し, Public API Serverからは認証・Account・騎士団戦ルーティング関連API, GameServerからはゲームデータ関連API, Discord Botからは`RevokeDiscordSessions`だけを受け付ける.
+- mTLS証明書のService Identityを検証し, Public API Serverからは認証・Account・騎士団戦ルーティング関連API, GameServerからはゲームデータ関連API, Discord Botからは`RevokeDiscordSessions`だけを受け付ける. 運営用APIはmTLSで識別した運営Componentからだけ受け付ける.
 - Databaseへ直接接続できるApplication ComponentはPrivate API Serverだけとする.
 - AccessToken署名用秘密鍵はPrivate API Serverだけが保持する.
 - Databaseとのデータ保存・取得を仲介する. ゲームロジック上の抽選・マッチング生成はGameServerが行う.
@@ -163,8 +163,9 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 
 - `SaveGuildLeadershipRequest.RequesterPlayerID`が更新対象`GUILD.leader_player_id`と一致することをDatabase上で確認する.
 - 一致しない場合は更新せず, 団長権限なしとしてGameServerへ返す.
-- LeaderPlayerIDとSubleaderPlayerIDがともに対象Guildの`GUILD_MEMBER`に存在することを確認する.
-- LeaderPlayerIDとSubleaderPlayerIDが同一値の場合は更新しない.
+- LeaderPlayerIDが対象Guildの`GUILD_MEMBER`に存在することを確認する.
+- SubleaderPlayerIDが`0`の場合は副団長未設定として許可する. `0`以外の場合だけ対象Guildの`GUILD_MEMBER`に存在することを確認する.
+- SubleaderPlayerIDが`0`以外でLeaderPlayerIDと同一値の場合は更新しない.
 - 上記をすべて満たす場合のみ`GUILD.leader_player_id`と`GUILD.subleader_player_id`を更新する. 団長確認, 所属確認, 同一PlayerID禁止確認, 更新は同一トランザクションで行う.
 
 #### 要求データ
@@ -217,7 +218,7 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 - 同一Databaseトランザクション内でApplicantPlayerIDの現在所属Guildと加入先Guildを取得し, 両Guildの`membership_locked=false`を再確認する.
 - ApplicantPlayerIDが現在所属Guildの団長で, 団長以外のメンバーが1人以上存在する場合は加入を成立させない. 副団長にはこの制約を適用しない.
 - 対象Guildの`GUILD_MEMBER`件数を同一トランザクション内で確認し, 20人以上の場合は加入を成立させない.
-- すべての条件を満たす場合だけApplicantPlayerIDの既存`GUILD_MEMBER`を加入先Guildへ更新し, 対応する加入申請を削除する.
+- すべての条件を満たす場合だけApplicantPlayerIDの既存`GUILD_MEMBER`を加入先Guildへ更新する. ApplicantPlayerIDが加入元Guildの副団長だった場合は加入元Guildの`subleader_player_id`を`0`へ戻す. ApplicantPlayerIDが加入元Guildの団長で, 団長以外のメンバーが0人であるため移動可能な場合は加入元Guildの`leader_player_id`を`0`へ更新する. 役職更新・所属更新・対応する加入申請削除は同一トランザクションで行う.
 
 #### 要求データ
 
@@ -252,7 +253,7 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 - 同一Databaseトランザクション内でPlayerIDの現在所属Guildと招待元Guildを取得し, 両Guildの`membership_locked=false`を再確認する.
 - PlayerIDが現在所属Guildの団長で, 団長以外のメンバーが1人以上存在する場合は加入を成立させない. 副団長にはこの制約を適用しない.
 - 対象Guildの`GUILD_MEMBER`件数を同一トランザクション内で確認し, 20人以上の場合は加入を成立させない.
-- すべての条件を満たす場合だけPlayerIDの既存`GUILD_MEMBER`を招待元Guildへ更新し, 対応する招待を削除する.
+- すべての条件を満たす場合だけPlayerIDの既存`GUILD_MEMBER`を招待元Guildへ更新する. PlayerIDが加入元Guildの副団長だった場合は加入元Guildの`subleader_player_id`を`0`へ戻す. PlayerIDが加入元Guildの団長で, 団長以外のメンバーが0人であるため移動可能な場合は加入元Guildの`leader_player_id`を`0`へ更新する. 役職更新・所属更新・対応する招待削除は同一トランザクションで行う.
 
 #### 要求データ
 
@@ -268,6 +269,9 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 
 - PlayerIDの現在所属GuildIDと`GuildID = PlayerID`の初期騎士団を取得する.
 - 同一Databaseトランザクション内で脱退元Guildと復帰先初期Guildの`membership_locked=false`を再確認する. いずれかが`true`の場合は所属変更・所属スワップを行わない.
+- PlayerIDが脱退元Guildの団長で, 団長以外のメンバーが1人以上存在する場合は脱退を成立させない.
+- PlayerIDが脱退元Guildの副団長だった場合は, 所属変更と同時に脱退元Guildの`subleader_player_id`を`0`へ戻す.
+- PlayerIDが脱退元Guildの団長で, 団長以外のメンバーが0人であるため脱退可能な場合は, 所属変更と同時に脱退元Guildの`leader_player_id`を`0`へ更新する.
 - 初期騎士団の現在団長がPlayerID自身の場合は, PlayerIDだけを初期騎士団へ戻す.
 - 初期騎士団の現在団長が別Playerの場合は, PlayerIDを初期騎士団へ戻し, その現在団長PlayerをPlayerIDが直前まで所属していたGuildIDへ移動し, 初期騎士団の団長をPlayerIDへ変更する.
 - 所属スワップと団長更新は同一トランザクションで行う.
@@ -325,7 +329,7 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 
 #### 処理内容
 
-- Database上でArenaParty登録済みのPlayerIDだけをPlayerID昇順で取得し, GameServerのアリーナ抽選候補キャッシュ同期に使用する. ArenaParty未登録Playerは返さない.
+- Database上でArenaParty登録済みの通常PlayerIDだけをPlayerID昇順で取得し, GameServerのアリーナ抽選候補キャッシュ同期に使用する. ArenaParty未登録PlayerおよびシステムダミーPlayerID `0`は返さない.
 
 #### レスポンス
 
@@ -342,12 +346,58 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 
 #### 処理内容
 
-- 指定`TargetDate`・`StartTime`を設定している騎士団について, GuildIDと現在の所属人数をDatabaseから取得する.
+- 指定`TargetDate`・`StartTime`を設定している通常騎士団について, GuildIDと現在の所属人数をDatabaseから取得する. システムダミーGuildID `0`は通常マッチング候補から除外して返さない.
 - 抽選, 0人除外, 並び替え, Seed生成, ペア生成, GuildBattleID生成は行わない. これらのマッチングロジックはGameServerが行う.
 
 #### 要求・レスポンス
 
 [API Payload](api_payload.md)の「GetGuildsForBattleMatchingRequest」「GetGuildsForBattleMatchingResponse」を参照する.
+
+### 0人除外騎士団保存
+
+#### メソッド名
+
+`SaveGuildBattleExcludedGuilds`
+
+#### 処理内容
+
+- 対象日・開始時刻で所属0人のためマッチングから除外したGuildID一覧をDatabaseへ保存する.
+- 同一対象日・開始時刻の既存一覧は要求一覧で置換する.
+- GuildID=0のシステムダミーGuildは保存対象にしない.
+
+#### 要求・レスポンス
+
+[API Payload](api_payload.md)の「SaveGuildBattleExcludedGuildsRequest」「SaveGuildBattleExcludedGuildsResponse」を参照する.
+
+### 0人除外騎士団取得
+
+#### メソッド名
+
+`GetGuildBattleExcludedGuilds`
+
+#### 処理内容
+
+- 対象日・開始時刻に対応する`GUILD_BATTLE_EXCLUDED_GUILD`をGuildID昇順で返す.
+- 割当済みGameServerは本一覧を保持し, 時間帯単位の所属ロック解除処理へ使用する.
+
+#### 要求・レスポンス
+
+[API Payload](api_payload.md)の「GetGuildBattleExcludedGuildsRequest」「GetGuildBattleExcludedGuildsResponse」を参照する.
+
+### 0人除外騎士団削除
+
+#### メソッド名
+
+`ClearGuildBattleExcludedGuilds`
+
+#### 処理内容
+
+- 対象日・開始時刻の除外Guild一覧を削除する.
+- 所属ロック解除完了後に実行する.
+
+#### 要求・レスポンス
+
+[API Payload](api_payload.md)の「ClearGuildBattleExcludedGuildsRequest」「ClearGuildBattleExcludedGuildsResponse」を参照する.
 
 ### 開戦予定騎士団戦保存
 
@@ -383,21 +433,22 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 #### レスポンス
 [API Payload](api_payload.md)の「GetScheduledGuildsResponse」を参照する.
 
-### 開戦予定騎士団戦Claim
+### 開戦予定騎士団戦割当
 
 #### メソッド名
 
-`ClaimScheduledGuildBattles`
+`AssignScheduledGuildBattles`
 
 #### 処理内容
 
 - 指定TargetDate・StartTimeに該当し, `status=scheduled`かつ`game_server_instance_id IS NULL`の騎士団戦から最大`MaxCount`件を取得する.
 - 取得した各騎士団戦の`game_server_instance_id`を要求`GameServerInstanceID`へ更新する.
 - 取得と更新は同一トランザクションで行い, PostgreSQLの`FOR UPDATE SKIP LOCKED`を使用して複数GameServerから同時要求された場合でも同一`GuildBattleID`を複数GameServerへ割り当てない.
+- 同一TargetDate・StartTimeの`GUILD_BATTLE_EXCLUDED_GUILD`一覧も応答へ含め, 割当先GameServerへ0人除外Guild一覧を渡す.
 
 #### 要求・レスポンス
 
-[API Payload](api_payload.md)の「ClaimScheduledGuildBattlesRequest」「ClaimScheduledGuildBattlesResponse」を参照する.
+[API Payload](api_payload.md)の「AssignScheduledGuildBattlesRequest」「AssignScheduledGuildBattlesResponse」を参照する.
 
 ### 騎士団戦所有GameServer取得
 
@@ -550,9 +601,72 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 
 [API Payload](api_payload.md)の「RematchPreloadFailedGuildBattlesRequest」「RematchPreloadFailedGuildBattlesResponse」を参照する.
 
+### Preload失敗対戦の同一ペア再開
+
+#### メソッド名
+
+`RetryPreloadFailedGuildBattle`
+
+#### 呼び出し元
+
+- mTLSで認証済みの運営Componentだけが呼び出せる.
+
+#### 処理内容
+
+- 運営が問題解決後に同一ペアで再開すると判断した場合に使用する.
+- 対象`GuildBattleID`が`GUILD_BATTLE_STATUS_PRELOAD_FAILED`であることを確認する.
+- `guild_a_id` / `guild_b_id`は変更しない.
+- 要求`RestartAt`を新しい`start_at`とし, `end_at = RestartAt + 30分`, `initial_seed=NULL`, `status=scheduled`, `game_server_instance_id=NULL`へ更新する.
+- 保存後は通常の騎士団戦割当と開戦前Preloadを再実行する.
+
+#### 要求・レスポンス
+
+[API Payload](api_payload.md)の「RetryPreloadFailedGuildBattleRequest」「RetryPreloadFailedGuildBattleResponse」を参照する.
+
+### 未割当騎士団戦の運営再割当
+
+#### メソッド名
+
+`RetryUnassignedGuildBattleAssignment`
+
+#### 呼び出し元
+
+- mTLSで認証済みの運営Componentだけが呼び出せる.
+
+#### 処理内容
+
+- 指定`GuildBattleID[]`について`status=scheduled`かつ`game_server_instance_id IS NULL`であることを確認する.
+- 指定`GameServerInstanceID`へ条件を満たす対象を同一トランザクションで割り当てる.
+- すでに割当済み, または`scheduled`以外の対象は更新しない.
+
+#### 要求・レスポンス
+
+[API Payload](api_payload.md)の「RetryUnassignedGuildBattleAssignmentRequest」「RetryUnassignedGuildBattleAssignmentResponse」を参照する.
+
+### 未割当騎士団戦の運営削除
+
+#### メソッド名
+
+`DeleteUnassignedGuildBattles`
+
+#### 呼び出し元
+
+- mTLSで認証済みの運営Componentだけが呼び出せる.
+
+#### 処理内容
+
+- 指定`GuildBattleID[]`のうち`status=scheduled`かつ`game_server_instance_id IS NULL`の対戦だけを削除する.
+- 削除する各対戦の`guild_a_id` / `guild_b_id`について, 他に同一時間帯の未完了騎士団戦が存在しない場合は`GUILD.membership_locked=false`へ更新する.
+- 削除後に同一対象日・開始時刻の未完了騎士団戦が0件となった場合は, `GUILD_BATTLE_EXCLUDED_GUILD`に保持している0人除外Guildも`membership_locked=false`へ更新し, 対応する除外一覧を削除する.
+- 削除対象以外の騎士団戦レコードは変更しない.
+
+#### 要求・レスポンス
+
+[API Payload](api_payload.md)の「DeleteUnassignedGuildBattlesRequest」「DeleteUnassignedGuildBattlesResponse」を参照する.
+
 ### 騎士団戦ログ送信
 
-騎士団戦中の成立した各種処理について, GameServerのReplay WorkerからPrivate API Serverへリプレイログ送信が行われる. 各Payloadは`GuildBattleID`を含み, `GUILD_BATTLE_REPLAY_LOG`へ保存する.
+騎士団戦中の成立した各種処理について, GameServerのReplay WorkerからPrivate API Serverへリプレイログ送信が行われる. 各論理Payloadは「[guild_battle_replay.proto](../system/guild_battle_replay.proto)」の`GuildBattleReplayEnvelope`へ変換してProtocol BuffersでSerializeし, `GUILD_BATTLE_REPLAY_LOG.payload`へバイナリ保存する.
 通常の騎士団戦要求処理スレッドはPrivate API Serverへのリプレイログ保存完了を待機しない. 処理成立時はReplay EventをReplayQueueへ追加し, Replay Workerが成立順に送信する.
 騎士団戦作成ログだけは開戦時初期状態の保存を保証するため同期保存し, 保存成功後に`GUILD_BATTLE.status=in_progress`へ遷移する.
 ReplayQueueおよびDatabase送信失敗時の扱いは「[ログ仕様](../system/log.md)」および「騎士団戦DB送信失敗時」に従う.

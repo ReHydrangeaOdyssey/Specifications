@@ -8,6 +8,10 @@ flowchart TD;
     Start[戦闘開始];
     End[戦闘終了];
     TrunStart[ターン開始];
+    TurnStartAbility[EVERY_N_TURNS ターン開始評価];
+    BeforeActionAbility[EVERY_N_TURNS 行動前評価];
+    AfterActionAbility[EVERY_N_TURNS 行動後評価];
+    TurnEndAbility[EVERY_N_TURNS ターン終了評価];
     TrunEnd[ターン終了];
     Judgment[勝敗判定]
     CheckTurnLimit{指定ターン経過?};
@@ -22,8 +26,8 @@ flowchart TD;
     UpdateStatusAbnormality[[状態異常更新]];
     UpdateTurnEndEffect[[ターン終了時処理]];
 
-    Start --> Ability --> DetermineOrder --> PopQueue --> NextTurn 
-    NextTurn--> TrunStart --> CharacterAttack --> UpdateStatusAbnormality --> UpdateTurnEndEffect --> AddWaitCount --> TrunEnd
+    Start --> Ability --> DetermineOrder --> PopQueue --> NextTurn
+    NextTurn --> TrunStart --> TurnStartAbility --> BeforeActionAbility --> CharacterAttack --> AfterActionAbility --> UpdateStatusAbnormality --> UpdateTurnEndEffect --> TurnEndAbility --> AddWaitCount --> TrunEnd
     TrunEnd --> CheckAnnihilation
     CheckAnnihilation -- Yes --> Judgment;
     CheckAnnihilation -- No --> CheckTurnLimit;
@@ -40,6 +44,7 @@ flowchart TD;
 通常の行動順決定で敵味方の速度・フォーメーション内部値が同一となる場合も, PlayerIDの小さい順で抽選対象リストを作成する.
 戦闘中キャラクターは`BuffDebuffState`, `BuffDebuffEffectState`, `StatusAbnormalityState[]`を保持する. スキル・アビリティによるバフ・デバフ付与時は`BuffDebuffEffectState`の実値を更新し, その有無から`BuffDebuffState`を更新する. 状態異常付与・更新時は`StatusAbnormalityState[]`を更新する. フォーメーションおよびタクティクス補正はこれらのバフ・デバフ状態へ影響しない.
 暗闇状態の攻撃成功判定に失敗した場合は, `追撃は発動済み?`の判定を行わず, 直接`追撃率 > 乱数?`へ進む. この分岐は仕様上の意図した処理とする.
+`ABILITY_CONDITION_EVERY_N_TURNS`は`AbilityActivationConditionData.turn_timing`の`AbilityTurnTiming`に従い, `TURN_START`はターン開始直後, `BEFORE_ACTION`は行動キャラクターの行動直前, `AFTER_ACTION`は当該行動完了直後, `TURN_END`は状態異常更新・ターン終了時効果処理後かつターン終了直前に評価する. 現在ターン数が`condition_value`の倍数の場合に条件成立とする.
 
 ### TacticsBattleSpecialType適用
 
@@ -47,11 +52,15 @@ flowchart TD;
 
 ### ダメージ計算フロー
 
+ダメージ発生時は最初にスキルによるダメージかを判定する. スキルによるダメージは後述の「スキルダメージ計算フロー」を使用し, 通常攻撃・追撃・反撃は通常ダメージ計算を使用する.
+
 現時点で仕様上の適用位置が明確な処理だけを以下のフローへ反映する. `ABILITY_EFFECT_DAMAGE_INCREASE`, `ABILITY_EFFECT_FIXED_DAMAGE_INCREASE`, `ABILITY_EFFECT_HEAL`, `ABILITY_EFFECT_COVER`, `ABILITY_EFFECT_DRAW_AGGRO`は具体的な適用位置・対象処理が未確定のため, このフローにはまだ挿入しない.
 
 ```mermaid
 flowchart TD;
     Start[ダメージ計算開始];
+    SkillDamage{スキルによるダメージ?};
+    SkillFlow[[スキルダメージ計算]];
     Mode{騎士団戦?};
     GuildAttack[騎士団戦の攻撃力を仕様式で算出];
     GuildDefense[騎士団戦の防御力を仕様式で算出];
@@ -64,10 +73,61 @@ flowchart TD;
     MaxDamage[ダメージ = min ダメージ, 99999];
     Apply[HP反映時に小数点以下を切り捨てて減算し, HPを0未満にしない];
     End[ダメージ計算終了];
-    Start --> Mode;
+    Start --> SkillDamage;
+    SkillDamage -- Yes --> SkillFlow --> End;
+    SkillDamage -- No --> Mode;
     Mode -- Yes --> GuildAttack --> GuildDefense --> BaseDamage;
     Mode -- No --> ArenaAttack --> ArenaDefense --> BaseDamage;
     BaseDamage --> MinDamage --> Random --> RandomDamage --> MaxDamage --> Apply --> End;
+```
+
+### スキル発動
+
+`キャラクター行動`フローでスキル発動判定に成功した場合は, `SkillMasterData.effect_id`に応じて以下を処理する. 攻撃スキルでは「スキルダメージ計算フロー」を使用する. バフ, デバフ, 状態異常, 回復は各スキル仕様の効果処理を行い, 通常攻撃処理へは進まない.
+
+```mermaid
+flowchart TD;
+    Start[スキル発動開始];
+    Effect{SkillEffectID};
+    Attack[[スキルダメージ計算]];
+    Buff[バフ効果を適用];
+    Debuff[デバフ効果を適用];
+    Status[状態異常効果を適用];
+    Heal[回復効果を適用];
+    End[スキル発動終了];
+
+    Start --> Effect;
+    Effect -- ATTACK --> Attack --> End;
+    Effect -- BUFF --> Buff --> End;
+    Effect -- DEBUFF --> Debuff --> End;
+    Effect -- STATUS_ABNORMALITY --> Status --> End;
+    Effect -- HEAL --> Heal --> End;
+```
+
+### スキルダメージ計算フロー
+
+攻撃スキルの対象・HITごとに以下を実行する. スキルダメージには99,999の上限を適用しない. 最小ダメージ250の適用はダメージ乱数乗算後に行う.
+
+```mermaid
+flowchart TD;
+    Start[スキルダメージ計算開始];
+    Mode{騎士団戦?};
+    GuildAttack[騎士団戦攻撃者攻撃力を算出];
+    GuildDefense[騎士団戦攻撃対象防御力を算出];
+    ArenaAttack[アリーナ攻撃者攻撃力を算出];
+    ArenaDefense[アリーナ攻撃対象防御力を算出];
+    Correction[SkillMasterData.correction_valueをスキル補正として取得];
+    Base[ダメージ = 攻撃力 * スキル補正 - 防御力 / 3];
+    Random[対象・HITごとに1.0以上1.03以下の乱数を取得];
+    RandomDamage[ダメージ = ダメージ * 乱数];
+    Min[ダメージ = max ダメージ, 250];
+    Apply[HP反映時に小数点以下を切り捨てて減算し, HPを0未満にしない];
+    End[スキルダメージ計算終了];
+
+    Start --> Mode;
+    Mode -- Yes --> GuildAttack --> GuildDefense --> Correction;
+    Mode -- No --> ArenaAttack --> ArenaDefense --> Correction;
+    Correction --> Base --> Random --> RandomDamage --> Min --> Apply --> End;
 ```
 
 ### ダメージ乱数の消費規則
@@ -75,6 +135,8 @@ flowchart TD;
 ダメージ乱数は各対象・各HITごとに個別取得する. 1回の行動で複数対象へ命中する場合も対象ごとに取得し, 複数HITの場合も各HITごとに取得する.
 
 ### キャラクター行動
+
+`ActivateSkill`は前述の「スキル発動」フローを呼び出す. 攻撃スキルの場合はその内部で「スキルダメージ計算フロー」を使用する.
 
 ```mermaid
 flowchart TD;

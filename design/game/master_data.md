@@ -78,6 +78,7 @@ message SkillMasterData {
 message AbilityActivationConditionData {
   AbilityConditionID condition_id = 1; // アビリティの発動条件.
   uint32 condition_value = 2; // condition_idが具体値を必要とする場合の発動条件値. 論理型ConditionValue.
+  AbilityTurnTiming turn_timing = 3; // condition_idがABILITY_CONDITION_EVERY_N_TURNSの場合の評価タイミング. それ以外では参照しない.
 }
 
 message AbilityCorrectionData {
@@ -139,6 +140,7 @@ message AbilityMasterData {
 message TacticsStageEffectData {
   TacticsEffectID effect_id = 1; // 段階効果の対象となる効果種別.
   TacticsTarget target = 2; // 段階効果の対象.
+  uint32 effect_index = 6; // 同一TacticsMasterData.effects内の対象要素Index. effect_id/targetが同一の複数効果も本Indexで一意に対応付ける.
 
   oneof increase_data {
     float increase_value = 3; // 浮動小数点で表現する効果の1段階あたり増加値. 論理型CorrectionValue.
@@ -203,6 +205,7 @@ Player, Guild, 所属, 役職等の実行時可変データは加工済みマス
 * `TACTICS_EFFECT_BATTLE_SPECIAL`では`TacticsEffectData.battle_special`を使用し, 特殊効果系列, `TacticsBattleSpecialParameters`の各数値パラメータ, 適用箇所, 発動条件を保持する.
 * 上記以外の浮動小数点補正値は`TacticsEffectData.correction_value`を使用する.
 * 段階レベル`n`の最終効果値は`基本効果値 + (n - 1) * 1段階あたり増加値`で算出する. BP固定回復は`uint_value`と`increase_uint_value`, 通常補正・割合は`correction_value`と`increase_value`, Battle Specialは各パラメータと`battle_special_increase`を対応させて同じ式を適用する.
+* `TacticsStageEffectData.effect_index`は同じ`TacticsMasterData.effects`の0始まりIndexを指す. `effects[effect_index].effect_id`と`TacticsStageEffectData.effect_id`, `effects[effect_index].target`と`TacticsStageEffectData.target`は一致必須とし, 不一致はマスターデータ不正とする. 同一`effect_id + target`を複数持つ場合でも`effect_index`で対象効果を一意に識別する.
 
 ## 効果値の合算規則
 

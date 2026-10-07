@@ -1,7 +1,7 @@
 # ログ仕様
 
 ログは用途ごとにシステムログ, 騎士団戦リプレイログ, 騎士団戦システムログへ分離する.
-騎士団戦の実行速度を優先し, GameServerの騎士団戦処理スレッドではログのファイル書き込み, `stdout` / `stderr`書き込み, JSON Serialize, 外部ログ基盤への送信, Private API Serverへのログ保存要求を直接待機しない.
+騎士団戦の実行速度を優先し, GameServerの騎士団戦処理スレッドではログのファイル書き込み, `stdout` / `stderr`書き込み, JSONまたはProtocol BuffersのSerialize, 外部ログ基盤への送信, Private API Serverへのログ保存要求を直接待機しない.
 
 システムログおよび騎士団戦システムログは1行1JSON形式（UTF-8）の構造化ログとし, `stdout` / `stderr`へ出力する. 本番Kubernetes環境ではContainer RuntimeおよびNode上のログ収集Agentが非同期に収集する. GameServerは外部ログ基盤へ同期送信しない.
 騎士団戦リプレイログだけは完全再現用データとして`./log/guild_battle`配下へ専用ファイルを生成し, Databaseにも保存する.
@@ -51,7 +51,7 @@ GameServerはシステムログ用Queueと騎士団戦リプレイログ用Repla
 
 * 騎士団戦で処理が成立した場合, GameServerは状態反映および`RequestSequence`更新後に対応Replay EventをReplayQueueへ追加する.
 * Replay Event追加順は騎士団戦処理成立順と一致させる.
-* GameServerの騎士団戦処理スレッドはReplay EventのJSON Serialize, ファイル書き込み, Private API Server送信, Database保存完了を待機しない.
+* GameServerの騎士団戦処理スレッドはReplay EventのProtocol Buffers Serialize, ファイル書き込み, Private API Server送信, Database保存完了を待機しない.
 * Replay WorkerはReplayQueueを成立順に読み出し, リプレイログファイルへの追記およびPrivate API Server経由のDatabase保存を行う.
 * Replay Logは完全再現に使用するためReplay Eventを破棄しない.
 * ReplayQueueはbounded queueとし, 高水位到達をMetricへ記録する. Queue上限へ到達し新しいReplay Eventを格納できない場合だけ, Replay Eventを破棄せず空きができるまで要求処理を待機する.
@@ -98,7 +98,7 @@ Token本体およびPasswordは記録しない.
 
 * GameServer起動・終了.
 * GameServerの`ready`・`draining`遷移.
-* 騎士団戦Claim・開始・終了・解放.
+* 騎士団戦割当・開始・終了・解放.
 * GuildBattleIDとGameServerInstanceIDの所有不一致.
 * Database送信失敗およびDB障害発生状態への遷移.
 * Recoveryファイル作成・再送成功・再送失敗.
@@ -158,8 +158,11 @@ Trace Exportは騎士団戦処理スレッドから同期実行しない.
 
 ## 騎士団戦リプレイログ
 
-ファイル名は`./log/guild_battle/<生成時刻(YYYY_MMDD_HHMMSS)(JST)>_<騎士団戦ID>_replay.log`とする.
-リプレイログファイルはJSON形式（UTF-8）とし, ファイル全体を1つのJSON配列とする. 配列要素は処理成立順に追加するJSONオブジェクトで, 各オブジェクトは[API Payload](../server/api_payload.md)で定義された対応Payloadの項目名・型に従う. `ProcessType`の値から対応するPayloadを判定する.
+ファイル名は`./log/guild_battle/<生成時刻(YYYY_MMDD_HHMMSS)(JST)>_<騎士団戦ID>_replay.pb`とする.
+リプレイログのwire形式は「[guild_battle_replay.proto](guild_battle_replay.proto)」を正本とする.
+ファイルは`GuildBattleReplayEnvelope`をProtocol BuffersでSerializeし, 各Messageの前へprotobuf varintのMessage長を付与したlength-delimited Message列として処理成立順に追記する.
+JSONへ変換して保存しない. Databaseの`GUILD_BATTLE_REPLAY_LOG.payload`にも同じ`GuildBattleReplayEnvelope`のSerialize済みバイナリを保存する.
+`GuildBattleReplayEnvelope.process_type`と`oneof payload`は必ず対応する組み合わせを設定する.
 処理が成立した場合のみReplay Eventを生成する(失敗は含まれない).
 成立した処理はReplayQueueへ追加し, Replay Workerが本リプレイログへ書き出すとともに, Private API Server経由でDatabaseへ保存する.
 ログの最初から辿ることで特定地点まで完全に再現可能にする.

@@ -211,6 +211,20 @@ sequenceDiagram
             PublicAPIServer->>PublicAPIServer: RefreshTokenをHttpOnly Cookieへ設定
             PublicAPIServer-->>Client: Login(PlayerID, AccessToken)
             Client->>Client: AccessTokenをメモリへ保持
+            opt 新規プレイヤーフラグあり
+                Client->>Client: 初期騎士団作成画面でGuildName・昼夜開始時刻を確定
+                Client->>PublicAPIServer: CreateGuild(AccessToken, PlayerID, GuildName, DaytimeStartTime, NighttimeStartTime)
+                PublicAPIServer->>PrivateAPIServer: SaveGuild
+                alt 初回SaveGuild失敗
+                    PublicAPIServer->>PrivateAPIServer: 同一SaveGuild要求を1回再実行
+                end
+                alt 再実行後も失敗
+                    PublicAPIServer-->>Client: RequiredOperationErrorResponse(API_ERROR_REQUIRED_OPERATION_FAILED, 必要な処理が実行できませんでした)
+                else 初期騎士団作成成功
+                    PublicAPIServer-->>Client: CreateGuildResponse
+                    Client->>Client: 新規プレイヤーフラグ解除
+                end
+            end
         else 認証失敗
             PrivateAPIServer-->>PublicAPIServer: 認証失敗
             PublicAPIServer-->>Client: API_ERROR_INVALID_CREDENTIALS

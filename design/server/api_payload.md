@@ -152,6 +152,16 @@
 
 PublicAPIで失敗レスポンスが必要な場合は, 個別に別構造が定義されている場合を除き本構造を使用する.
 
+### RequiredOperationErrorResponse
+
+Account作成後の初期騎士団作成等, 必須の後続処理を1回再実行しても完了できない場合に使用する.
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| ErrorCode | `ApiErrorCode` | `API_ERROR_REQUIRED_OPERATION_FAILED` |
+| Message | `String` | 固定文字列`必要な処理が実行できませんでした` |
+
+
 ## システム
 
 ### CreateAccountRequest
@@ -193,6 +203,15 @@ RefreshTokenはResponse Bodyへ含めず, Public API Serverが`__Host-RefreshTok
 |---|---|---|
 | ErrorCode | `ApiErrorCode` | `API_ERROR_CLIENT_VERSION_MISMATCH` |
 | RequiredVersion | `Version` | Public API Serverが要求するVersion. ClientはこのVersionへの更新をユーザーへ促す |
+
+### ClientVersionMismatchResponse
+
+アリーナ対戦開始・騎士団戦参加時にClientVersionと対象GameServerのVersionが一致しない場合に使用する.
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| ErrorCode | `ApiErrorCode` | `API_ERROR_CLIENT_VERSION_MISMATCH` |
+| RequiredVersion | `Version` | 対象GameServerが使用するVersion. ClientはこのVersionへの更新をユーザーへ促す |
 
 ### RefreshAccessTokenRequest
 
@@ -310,7 +329,7 @@ Rotation後RefreshTokenはResponse Bodyへ含めず, Public API Serverが`__Host
 | PlayerID | `PlayerID` | 変更要求を行うプレイヤーID |
 | GuildID | `GuildID` | 役職を変更する騎士団ID |
 | LeaderPlayerID | `PlayerID` | 変更後の団長PlayerID |
-| SubleaderPlayerID | `PlayerID` | 変更後の副団長PlayerID |
+| SubleaderPlayerID | `PlayerID` | 変更後の副団長PlayerID. `0`は副団長未設定を表す |
 
 ### UpdateGuildLeadershipResponse
 
@@ -341,8 +360,11 @@ Rotation後RefreshTokenはResponse Bodyへ含めず, Public API Serverが`__Host
 |---|---|---|
 | AccessToken | `AccessToken` | 認証に使用するAccessToken |
 | PlayerID | `PlayerID` | プレイヤーID |
+| ClientVersion | `Version` | Clientが現在使用しているゲームロジック・マスターデータVersion. GameServer自身のVersionと一致必須 |
 | Mode | `ArenaMode` | 対戦モード |
 | OpponentID | `PlayerID` | 対戦相手PlayerID. `Mode=friend` の場合に使用 |
+| LocalFormationID | `FormationID` | Clientがローカル保存している自分側Arena編成のFormationID |
+| LocalCharacters | `ArenaPartyCharacter[]` | Clientがローカル保存している自分側Arena編成.1～5件 |
 
 ### ArenaBattleResponse
 
@@ -350,6 +372,9 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 
 | 項目 | 型 | 内容 |
 |---|---|---|
+| OwnPartyMatched | `Bool` | Client送信のローカル編成とDatabase上の自分側ArenaPartyが完全一致する場合true |
+| OwnFormationID | `FormationID` | Database上の自分側FormationID. `OwnPartyMatched=false`の場合はClientが本値でローカル編成を更新して使用する |
+| OwnCharacters | `ArenaPartyCharacter[]` | Database上の自分側ArenaParty. `OwnPartyMatched=false`の場合はClientが本値でローカル編成を更新して使用する |
 | EnemyFormationID | `FormationID` | 戦闘開始時点の相手フォーメーションID |
 | EnemyCharacters | `BattleCharacterStatus[]` | 戦闘開始時点の相手キャラクターステータス. 最大5件 |
 | Seed | `Seed` | GameServerとClientが同じ戦闘を実行するために使用するシード値 |
@@ -381,14 +406,20 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 |---|---|---|
 | AccessToken | `AccessToken` | 認証に使用するAccessToken |
 | PlayerID | `PlayerID` | プレイヤーID |
+| ClientVersion | `Version` | Clientが現在使用しているゲームロジック・マスターデータVersion. 所有GameServerのVersionと一致必須 |
 | GuildID | `GuildID` | 参加要求する騎士団ID |
 | GuildBattleID | `GuildBattleID` | 参加対象の騎士団戦ID |
+| LocalFormationID | `FormationID` | Clientがローカル保存している騎士団戦編成のFormationID |
+| LocalCharacters | `GuildBattlePartyCharacter[10]` | Clientがローカル保存している騎士団戦編成 |
 
 ### GuildBattleJoinResponse
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| Characters | `FormationCharacterHP[10]` | 編成IDと現在HPの一覧 |
+| PartyMatched | `Bool` | Client送信のローカル編成とGameServerがPreload済みのServer編成が完全一致する場合true |
+| ServerFormationID | `FormationID` | GameServerが保持する騎士団戦FormationID. `PartyMatched=false`の場合はClientが本値でローカル編成を更新する |
+| ServerCharacters | `GuildBattlePartyCharacter[10]` | GameServerが保持する騎士団戦編成. `PartyMatched=false`の場合はClientが本値でローカル編成を更新する |
+| Characters | `FormationCharacterHP[10]` | Server編成の編成IDと現在HPの一覧 |
 | RequestSequence | `RequestSequence` | 参加時に割り当てられたプレイヤー固有の要求シーケンス番号 |
 
 ### GetGuildBattleStatusRequest
@@ -733,7 +764,7 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 | RequesterPlayerID | `PlayerID` | 役職変更を要求したPlayerID. 現在の団長であることをPrivate APIで検証する |
 | GuildID | `GuildID` | 更新対象の騎士団ID |
 | LeaderPlayerID | `PlayerID` | 保存する団長PlayerID. 対象Guild所属Playerのみ指定可能 |
-| SubleaderPlayerID | `PlayerID` | 保存する副団長PlayerID. 対象Guild所属Playerのみ指定可能かつLeaderPlayerIDと同一値不可 |
+| SubleaderPlayerID | `PlayerID` | 保存する副団長PlayerID. `0`は未設定. `0`以外は対象Guild所属Playerのみ指定可能かつLeaderPlayerIDと同一値不可 |
 
 ### SetGuildMembershipLockRequest
 
@@ -769,20 +800,21 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 | FormationID | `FormationID` | `PlayerExists=true`かつ`ArenaPartyRegistered=true`の場合のフォーメーションID |
 | Characters | `ArenaPartyCharacter[]` | `PlayerExists=true`かつ`ArenaPartyRegistered=true`の場合のキャラクター情報.1～5件 |
 
-### ClaimScheduledGuildBattlesRequest
+### AssignScheduledGuildBattlesRequest
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| GameServerInstanceID | `GameServerInstanceID` | Claimを要求するGameServer Instance ID |
+| GameServerInstanceID | `GameServerInstanceID` | 割当を要求するGameServer Instance ID |
 | TargetDate | `DateTime` | 対象日. 日付部分を使用する |
 | StartTime | `GuildBattleStartTime` | 対象開始時刻 |
-| MaxCount | `Count` | この要求でClaimする最大騎士団戦数 |
+| MaxCount | `Count` | この要求で割り当てる最大騎士団戦数 |
 
-### ClaimScheduledGuildBattlesResponse
+### AssignScheduledGuildBattlesResponse
 
 | 項目 | 型 | 内容 |
 |---|---|---|
 | Battles | `ScheduledGuildBattle[]` | このGameServerへ原子的に割り当てられた騎士団戦一覧 |
+| ExcludedGuildID | `GuildID[]` | 同一TargetDate・StartTimeで所属0人のため除外されたGuildID一覧. GuildID昇順 |
 
 ### GetGuildBattleAssignmentRequest
 
@@ -824,6 +856,42 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 |---|---|---|
 | GuildID | `GuildID` | 対象騎士団ID |
 | MemberCount | `Count` | 現在の所属プレイヤー数 |
+
+### SaveGuildBattleExcludedGuildsRequest
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| TargetDate | `DateTime` | 対象日. JSTの日付部分を使用する |
+| StartTime | `GuildBattleStartTime` | 固定開戦時刻 |
+| GuildID | `GuildID[]` | 所属0人のため除外したGuildID一覧. GuildID昇順 |
+
+### SaveGuildBattleExcludedGuildsResponse
+
+- 保存完了とする.
+
+### GetGuildBattleExcludedGuildsRequest
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| TargetDate | `DateTime` | 対象日. JSTの日付部分を使用する |
+| StartTime | `GuildBattleStartTime` | 固定開戦時刻 |
+
+### GetGuildBattleExcludedGuildsResponse
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| GuildID | `GuildID[]` | 所属0人のため除外されたGuildID一覧. GuildID昇順 |
+
+### ClearGuildBattleExcludedGuildsRequest
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| TargetDate | `DateTime` | 対象日. JSTの日付部分を使用する |
+| StartTime | `GuildBattleStartTime` | 固定開戦時刻 |
+
+### ClearGuildBattleExcludedGuildsResponse
+
+- 削除完了とする.
 
 ### SaveScheduledGuildBattlesRequest
 
@@ -904,7 +972,7 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| PlayerID | `PlayerID[]` | Database上でArenaParty登録済みのPlayerID一覧. ArenaParty未登録Playerは含めず, PlayerID昇順で返す |
+| PlayerID | `PlayerID[]` | Database上でArenaParty登録済みの通常PlayerID一覧. ArenaParty未登録PlayerおよびシステムダミーPlayerID `0`は含めず, PlayerID昇順で返す |
 
 ### GetGuildMembersRequest
 
@@ -971,12 +1039,52 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 
 Private APIは再抽籤を行わない. `GuildBattleID[]`と`Battles[]`のID集合が一致すること, 対象がすべて`GUILD_BATTLE_STATUS_PRELOAD_FAILED`であることを確認し, `guild_a_id` / `guild_b_id`を更新して`status=scheduled`, `game_server_instance_id=NULL`へ戻す.
 
+### RetryPreloadFailedGuildBattleRequest
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| GuildBattleID | `GuildBattleID` | 同一ペアで再開する`PRELOAD_FAILED`騎士団戦ID |
+| RestartAt | `DateTime` | 再開後の新しい開戦時刻. `end_at`は本時刻+30分で保存する |
+
+### RetryPreloadFailedGuildBattleResponse
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| Battle | `ScheduledGuildBattle` | 同一ペアのまま`scheduled`へ戻した騎士団戦 |
+| StartAt | `DateTime` | 保存後の新しい開戦時刻 |
+| EndAt | `DateTime` | 保存後の終了時刻 |
+
+### RetryUnassignedGuildBattleAssignmentRequest
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| GameServerInstanceID | `GameServerInstanceID` | 再割当先の空きGameServer |
+| GuildBattleID | `GuildBattleID[]` | 再割当する未割当騎士団戦ID一覧 |
+
+### RetryUnassignedGuildBattleAssignmentResponse
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| Battles | `ScheduledGuildBattle[]` | 実際に再割当できた騎士団戦一覧 |
+
+### DeleteUnassignedGuildBattlesRequest
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| GuildBattleID | `GuildBattleID[]` | 削除する未割当騎士団戦ID一覧 |
+
+### DeleteUnassignedGuildBattlesResponse
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| DeletedGuildBattleID | `GuildBattleID[]` | 実際に削除した騎士団戦ID一覧 |
+
 ### SaveErrorLogRequest
 
 | 項目 | 型 | 内容 |
 |---|---|---|
 | Time | `GameServerTime` | GameServerの受信時刻 |
-| GuildBattleID | `GuildBattleID` | 騎士団戦に紐づく場合の騎士団戦ID |
+| GuildBattleID | `GuildBattleID` | 騎士団戦に紐づく場合の騎士団戦ID. 騎士団戦未生成の時間帯エラー等では`0`を指定し, Database保存時はNULLとして扱う |
 | ErrorLog | `ErrorLogMessage` | 追記するエラーログ文字列 |
 
 ### UpdatePlayerGuildBattleRecordRequest
@@ -996,6 +1104,8 @@ Private APIは再抽籤を行わない. `GuildBattleID[]`と`Battles[]`のID集�
 | Result | `GuildBattleResult` | 勝敗結果 |
 
 
+騎士団戦Replayのwire形式は「[guild_battle_replay.proto](../system/guild_battle_replay.proto)」を正本とする. `ProcessType`は各個別Payloadではなく`GuildBattleReplayEnvelope.process_type`に保持する. 以下のReplay Payload表は`oneof payload`へ格納する論理項目の説明として維持する.
+
 ### GuildBattleReplayPlayerSnapshot
 
 騎士団戦開始時点でGameServerの騎士団戦データとして保持するプレイヤーの可変データを保存する.
@@ -1005,7 +1115,7 @@ Private APIは再抽籤を行わない. `GuildBattleID[]`と`Battles[]`のID集�
 | PlayerID | `PlayerID` | プレイヤーID |
 | MaxBP | `BP` | 騎士団戦開始時点の最大BP. 開始時の現在BPはこの値と同じ |
 | FormationID | `FormationID` | 開始時点の騎士団戦フォーメーションID |
-| Characters | `GuildBattlePartyCharacter[10]` | 開始時点の騎士団戦編成 |
+| Characters | `GuildBattlePartyCharacter[]` | 開始時点の騎士団戦編成. 有効Characterだけを`party_slot_no`付きで保存する |
 | Items | `PlayerItemData[]` | 開始時点の所持アイテム一覧 |
 
 ### GuildBattleReplayGuildSnapshot
@@ -1016,7 +1126,7 @@ Private APIは再抽籤を行わない. `GuildBattleID[]`と`Battles[]`のID集�
 | MemberPlayerID | `PlayerID[]` | 開始時点の所属メンバー一覧 |
 | Participants | `GuildBattleReplayPlayerSnapshot[]` | 開始時点でGameServerの騎士団戦データとして保持するプレイヤーのスナップショット |
 
-`MemberPlayerID`には所属メンバー全員を保存する. 開戦前データ取得に失敗したPlayerIDは騎士団への所属・参加資格から除外せず, 当該騎士団戦でGameServerが保持する騎士団戦データからのみ除外する. `Participants`には開戦時点でGameServerの騎士団戦データとして保持できたプレイヤーのみを保存する.
+`MemberPlayerID`には所属メンバー全員を保存する. 開戦前Preloadで必須データ取得に1件でも失敗した場合は当該対戦を`GUILD_BATTLE_STATUS_PRELOAD_FAILED`として開戦しないため, Create Replayは生成しない. `Participants`にはPreload成功後にGameServerが保持している通常Playerのスナップショットを保存する. システムダミーGuildを含む場合はPlayerID `0`のダミースナップショットも保存する.
 
 ### GuildBattleInitialSnapshot
 
@@ -1032,7 +1142,6 @@ Private APIは再抽籤を行わない. `GuildBattleID[]`と`Battles[]`のID集�
 |---|---|---|
 | Time | `GameServerTime` | GameServer受信時刻 |
 | GuildBattleID | `GuildBattleID` | ログ対象の騎士団戦ID |
-| ProcessType | `GuildBattleReplayProcessType` | 処理の種類. `create` |
 | InitialSeed | `Seed` | 騎士団戦の初期シード |
 | GuildID | `GuildID[2]` | 対戦する2騎士団のID |
 | InitialSnapshot | `GuildBattleInitialSnapshot` | 開戦時点の騎士団レベル, 所属メンバー, 参加者の最大BP・編成・所持アイテム等の初期状態 |
@@ -1044,7 +1153,6 @@ Private APIは再抽籤を行わない. `GuildBattleID[]`と`Battles[]`のID集�
 |---|---|---|
 | Time | `GameServerTime` | GameServerが参加要求を受信した時刻 |
 | GuildBattleID | `GuildBattleID` | 騎士団戦ID |
-| ProcessType | `GuildBattleReplayProcessType` | 処理の種類. `join` |
 | PlayerID | `PlayerID` | 参加したPlayerID |
 
 ### GuildBattleSortieLogPayload
@@ -1053,10 +1161,9 @@ Private APIは再抽籤を行わない. `GuildBattleID[]`と`Battles[]`のID集�
 |---|---|---|
 | Time | `GameServerTime` | GameServer受信時刻 |
 | GuildBattleID | `GuildBattleID` | ログ対象の騎士団戦ID |
-| ProcessType | `GuildBattleReplayProcessType` | 処理の種類. `sortie` |
 | Sequence | `Sequence` | 出撃時のシーケンス番号 |
 | PlayerID | `PlayerID` | 出撃したPlayerID |
-| SelectID | `FormationSlotID[5]` | 出撃時に選択した編成ID. 未使用スロットは`255` |
+| SelectID | `FormationSlotID[]` | 出撃時に選択した有効な編成IDを選択順で保存する. 最大5件 |
 
 ### GuildBattleTacticsLogPayload
 
@@ -1064,7 +1171,6 @@ Private APIは再抽籤を行わない. `GuildBattleID[]`と`Battles[]`のID集�
 |---|---|---|
 | Time | `GameServerTime` | GameServer受信時刻 |
 | GuildBattleID | `GuildBattleID` | ログ対象の騎士団戦ID |
-| ProcessType | `GuildBattleReplayProcessType` | 処理の種類. `tactics` |
 | PlayerID | `PlayerID` | 使用したPlayerID |
 | TacticsID | `TacticsID` | 使用したタクティクスID |
 
@@ -1074,7 +1180,6 @@ Private APIは再抽籤を行わない. `GuildBattleID[]`と`Battles[]`のID集�
 |---|---|---|
 | Time | `GameServerTime` | GameServer受信時刻 |
 | GuildBattleID | `GuildBattleID` | ログ対象の騎士団戦ID |
-| ProcessType | `GuildBattleReplayProcessType` | 処理の種類. `item` |
 | PlayerID | `PlayerID` | 使用したPlayerID |
 | ItemID | `ItemID` | 使用したアイテムID |
 
@@ -1084,7 +1189,6 @@ Private APIは再抽籤を行わない. `GuildBattleID[]`と`Battles[]`のID集�
 |---|---|---|
 | Time | `GameServerTime` | GameServer受信時刻 |
 | GuildBattleID | `GuildBattleID` | ログ対象の騎士団戦ID |
-| ProcessType | `GuildBattleReplayProcessType` | 処理の種類. `heal` |
 | PlayerID | `PlayerID` | 対象PlayerID |
 | HealState | `HealState` | 回復状態 |
 
@@ -1094,7 +1198,6 @@ Private APIは再抽籤を行わない. `GuildBattleID[]`と`Battles[]`のID集�
 |---|---|---|
 | Time | `GameServerTime` | GameServer受信時刻 |
 | GuildBattleID | `GuildBattleID` | ログ対象の騎士団戦ID |
-| ProcessType | `GuildBattleReplayProcessType` | 処理の種類. `revive` |
 | PlayerID | `PlayerID` | 対象PlayerID |
 | ReviveState | `ReviveState` | 復活状態 |
 

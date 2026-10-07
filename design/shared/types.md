@@ -44,7 +44,9 @@
 
 ### ID予約値
 
-* `AccountID`および`PlayerID`は `0` と `u64::MAX` を予約済み無効値とし, 有効なIDとして使用しない.
+* `AccountID`は`0`と`u64::MAX`を予約済み無効値とし, 有効なIDとして使用しない.
+* `PlayerID`および`GuildID`の`0`はシステム予約値とし, 通常のプレイヤー・騎士団では使用しない. 騎士団戦用のダミープレイヤーおよびダミー騎士団だけが`PlayerID=0`, `GuildID=0`を使用する. Clientから通常IDとして`0`を指定することはできない.
+* `PlayerID`の`u64::MAX`は予約済み無効値とし, 有効なIDとして使用しない.
 * `DiscordUserID`は`0`を予約済み無効値とし, Discord追加認可を使用しない内部Payloadで未指定を表す場合に使用する.
 * `DiscordAuthorizationTokenID`は全byteが`0`の値を予約済み無効値とする.
 * `PlayerID`について, ClientがPlayerIDを未取得の場合の初期値は`0`とする.
@@ -372,6 +374,19 @@ enum AbilityConditionID {
 
 `ABILITY_CONDITION_EVERY_N_TURNS`および`ABILITY_CONDITION_HP_AT_OR_BELOW_THRESHOLD`の具体値は, 加工済みアビリティマスターデータの`AbilityMasterData.activation_condition.condition_value`で保持する.
 
+### AbilityTurnTiming
+
+`AbilityTurnTiming`は`ABILITY_CONDITION_EVERY_N_TURNS`の評価タイミングを表す. 同一AbilityIDについて各タイミングで条件成立しても, 1ターン内発動済み規則を優先する.
+
+```proto
+enum AbilityTurnTiming {
+  ABILITY_TURN_TIMING_TURN_START = 0; // ターン開始直後に評価する.
+  ABILITY_TURN_TIMING_BEFORE_ACTION = 1; // 行動キャラクターの行動直前に評価する.
+  ABILITY_TURN_TIMING_AFTER_ACTION = 2; // 行動キャラクターの行動完了直後に評価する.
+  ABILITY_TURN_TIMING_TURN_END = 3; // 状態異常更新・ターン終了時効果処理後, ターン終了直前に評価する.
+}
+```
+
 ### TacticsTarget
 
 タクティクス効果対象を表す.
@@ -436,11 +451,9 @@ PublicAPIの共通エラーコード. 現行仕様で判明している失敗条
 ```proto
 enum ApiErrorCode {
   API_ERROR_UNSPECIFIED = 0; // 未分類のAPIエラー.
-  API_ERROR_INVALID_TOKEN = 1; // 旧Startup Token方式で使用していた予約済みエラー. 現行仕様では使用しない.
   API_ERROR_INVALID_ACCESS_TOKEN = 2; // AccessTokenが不正.
   API_ERROR_INVALID_USER_NAME = 3; // UserNameが不正.
   API_ERROR_INVALID_PLAYER_ID = 4; // PlayerIDが不正.
-  API_ERROR_INVALID_SESSION = 5; // 旧SessionID PublicAPI方式で使用していた予約済みエラー. 現行仕様では使用しない.
   API_ERROR_NO_OPPONENT_AVAILABLE = 6; // 対戦可能な相手が存在しない.
   API_ERROR_GUILD_BATTLE_JOIN_NOT_ALLOWED = 7; // 騎士団戦への参加条件を満たさない.
   API_ERROR_GUILD_BATTLE_PARTY_UPDATE_NOT_ALLOWED = 8; // 騎士団戦編成を変更できない.
@@ -464,7 +477,6 @@ enum ApiErrorCode {
   API_ERROR_INVALID_CREDENTIALS = 26; // LoginID不存在またはPassword不一致.
   API_ERROR_INVALID_LOGIN_ID = 27; // LoginIDが不正.
   API_ERROR_INVALID_PASSWORD = 28; // Passwordが不正.
-  API_ERROR_LOGIN_ID_ALREADY_EXISTS = 29; // 旧仕様でLoginID重複をClientへ通知するために使用していた予約済みエラー. 現行仕様では使用しない.
   API_ERROR_INVALID_REFRESH_TOKEN = 30; // RefreshTokenが不正または期限切れ.
   API_ERROR_GAME_SERVER_UNAVAILABLE = 31; // 対象騎士団戦を所有するGameServerへ到達できない.
   API_ERROR_DISCORD_AUTHORIZATION_REQUIRED = 32; // 現在の構成でDiscord追加認可が必須だがDiscordAuthorizationTokenが指定されていない.
@@ -476,6 +488,7 @@ enum ApiErrorCode {
   API_ERROR_INVALID_GUILD_LEADERSHIP_TARGET = 38; // 団長・副団長候補が対象Guild所属ではない, または団長と副団長が同一PlayerIDである.
   API_ERROR_GUILD_LEADER_MOVE_NOT_ALLOWED = 39; // 団長以外のメンバーが存在する騎士団の団長が加入申請または招待によって別Guildへ移動しようとした.
   API_ERROR_ACCOUNT_CREATION_FAILED = 40; // Accountを作成できなかった. LoginID重複を含むDatabase上のAccount作成失敗理由はClientへ区別して返さない.
+  API_ERROR_REQUIRED_OPERATION_FAILED = 41; // Account作成後などに必須の後続処理を再試行しても完了できなかった.
 }
 ```
 
@@ -711,15 +724,16 @@ message TacticsHpRecoveryData {
 }
 
 message TacticsActiveEffectState {
-  TacticsEffectID effect_id = 1; // 継続中の効果種別.
-  TacticsTarget target = 2; // 継続中の効果対象. OPPONENT_PARTYは出撃ごとにその時点の対戦相手パーティへ再Bindする.
-  float effect_value = 3; // スカラー値で表現する効果の現在値. 論理型CorrectionValue.
-  uint64 expires_at = 4; // DURATION型の絶対終了時刻. UNIX epochからの経過マイクロ秒. 論理型GameServerTime. DURATION以外では0.
-  uint32 remaining_count = 5; // 残り効果回数. 論理型Count.
-  TacticsBattleSpecialData battle_special = 6; // effect_idがBATTLE_SPECIALの場合に保持する特殊効果データ.
-  TacticsCountConsumeTrigger count_consume_trigger = 7; // COUNT型効果の残り回数を消費するイベント. COUNT以外では参照しない.
-  TacticsEndType end_type = 8; // 継続中効果の終了方式.
-  bool erase_consumed = 9; // ERASEが最初の通常攻撃ダメージを0にする効果をすでに消費した場合true. ERASE以外ではfalse.
+  uint32 tactics_id = 1; // この継続効果を生成したタクティクスID. 論理型TacticsID. 同一タクティクス再使用判定に使用する.
+  TacticsEffectID effect_id = 2; // 継続中の効果種別.
+  TacticsTarget target = 3; // 継続中の効果対象. OPPONENT_PARTYは出撃ごとにその時点の対戦相手パーティへ再Bindする.
+  float effect_value = 4; // スカラー値で表現する効果の現在値. 論理型CorrectionValue.
+  uint64 expires_at = 5; // DURATION型の絶対終了時刻. UNIX epochからの経過マイクロ秒. 論理型GameServerTime. DURATION以外では0.
+  uint32 remaining_count = 6; // 残り効果回数. 論理型Count.
+  TacticsBattleSpecialData battle_special = 7; // effect_idがBATTLE_SPECIALの場合に保持する特殊効果データ.
+  TacticsCountConsumeTrigger count_consume_trigger = 8; // COUNT型効果の残り回数を消費するイベント. COUNT以外では参照しない.
+  TacticsEndType end_type = 9; // 継続中効果の終了方式.
+  bool erase_consumed = 10; // ERASEが最初の通常攻撃ダメージを0にする効果をすでに消費した場合true. ERASE以外ではfalse.
 }
 
 ```
@@ -727,7 +741,7 @@ message TacticsActiveEffectState {
 `PartyCharacterStatus`は編成時専用の状態とし, 現在HPを保持しない. `max_hp` / `attack` / `defense`には従者補正だけを適用した値を保持する. パーティランク算出ではこの構造を使用する.
 `SkillBattleState`および`AbilityBattleState`は戦闘中だけ使用する実行時状態とし, Databaseへ永続化しない. `AbilityBattleState`の発動済み管理はAbilityID単位で行い, Effect単位では共有しない.
 `CharacterBattle` の `hp` / `attack` / `defense` は従者等の補正適用後に戦闘計算で使用する値であるため, 戦闘仕様に従い `Float32` とする. プレイヤーへ表示する際の丸めは各仕様書の表示規則に従う. `buff_debuff_state`は`buff_debuff_effect`に含まれるスキル・アビリティ由来のバフ・デバフ有無から更新する. `status_abnormalities`は状態異常ごとの経過ターンおよび毒周期カウントを保持する.
-`TacticsActiveEffectState`は騎士団戦中にGameServerが保持する継続中タクティクス効果の状態とする. DURATION型は`expires_at`へ絶対終了時刻を保持し, 現在時刻が`expires_at`以上の場合に無効化して削除する. 残り秒数を定期減算しない. COUNT型では`count_consume_trigger`を使用し, `end_type`に従って終了判定する. `TacticsBattleSpecialData`は`TACTICS_EFFECT_BATTLE_SPECIAL`の具体的な特殊効果を表す.
+`TacticsActiveEffectState`は騎士団戦中にGameServerが保持する継続中タクティクス効果の状態とする. `tactics_id`を保持し, 同一タクティクスの再使用と別タクティクス由来の同系列効果を区別する. DURATION型は`expires_at`へ絶対終了時刻を保持し, 現在時刻が`expires_at`以上の場合に無効化して削除する. 残り秒数を定期減算しない. COUNT型では`count_consume_trigger`を使用し, `end_type`に従って終了判定する. `TacticsBattleSpecialData`は`TACTICS_EFFECT_BATTLE_SPECIAL`の具体的な特殊効果を表す.
 
 ## 疑似乱数内部型
 

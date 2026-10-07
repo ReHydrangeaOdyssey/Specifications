@@ -34,10 +34,12 @@
 * 戦闘不能時に発動する.
 * 通常攻撃時に発動する.
 * 一定ターン毎に発動する.
+  - `AbilityActivationConditionData.turn_timing`で, ターン開始・行動前・行動後・ターン終了のいずれで評価するかを指定する.
 * 被攻撃時に発動する.
 * 一定HP以下で発動する.
 * 「[キャッスルブレイク](guild_battle.md#キャッスルブレイク)」時に発動する.
 
+`ABILITY_CONDITION_EVERY_N_TURNS`の`condition_value`は発動間隔となるターン数を表し, `turn_timing`に設定したタイミングで現在ターン数が指定間隔の倍数の場合に条件成立とする.
 `ABILITY_CONDITION_HP_AT_OR_BELOW_THRESHOLD`の`condition_value`は最大HPに対する割合を整数のパーセント値で保持する. 例えば`25`は最大HPの25%を表す.
 
 各アビリティは1ターンに1回しか発動しない. 発動済み判定はEffect単位ではなくAbilityID単位で行う.

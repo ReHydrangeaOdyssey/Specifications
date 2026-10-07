@@ -121,6 +121,11 @@ Discord Botから`RevokeDiscordSessions`を受信した場合は, 指定DiscordU
 * `LeaveGuild`では脱退元Guildおよび復帰先の初期Guildの`membership_locked=false`を同一トランザクション内で確認する. いずれかがロック中の場合は所属変更・所属スワップを行わない.
 * `GUILD.daytime_start_time`は`GUILD_BATTLE_START_1130`, `GUILD_BATTLE_START_1215`, `GUILD_BATTLE_START_1300`のいずれか1つとする.
 * `GUILD.nighttime_start_time`は`GUILD_BATTLE_START_2100`, `GUILD_BATTLE_START_2200`, `GUILD_BATTLE_START_2300`のいずれか1つとする.
+* `PlayerID=0`および`GuildID=0`は騎士団戦用のシステムダミー専用とする. 通常のAccount・Player・Guildへ割り当てない.
+* システムダミーPlayerは`PLAYER.id=0`, `max_bp=500`とし, 認証対象ではないため`account_id`はNULLを許可する. `PLAYER_ITEM`は保持しない.
+* システムダミーPlayerID `0`は`ACCOUNT`との1:1関係の例外とし, `PLAYER.account_id=NULL`を許可する. 通常Playerでは`account_id`を必須とし1:1関係を維持する.
+* システムダミーGuildは`GUILD.id=0`, `leader_player_id=0`, `subleader_player_id=0`, `membership_locked=false`とし, 城・武器庫・食糧庫・鍛冶屋・兵法所・酒場の各Levelをすべて100とする. `GUILD_MEMBER`には`guild_id=0, player_id=0`のシステム用所属を保持してよい.
+* システムダミーPlayer/Guildは通常のArena候補および通常の騎士団戦マッチング候補へ含めない.
 
 
 ```mermaid
@@ -170,6 +175,7 @@ erDiagram
     ABILITY_CONDITION_VALUE {
         AbilityID ability_id PK, FK
         ConditionValue condition_value
+        AbilityTurnTiming turn_timing
     }
 
     ABILITY_EFFECT_CORRECTION {
@@ -208,6 +214,7 @@ erDiagram
     TACTICS_STAGE_EFFECT {
         RecordID id PK
         TacticsID tactics_id FK
+        RecordID target_tactics_effect_id FK
         TacticsEffectID effect_id
         TacticsTarget target
         CorrectionValue increase_value
@@ -311,6 +318,7 @@ erDiagram
     ABILITY ||--o| ABILITY_EFFECT_STAT_CORRECTION : effect_data
 
     TACTICS ||--o{ TACTICS_STAGE_EFFECT : has
+    TACTICS_EFFECT ||--o| TACTICS_STAGE_EFFECT : stage_increase
     TACTICS_STAGE_EFFECT ||--o| TACTICS_STAGE_BATTLE_SPECIAL_EFFECT : battle_special_increase
     TACTICS ||--o{ TACTICS_EFFECT : has
     TACTICS_EFFECT ||--o| TACTICS_HP_RECOVERY_EFFECT : hp_recovery
@@ -319,8 +327,8 @@ erDiagram
 ```
 
 `SKILL.activation_rate`は基本スキル発動率`0.2`へ加算する値とする. `SKILL.max_activation_count`は1戦闘中の最大発動回数とし, `u32::MAX`は回数無制限を表す. `SKILL`の効果別フィールドは加工済み`SkillMasterData.effect_data`の`oneof`に対応して格納する. 該当しない効果別フィールドは未使用とし, DatabaseではNULLを許可する. `SKILL.target_condition_status_abnormality_id`は`target_condition_id=SKILL_TARGET_CONDITION_STATUS_ABNORMALITY`の場合のみ使用する. `SKILL.heal_rate`は対象の最大HPに対する回復割合とし, `SKILL.effect_id=SKILL_EFFECT_HEAL`では`SKILL.correction_value`を使用しない.
-`SKILL.effect_id`は「[型定義](../shared/types.md)」の`SkillEffectID`, `ABILITY.effect_id`は`AbilityEffectID`, `TACTICS_EFFECT.effect_id`は`TacticsEffectID`を使用する. これら3つは相互に別の列挙型とする. `ABILITY.condition_id`は発動条件を保持し, 具体値が必要な場合だけ`ABILITY_CONDITION_VALUE.condition_value`を使用する. `ABILITY`の効果固有値は加工済み`AbilityMasterData.effect_data`の`oneof`に対応する詳細テーブルへ格納する. `no_parameter`を使用するAbilityEffectIDでは効果詳細テーブルを使用しない. `ABILITY_EFFECT_STATUS.status`は`ABILITY_EFFECT_AVOIDANCE`で攻撃回避を表す場合にNULLを許可し, 状態異常回避および`ABILITY_EFFECT_STATUS_ABNORMALITY_ATTACK`では対象または付与する`StatusAbnormalityID`を保持する. 発動条件値と効果詳細は独立して保持するため同時に存在できる.
-同一`TacticsEffectID`系列の効果値はすべて加算する. 段階レベル`n`の最終効果値は`基本効果値 + (n - 1) * 増加値`で算出する. `TACTICS_STAGE_EFFECT.increase_value`は浮動小数点効果, `increase_uint_value`はBP固定回復等の整数効果に使用する. `TACTICS_EFFECT_BATTLE_SPECIAL`の段階上昇量は`TACTICS_STAGE_BATTLE_SPECIAL_EFFECT`へ`TacticsBattleSpecialParameters`に対応する各数値として保持する. `TACTICS_EFFECT.correction_value`は浮動小数点効果, `TACTICS_EFFECT.uint_value`はBP固定回復等の整数効果に使用する. `TACTICS_EFFECT_HP_RECOVERY`は`TACTICS_HP_RECOVERY_EFFECT`, `TACTICS_EFFECT_BATTLE_SPECIAL`は`TACTICS_BATTLE_SPECIAL_EFFECT`へ効果固有値を保持する. 使用しない値列はNULLとする. `TACTICS.end_type=TACTICS_END_TYPE_COUNT`の場合は`TACTICS.count_consume_trigger`で残り回数を消費するイベントを指定する.
+`SKILL.effect_id`は「[型定義](../shared/types.md)」の`SkillEffectID`, `ABILITY.effect_id`は`AbilityEffectID`, `TACTICS_EFFECT.effect_id`は`TacticsEffectID`を使用する. これら3つは相互に別の列挙型とする. `ABILITY.condition_id`は発動条件を保持し, 具体値が必要な場合だけ`ABILITY_CONDITION_VALUE.condition_value`を使用する. `ABILITY_CONDITION_VALUE.turn_timing`は`ABILITY_CONDITION_EVERY_N_TURNS`の場合に評価タイミングを保持し, それ以外では使用しない. `ABILITY`の効果固有値は加工済み`AbilityMasterData.effect_data`の`oneof`に対応する詳細テーブルへ格納する. `no_parameter`を使用するAbilityEffectIDでは効果詳細テーブルを使用しない. `ABILITY_EFFECT_STATUS.status`は`ABILITY_EFFECT_AVOIDANCE`で攻撃回避を表す場合にNULLを許可し, 状態異常回避および`ABILITY_EFFECT_STATUS_ABNORMALITY_ATTACK`では対象または付与する`StatusAbnormalityID`を保持する. 発動条件値と効果詳細は独立して保持するため同時に存在できる.
+同一`TacticsEffectID`系列の効果値はすべて加算する. 段階レベル`n`の最終効果値は`基本効果値 + (n - 1) * 増加値`で算出する. `TACTICS_STAGE_EFFECT.target_tactics_effect_id`は段階補正対象となる`TACTICS_EFFECT.id`を一意に指定する. 加工済みマスター生成時は同一Tactics内の`TACTICS_EFFECT`を`TACTICS_EFFECT.id`昇順へ並べ, 対象行のIndexを`TacticsStageEffectData.effect_index`へ変換する. `TACTICS_STAGE_EFFECT.effect_id`および`target`は対象`TACTICS_EFFECT`と一致必須とする. `TACTICS_STAGE_EFFECT.increase_value`は浮動小数点効果, `increase_uint_value`はBP固定回復等の整数効果に使用する. `TACTICS_EFFECT_BATTLE_SPECIAL`の段階上昇量は`TACTICS_STAGE_BATTLE_SPECIAL_EFFECT`へ`TacticsBattleSpecialParameters`に対応する各数値として保持する. `TACTICS_EFFECT.correction_value`は浮動小数点効果, `TACTICS_EFFECT.uint_value`はBP固定回復等の整数効果に使用する. `TACTICS_EFFECT_HP_RECOVERY`は`TACTICS_HP_RECOVERY_EFFECT`, `TACTICS_EFFECT_BATTLE_SPECIAL`は`TACTICS_BATTLE_SPECIAL_EFFECT`へ効果固有値を保持する. 使用しない値列はNULLとする. `TACTICS.end_type=TACTICS_END_TYPE_COUNT`の場合は`TACTICS.count_consume_trigger`で残り回数を消費するイベントを指定する.
 
 
 `FORMATION` / `FORMATION_POSITION`および`ITEM`はDatabase上の固定参照データとして保持するが, `ProcessedMasterData`には含めない. 騎士団・Player・所属・役職などの実行時可変データも`ProcessedMasterData`には含めない.
@@ -401,16 +409,24 @@ erDiagram
         DateTime completed_at
     }
 
+    GUILD_BATTLE_EXCLUDED_GUILD {
+        DateTime target_date PK
+        GuildBattleStartTime start_time PK
+        GuildID guild_id PK, FK
+    }
+
     GUILD ||--o{ GUILD_BATTLE : guild_a
     GUILD ||--o{ GUILD_BATTLE : guild_b
     GUILD_BATTLE ||--|{ GUILD_BATTLE_RESULT : has
     GUILD ||--o{ GUILD_BATTLE_RESULT : receives
     GUILD_BATTLE ||--o{ GUILD_BATTLE_DB_OPERATION : idempotency
+    GUILD ||--o{ GUILD_BATTLE_EXCLUDED_GUILD : excluded_from_matching
 ```
 
 
-`GUILD_BATTLE.game_server_instance_id`は未割当時NULLを許可する. 騎士団戦処理を開始するGameServerはPrivate API経由で未割当の騎士団戦を原子的にClaimし, Claim成功時に自身の`GameServerInstanceID`を保存する. 既に他GameServerへ割当済みの場合は上書きしない. `status`, `start_at`, `game_server_instance_id`を使用するClaim・割当検索にIndexを設定する.
+`GUILD_BATTLE.game_server_instance_id`は未割当時NULLを許可する. 騎士団戦処理を開始するGameServerはPrivate API経由で未割当の騎士団戦を原子的に割当し, 割当成功時に自身の`GameServerInstanceID`を保存する. 既に他GameServerへ割当済みの場合は上書きしない. `status`, `start_at`, `game_server_instance_id`を使用する割当検索にIndexを設定する.
 `SaveScheduledGuildBattles`保存時に`start_at`を`TargetDate`と`GuildBattleStartTime`からJSTで生成し, `end_at = start_at + 30分`として保存する. `initial_seed`は開戦前Preload完了まではNULLを許可し, Preload成功後にGameServerが生成したSeedを`SaveGuildBattleInitialSeed`で保存する.
+`GUILD_BATTLE_EXCLUDED_GUILD`はマッチング生成時に所属0人のため除外したGuildを対象日・開始時刻単位で保持する. 除外一覧は割当済みGameServerへ返し, 当該時間帯の所属ロック解除処理で使用する. 対象時間帯の処理完了後は削除する.
 Public API Serverは騎士団戦要求を中継する際に`GuildBattleID`から`game_server_instance_id`を取得できる. Public API Serverは取得結果をローカルキャッシュしてよいが, キャッシュは正本として扱わない.
 
 ## アリーナ
@@ -500,7 +516,7 @@ erDiagram
         GuildBattleID guild_battle_id FK
         GameServerTime time
         GuildBattleReplayProcessType process_type
-        JsonData payload
+        BinaryData payload
     }
 
     ERROR_LOG {
@@ -514,7 +530,9 @@ erDiagram
     GUILD_BATTLE ||--o{ ERROR_LOG : has_error
 ```
 
-`GUILD_BATTLE_REPLAY_LOG.payload`には, リプレイログファイルへ書き込むものと同じ処理種別対応JSONオブジェクトを`jsonb`として保存する.
+`ERROR_LOG.guild_battle_id`はNULLを許可する. 騎士団戦自体がまだ生成されていない時間帯単位のエラーではNULLとして保存する.
+
+`GUILD_BATTLE_REPLAY_LOG.payload`には, 「[騎士団戦リプレイProtocol Buffers定義](../system/guild_battle_replay.proto)」の`GuildBattleReplayEnvelope`をProtocol BuffersでSerializeしたバイナリを`bytea`として保存する. `GUILD_BATTLE_REPLAY_LOG.process_type`は検索用の索引値とし, Serialize済みEnvelopeの`process_type`と必ず一致させる.
 
 
 ## 騎士団戦DB送信失敗時

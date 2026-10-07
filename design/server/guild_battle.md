@@ -46,8 +46,9 @@ sequenceDiagram
     participant DB
 
     User ->> Client: 参加ボタン押下
-    Client ->> PublicAPIServer: JoinGuildBattle(AccessToken, PlayerID, GuildID, GuildBattleID)
-    PublicAPIServer ->> GameServer: JoinGuildBattle(PlayerID, GuildID, GuildBattleID, AuthenticatedContext)
+    Client ->> PublicAPIServer: JoinGuildBattle(AccessToken, PlayerID, ClientVersion, GuildID, GuildBattleID, LocalFormationID, LocalCharacters)
+    PublicAPIServer ->> GameServer: JoinGuildBattle(PlayerID, ClientVersion, GuildID, GuildBattleID, LocalFormationID, LocalCharacters, AuthenticatedContext)
+    GameServer ->> GameServer: ClientVersion == GameServer Versionを確認
     GameServer ->> GameServer: 要求GuildBattleIDが騎士団戦中であることを確認
     GameServer ->> GameServer: 要求GuildIDが要求GuildBattleIDの対戦騎士団であることを確認
     GameServer ->> GameServer: PlayerIDの現在所属GuildIDと要求GuildIDが一致することを確認
@@ -58,6 +59,7 @@ sequenceDiagram
         DB -->> PrivateAPIServer: 確認結果
         PrivateAPIServer -->> GameServer: ValidateAccountSession(IsValid)
         GameServer->>GameServer: IsValid=trueを確認
+        GameServer->>GameServer: LocalFormationID・LocalCharactersとPreload済みServer編成を比較
         alt すでにJoin済み
             GameServer->>GameServer: 現在保持しているRequestSequenceを取得. 騎士団戦本体PRNGは消費しない
         else 初回Join
@@ -82,7 +84,7 @@ sequenceDiagram
 対象開始時刻の騎士団は, 対戦組み合わせ生成前にDatabaseの`GUILD.membership_locked=true`へ更新して加入・脱退を禁止し所属を固定する. 所属変更禁止状態の正本はDatabaseとする.
 所属固定後に対戦組み合わせを生成する.
 Kubernetes上で複数GameServerが稼働する場合, 対戦組み合わせ生成はLeader Electionで選出された1つのGameServerだけが行う.
-生成後の各騎士団戦は`ClaimScheduledGuildBattles`で1つのGameServerへ割り当て, 以降は割当先GameServerだけが当該騎士団戦を処理する.
+生成後の各騎士団戦は`AssignScheduledGuildBattles`で1つのGameServerへ割り当て, 以降は割当先GameServerだけが当該騎士団戦を処理する.
 
 ```mermaid
 sequenceDiagram
@@ -112,24 +114,42 @@ sequenceDiagram
         LeaderGameServer->>LeaderGameServer: 既存ScheduledGuildBattle[]をそのまま使用
     else 既存データなし
         LeaderGameServer->>LeaderGameServer: 取得済みGuildBattleMatchCandidate[]から所属0人の騎士団を除外
-        LeaderGameServer->>LeaderGameServer: GuildID昇順へ並べ替え
-        LeaderGameServer->>LeaderGameServer: 共通内部API GenerateTimeBasedSeed でマッチング用Seedを生成
-        LeaderGameServer->>LeaderGameServer: Seedを使用して騎士団一覧をシャッフルしペア生成
-        LeaderGameServer->>LeaderGameServer: PairIndex=0からGuildBattleIDを生成
-        LeaderGameServer->>PrivateAPIServer: SaveScheduledGuildBattles(TargetDate, StartTime, Battles[])
-        PrivateAPIServer->>DB: GameServer生成済みGUILD_BATTLEをscheduledとして保存
-        DB-->>PrivateAPIServer: 保存済みまたは既存ScheduledGuildBattle[]
-        PrivateAPIServer-->>LeaderGameServer: SaveScheduledGuildBattles
+        LeaderGameServer->>PrivateAPIServer: SaveGuildBattleExcludedGuilds(TargetDate, StartTime, ExcludedGuildID[])
+        PrivateAPIServer->>DB: 0人除外Guild一覧を保存
+        alt 除外後の通常候補が0件
+            LeaderGameServer->>PrivateAPIServer: SetGuildMembershipLock(ExcludedGuildID[], false)
+            PrivateAPIServer->>DB: 0人Guildの所属ロック解除
+            LeaderGameServer->>PrivateAPIServer: SaveErrorLog
+            opt DiscordNotificationEnabled=true
+                LeaderGameServer->>Bot: 0人候補エラー通知
+            end
+            LeaderGameServer->>PrivateAPIServer: ClearGuildBattleExcludedGuilds(TargetDate, StartTime)
+        else 通常候補あり
+            LeaderGameServer->>LeaderGameServer: GuildID昇順へ並べ替え
+            LeaderGameServer->>LeaderGameServer: 共通内部API GenerateTimeBasedSeed でマッチング用Seedを生成
+            LeaderGameServer->>LeaderGameServer: Seedを使用して騎士団一覧をシャッフルしペア生成
+            LeaderGameServer->>LeaderGameServer: PairIndex=0からGuildBattleIDを生成
+            LeaderGameServer->>PrivateAPIServer: SaveScheduledGuildBattles(TargetDate, StartTime, Battles[])
+            PrivateAPIServer->>DB: GameServer生成済みGUILD_BATTLEをscheduledとして保存
+            DB-->>PrivateAPIServer: 保存済みまたは既存ScheduledGuildBattle[]
+            PrivateAPIServer-->>LeaderGameServer: SaveScheduledGuildBattles
+        end
     end
-    Note over LeaderGameServer,DB: 0人で組み合わせ生成対象から除外された騎士団も所属変更禁止解除対象として保持
+    Note over LeaderGameServer,DB: 0人除外Guild一覧はDatabaseに保持し, 割当先GameServerへ渡す
 
-    GameServer->>PrivateAPIServer: ClaimScheduledGuildBattles(GameServerInstanceID, TargetDate, GuildBattleStartTime, 空き容量)
-    PrivateAPIServer->>DB: 未割当scheduled騎士団戦を原子的にClaim
-    DB-->>PrivateAPIServer: Claim済みScheduledGuildBattle[]
-    PrivateAPIServer-->>GameServer: ClaimScheduledGuildBattles
+    GameServer->>PrivateAPIServer: AssignScheduledGuildBattles(GameServerInstanceID, TargetDate, GuildBattleStartTime, 空き容量)
+    PrivateAPIServer->>DB: 未割当scheduled騎士団戦を原子的に割当
+    DB-->>PrivateAPIServer: 割当済みScheduledGuildBattle[]・ExcludedGuildID[]
+    PrivateAPIServer-->>GameServer: AssignScheduledGuildBattles(Battles[], ExcludedGuildID[])
+    GameServer->>GameServer: ExcludedGuildID[]を当該開始時刻のロック解除用に保持
 
-    loop Claimした騎士団戦すべて
+    loop 割り当てられた騎士団戦すべて
         loop 対戦する2騎士団
+            alt GuildID=0のシステムダミー騎士団
+                GameServer->>GameServer: Guild/Player固定値をシステムダミー仕様から構築
+                GameServer->>GameServer: CharacterID昇順の先頭10体をダミー編成として選択
+                Note over GameServer: 最大BP=500, Itemなし, 全施設Level=100
+            else 通常騎士団
                 GameServer->>PrivateAPIServer: GetGuildData(GuildID)
                 PrivateAPIServer->>DB: 騎士団レベル情報要求
                 DB-->>PrivateAPIServer: 騎士団レベル情報返答
@@ -162,8 +182,9 @@ sequenceDiagram
                     end
                 end
             end
+        end
 
-            alt いずれかのPlayerでPreload失敗
+        alt いずれかのPlayerでPreload失敗
                 GameServer->>PrivateAPIServer: UpdateGuildBattleStatus(GuildBattleID, preload_failed)
                 PrivateAPIServer->>DB: GUILD_BATTLE.status = preload_failed
                 opt DiscordNotificationEnabled=true
@@ -191,7 +212,7 @@ sequenceDiagram
 
 GetGuildDataまたはGetGuildMembersを含む開戦前Preloadの必須データ取得に失敗した場合も, Player単位の取得失敗と同様に当該GuildBattleIDをPreload失敗として扱う.
 
-`GUILD_BATTLE_STATUS_PRELOAD_FAILED`となった対戦は運営判断待ちとする. 問題解決後に運営が再抽籤を選択した場合, GameServerは対象GuildをGuildID昇順へ並べ, 共通時刻ベースSeedを新規生成してShuffleする. `PRELOAD_FAILED`のGuildBattleIDを昇順へ並べて新しいペアを割り当て, Private APIの`RematchPreloadFailedGuildBattles`へ保存を要求する. 保存後は`scheduled`かつ未Claimへ戻し, 通常のClaimと開戦前Preloadを再実行する. 運営が当該対戦を中止する場合は, 対象Guildについて`SetGuildMembershipLock(..., false)`を実行して所属変更禁止を解除する.
+`GUILD_BATTLE_STATUS_PRELOAD_FAILED`となった対戦は運営判断待ちとする. 問題解決後に運営が同一ペアで再開する場合は`RetryPreloadFailedGuildBattle(GuildBattleID, RestartAt)`を実行し, 同一ペアを維持したまま`scheduled`かつ未割当へ戻して通常の割当・再Preloadを実行する. 問題解決後に運営が再抽籤を選択した場合, GameServerは対象GuildをGuildID昇順へ並べ, 共通時刻ベースSeedを新規生成してShuffleする. `PRELOAD_FAILED`のGuildBattleIDを昇順へ並べて新しいペアを割り当て, Private APIの`RematchPreloadFailedGuildBattles`へ保存を要求する. 保存後は`scheduled`かつ未割当へ戻し, 通常の割当と開戦前Preloadを再実行する. 運営が当該対戦を中止する場合は, 対象Guildについて`SetGuildMembershipLock(..., false)`を実行して所属変更禁止を解除する.
 
 #### 騎士団戦中
 
@@ -254,7 +275,7 @@ GameServerが受信するあらゆる要求は先に到達した順に処理す�
 ClientはAccessToken, PlayerID, GuildBattleIDだけを送信し, GameServerは現在のRequestSequenceを要求しない.
 GameServerは現在HP, BP, TP, 治療・復活状態と残り時間, 出撃待機時間, タクティクス状態, アイテム残数, 両騎士団スコア, チェイン, CBC状態, 現在RequestSequenceを返す.
 `GetGuildBattleStatus`の実行ではRequestSequenceを加算しない.
-CharacterID, Follower, MainSkill, Ability, FormationID等の静的な編成構成はClientが編成確定時からローカルに保持し, 再接続時もそのローカル情報から復元する. `GetGuildBattleStatus`では静的な編成構成を再送しない.
+CharacterID, Follower, MainSkill, Ability, FormationID等の静的な編成構成はClientが編成確定時からローカルに保持する. `JoinGuildBattle`時にServer編成と照合し, 不一致の場合はServer編成でローカル情報を上書きする. 再接続時は照合済みのローカル情報から復元する. `GetGuildBattleStatus`では静的な編成構成を再送しない.
 
 ##### タクティクス使用時
 
@@ -618,13 +639,16 @@ sequenceDiagram
 
     alt 最終結果保存が完了
         Note over GameServer: 最終結果保存成功後にPlayer勝敗数を更新
-        loop 勝敗数更新対象Player
+        loop 当該騎士団戦で1回以上出撃成立した通常Player + ダミーPlayerID 0
             GameServer->>PrivateAPIServer: UpdatePlayerGuildBattleRecord(PlayerID, Result)
             PrivateAPIServer->>DB: 勝利ならwin_count+1 / 敗北ならlose_count+1 / 引き分けは更新なし
         end
         GameServer->>PrivateAPIServer: UpdateGuildBattleStatus(GuildBattleID, completed)
         PrivateAPIServer->>DB: GUILD_BATTLE.status = completed
-        GameServer->>PrivateAPIServer: SetGuildMembershipLock(対象2騎士団 + 同じ開始時刻に0人除外された騎士団, false)
+        GameServer->>PrivateAPIServer: GetGuildBattleExcludedGuilds(TargetDate, StartTime)
+        PrivateAPIServer-->>GameServer: ExcludedGuildID[]
+        GameServer->>PrivateAPIServer: SetGuildMembershipLock(対象2騎士団 + ExcludedGuildID, false)
+        GameServer->>PrivateAPIServer: ClearGuildBattleExcludedGuilds(TargetDate, StartTime)
         PrivateAPIServer->>DB: GUILD.membership_locked = false
     else 再試行後も最終結果保存失敗
         Note over GameServer: ErrorLog保存済み. DiscordNotificationEnabled=trueの場合はBot通知済み. 運営が原因調査し手動復旧する
