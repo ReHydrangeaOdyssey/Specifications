@@ -11,10 +11,10 @@
 sequenceDiagram
     actor User
     participant Client
-    participant PublicAPIServer
+    participant PublicAPIServer as Public API Server
     participant GameServer
-    participant PrivateAPIServer
-    participant DB
+    participant PrivateAPIServer as Private API Server
+    participant Database
 
     User->>Client: 編成変更完了
     Client->>+PublicAPIServer: UpdateGuildBattleParty
@@ -23,13 +23,13 @@ sequenceDiagram
 
     alt 編成変更可能
         GameServer->>PrivateAPIServer: SaveGuildBattleParty
-        PrivateAPIServer->>DB: 編成情報登録
-        DB-->>PrivateAPIServer: 登録完了
+        PrivateAPIServer->>Database: 編成情報登録
+        Database-->>PrivateAPIServer: 登録完了
         PrivateAPIServer-->>GameServer: SaveGuildBattleParty
-        GameServer-->>PublicAPIServer: 編成完了通知(UpdateGuildBattlePartyResponse)
-        PublicAPIServer-->>-Client: 編成完了通知(UpdateGuildBattlePartyResponse)
+        GameServer-->>PublicAPIServer: UpdateGuildBattlePartyResponse
+        PublicAPIServer-->>-Client: UpdateGuildBattlePartyResponse
     else 編成変更不可
-        PublicAPIServer-->>Client: UpdateGuildBattleParty
+        PublicAPIServer-->>Client: ApiErrorResponse
         Client->>User: 変更失敗表示
     end
 ```
@@ -40,10 +40,10 @@ sequenceDiagram
 sequenceDiagram
     actor User
     participant Client
-    participant PublicAPIServer
+    participant PublicAPIServer as Public API Server
     participant GameServer
-    participant PrivateAPIServer
-    participant DB
+    participant PrivateAPIServer as Private API Server
+    participant Database
 
     User ->> Client: 参加ボタン押下
     Client ->> PublicAPIServer: JoinGuildBattle(AccessToken, PlayerID, ClientVersion, GuildID, GuildBattleID, LocalFormationID, LocalCharacters)
@@ -55,7 +55,7 @@ sequenceDiagram
 
     alt 両条件を満たし参加可能
         GameServer ->> PrivateAPIServer: ValidateAccountSession(AuthenticatedContext.SessionID)
-        PrivateAPIServer ->> DB: ACCOUNT_SESSION存在・24時間期限確認
+        PrivateAPIServer ->> Database: ACCOUNT_SESSION存在・24時間期限確認
         DB -->> PrivateAPIServer: 確認結果
         PrivateAPIServer -->> GameServer: ValidateAccountSession(IsValid)
         GameServer->>GameServer: IsValid=trueを確認
@@ -70,7 +70,7 @@ sequenceDiagram
         PublicAPIServer -->> Client: GuildBattleJoinResponse(Characters, RequestSequence)
         Client ->> User: 結果表示
     else 参加不可
-        PublicAPIServer -->> Client: JoinGuildBattle
+        PublicAPIServer -->> Client: ApiErrorResponse
         Client ->> User: 結果表示
     end
 
@@ -88,41 +88,41 @@ GameServerは未割当騎士団戦の検索・自己割当・マッチング生�
 
 ```mermaid
 sequenceDiagram
-    participant Bot
+    participant DiscordBot as Discord Bot
     participant GuildBattleCoordinator
-    participant KubernetesController
+    participant GameServerScaleController as Dedicated GameServer Scale Controller
     participant GameServer
-    participant PrivateAPIServer
-    participant DB
+    participant PrivateAPIServer as Private API Server
+    participant Database
 
-    Note over GuildBattleCoordinator,DB: 開戦5分前. GuildBattleCoordinatorが対象開始時刻の騎士団戦開戦前処理を開始
+    Note over GuildBattleCoordinator,Database: 開戦5分前. GuildBattleCoordinatorが対象開始時刻の騎士団戦開戦前処理を開始
     GuildBattleCoordinator->>PrivateAPIServer: GetGuildsForBattleMatching(TargetDate, GuildBattleStartTime)
-    PrivateAPIServer->>DB: 対象開始時刻のGuildID・所属人数一覧を取得
-    DB-->>PrivateAPIServer: GuildBattleMatchCandidate[]
+    PrivateAPIServer->>Database: 対象開始時刻のGuildID・所属人数一覧を取得
+    Database-->>PrivateAPIServer: GuildBattleMatchCandidate[]
     PrivateAPIServer-->>GuildBattleCoordinator: GetGuildsForBattleMatching
     GuildBattleCoordinator->>PrivateAPIServer: SetGuildMembershipLock(対象GuildID[], true)
-    PrivateAPIServer->>DB: GUILD.membership_locked = true
-    Note over GuildBattleCoordinator,DB: 対象開始時刻の騎士団の加入・脱退を禁止し所属を固定
+    PrivateAPIServer->>Database: GUILD.membership_locked = true
+    Note over GuildBattleCoordinator,Database: 対象開始時刻の騎士団の加入・脱退を禁止し所属を固定
     GuildBattleCoordinator->>PrivateAPIServer: GetGuildsForBattleMatching(TargetDate, GuildBattleStartTime)
-    PrivateAPIServer->>DB: ロック後のGuildID・所属人数一覧を再取得
-    DB-->>PrivateAPIServer: GuildBattleMatchCandidate[]
+    PrivateAPIServer->>Database: ロック後のGuildID・所属人数一覧を再取得
+    Database-->>PrivateAPIServer: GuildBattleMatchCandidate[]
     PrivateAPIServer-->>GuildBattleCoordinator: GetGuildsForBattleMatching
     GuildBattleCoordinator->>PrivateAPIServer: GetScheduledGuilds(TargetDate, GuildBattleStartTime)
-    PrivateAPIServer->>DB: 同一日付・開始時刻の既存GUILD_BATTLEを取得
-    DB-->>PrivateAPIServer: 既存ScheduledGuildBattle[]
+    PrivateAPIServer->>Database: 同一日付・開始時刻の既存GUILD_BATTLEを取得
+    Database-->>PrivateAPIServer: 既存ScheduledGuildBattle[]
     PrivateAPIServer-->>GuildBattleCoordinator: GetScheduledGuilds
     alt 既存データあり
         GuildBattleCoordinator->>GuildBattleCoordinator: 既存ScheduledGuildBattle[]をそのまま使用
     else 既存データなし
         GuildBattleCoordinator->>GuildBattleCoordinator: 取得済みGuildBattleMatchCandidate[]から所属0人の騎士団を除外
         GuildBattleCoordinator->>PrivateAPIServer: SaveGuildBattleExcludedGuilds(TargetDate, StartTime, ExcludedGuildID[])
-        PrivateAPIServer->>DB: 0人除外Guild一覧を保存
+        PrivateAPIServer->>Database: 0人除外Guild一覧を保存
         alt 除外後の通常候補が0件
             GuildBattleCoordinator->>PrivateAPIServer: SetGuildMembershipLock(ExcludedGuildID[], false)
-            PrivateAPIServer->>DB: 0人Guildの所属ロック解除
+            PrivateAPIServer->>Database: 0人Guildの所属ロック解除
             GuildBattleCoordinator->>PrivateAPIServer: SaveErrorLog
             opt DiscordNotificationEnabled=true
-                GuildBattleCoordinator->>Bot: 0人候補エラー通知
+                GuildBattleCoordinator->>DiscordDiscordBot: 0人候補エラー通知
             end
             GuildBattleCoordinator->>PrivateAPIServer: ClearGuildBattleExcludedGuilds(TargetDate, StartTime)
         else 通常候補あり
@@ -131,12 +131,12 @@ sequenceDiagram
             GuildBattleCoordinator->>GuildBattleCoordinator: Seedを使用して騎士団一覧をシャッフルしペア生成
             GuildBattleCoordinator->>GuildBattleCoordinator: PairIndex=0からGuildBattleIDを生成
             GuildBattleCoordinator->>PrivateAPIServer: SaveScheduledGuildBattles(TargetDate, StartTime, Battles[])
-            PrivateAPIServer->>DB: GuildBattleCoordinator生成済みGUILD_BATTLEをscheduledとして保存
-            DB-->>PrivateAPIServer: 保存済みまたは既存ScheduledGuildBattle[]
+            PrivateAPIServer->>Database: GuildBattleCoordinator生成済みGUILD_BATTLEをscheduledとして保存
+            Database-->>PrivateAPIServer: 保存済みまたは既存ScheduledGuildBattle[]
             PrivateAPIServer-->>GuildBattleCoordinator: SaveScheduledGuildBattles
         end
     end
-    Note over GuildBattleCoordinator,DB: 0人除外Guild一覧はDatabaseに保持する
+    Note over GuildBattleCoordinator,Database: 0人除外Guild一覧はDatabaseに保持する
 
     loop 検出したready GameServer
         GuildBattleCoordinator->>GameServer: GetGameServerCapacity
@@ -145,19 +145,19 @@ sequenceDiagram
 
     alt 空きGameServerあり
         GuildBattleCoordinator->>PrivateAPIServer: AssignScheduledGuildBattles(GameServerInstanceID, GuildBattleID[])
-        PrivateAPIServer->>DB: 未割当scheduled騎士団戦を指定GameServerへ原子的に割当
-        DB-->>PrivateAPIServer: 割当済みScheduledGuildBattle[]
+        PrivateAPIServer->>Database: 未割当scheduled騎士団戦を指定GameServerへ原子的に割当
+        Database-->>PrivateAPIServer: 割当済みScheduledGuildBattle[]
         PrivateAPIServer-->>GuildBattleCoordinator: AssignScheduledGuildBattles(Battles[])
         GuildBattleCoordinator->>GameServer: StartGuildBattlePreload(Battles[])
         GameServer->>PrivateAPIServer: GetGuildBattleAssignment(GuildBattleID)
-        PrivateAPIServer->>DB: game_server_instance_id取得
-        DB-->>PrivateAPIServer: GameServerInstanceID
+        PrivateAPIServer->>Database: game_server_instance_id取得
+        Database-->>PrivateAPIServer: GameServerInstanceID
         PrivateAPIServer-->>GameServer: GetGuildBattleAssignment
         GameServer->>GameServer: 自身への割当一致を確認してPreload対象Queueへ追加
     else 空き容量不足
-        Note over GuildBattleCoordinator,DB: 未割当騎士団戦はscheduledかつgame_server_instance_id=NULLのまま維持
-        GuildBattleCoordinator->>KubernetesController: GameServer水平スケーリング要求
-        KubernetesController-->>GuildBattleCoordinator: 要求受付
+        Note over GuildBattleCoordinator,Database: 未割当騎士団戦はscheduledかつgame_server_instance_id=NULLのまま維持
+        GuildBattleCoordinator->>GameServerScaleController: GameServer水平スケーリング要求
+        GameServerScaleController-->>GuildBattleCoordinator: 要求受付
         Note over GuildBattleCoordinator: 新規GameServer ready後に容量確認・割当を再実行
     end
 
@@ -169,25 +169,25 @@ sequenceDiagram
                 Note over GameServer: 最大BP=500, Itemなし, 全施設Level=100
             else 通常騎士団
                 GameServer->>PrivateAPIServer: GetGuildData(GuildID)
-                PrivateAPIServer->>DB: 騎士団レベル情報要求
-                DB-->>PrivateAPIServer: 騎士団レベル情報返答
+                PrivateAPIServer->>Database: 騎士団レベル情報要求
+                Database-->>PrivateAPIServer: 騎士団レベル情報返答
                 PrivateAPIServer-->>GameServer: GetGuildData
                 GameServer->>GameServer: 騎士団レベル情報保管
 
                 GameServer->>PrivateAPIServer: GetGuildMembers(GuildID)
-                PrivateAPIServer->>DB: 所属PlayerID一覧要求
-                DB-->>PrivateAPIServer: 所属PlayerID一覧返答
+                PrivateAPIServer->>Database: 所属PlayerID一覧要求
+                Database-->>PrivateAPIServer: 所属PlayerID一覧返答
                 PrivateAPIServer-->>GameServer: GetGuildMembers
 
                 loop 所属しているメンバー全員
                     GameServer->>PrivateAPIServer: GetGuildBattleFormation(PlayerID)
-                    PrivateAPIServer->>DB: 最大BP・編成情報要求
-                    DB-->>PrivateAPIServer: 最大BP・編成情報返答
+                    PrivateAPIServer->>Database: 最大BP・編成情報要求
+                    Database-->>PrivateAPIServer: 最大BP・編成情報返答
                     PrivateAPIServer-->>GameServer: GetGuildBattleFormation
 
                     GameServer->>PrivateAPIServer: GetPlayerItems(PlayerID)
-                    PrivateAPIServer->>DB: PLAYER_ITEM要求
-                    DB-->>PrivateAPIServer: PLAYER_ITEM返答
+                    PrivateAPIServer->>Database: PLAYER_ITEM要求
+                    Database-->>PrivateAPIServer: PLAYER_ITEM返答
                     PrivateAPIServer-->>GameServer: GetPlayerItems
 
                     alt 取得成功
@@ -196,7 +196,7 @@ sequenceDiagram
                         GameServer->>GameServer: 当該GuildBattleIDをPreload失敗として記録
                         GameServer->>GameServer: エラーログ追記
                         GameServer->>PrivateAPIServer: SaveErrorLog(GuildBattleID)
-                        PrivateAPIServer->>DB: エラーログ保存
+                        PrivateAPIServer->>Database: エラーログ保存
                     end
                 end
             end
@@ -207,9 +207,9 @@ sequenceDiagram
                 PrivateAPIServer-->>GameServer: GameServerInstanceID
                 alt 自身への割当が継続している
                     GameServer->>PrivateAPIServer: UpdateGuildBattleStatus(GuildBattleID, preload_failed)
-                    PrivateAPIServer->>DB: GUILD_BATTLE.status = preload_failed
+                    PrivateAPIServer->>Database: GUILD_BATTLE.status = preload_failed
                     opt DiscordNotificationEnabled=true
-                        GameServer->>Bot: Preload失敗通知
+                        GameServer->>DiscordDiscordBot: Preload失敗通知
                     end
                     Note over GameServer: 当該1対戦だけ開戦しない. 他の騎士団戦は継続. 以後は運営判断
                 else 割当解除または別GameServerへ変更済み
@@ -224,11 +224,11 @@ sequenceDiagram
                 alt 自身への割当が継続している
                     GameServer->>GameServer: 開戦時に保持する騎士団戦データを確定しGuildBattleInitialSnapshotを生成
                     GameServer->>PrivateAPIServer: SaveGuildBattleInitialSeed(GuildBattleID, InitialSeed)
-                    PrivateAPIServer->>DB: GUILD_BATTLE.initial_seed = InitialSeed
+                    PrivateAPIServer->>Database: GUILD_BATTLE.initial_seed = InitialSeed
                     GameServer->>PrivateAPIServer: SaveGuildBattleCreateLog(GuildBattleID, InitialSeed, GuildID[2], InitialSnapshot, Version)
-                    PrivateAPIServer->>DB: リプレイ作成ログ・開戦時スナップショット保存
+                    PrivateAPIServer->>Database: リプレイ作成ログ・開戦時スナップショット保存
                     GameServer->>PrivateAPIServer: UpdateGuildBattleStatus(GuildBattleID, in_progress)
-                    PrivateAPIServer->>DB: GUILD_BATTLE.status更新
+                    PrivateAPIServer->>Database: GUILD_BATTLE.status更新
                 else 割当解除または別GameServerへ変更済み
                     GameServer->>GameServer: 当該騎士団戦のPreload済み保持データを破棄して開戦しない
                 end
@@ -236,13 +236,13 @@ sequenceDiagram
     end
 
     opt DiscordNotificationEnabled=true
-        GameServer->>Bot: 処理終了通知
+        GameServer->>DiscordDiscordBot: 処理終了通知
     end
 ```
 
 GetGuildDataまたはGetGuildMembersを含む開戦前Preloadの必須データ取得に失敗した場合も, Player単位の取得失敗と同様に当該GuildBattleIDをPreload失敗として扱う.
 
-`GUILD_BATTLE_STATUS_PRELOAD_FAILED`となった対戦は運営判断待ちとする. 問題解決後に運営が同一ペアで再開する場合は`RetryPreloadFailedGuildBattle(GuildBattleID, RestartAt)`を実行し, 同一ペアを維持したまま`scheduled`かつ未割当へ戻して`GuildBattleCoordinator`による通常の割当・再Preloadを実行する. 問題解決後に運営が再抽籤を選択した場合, `GuildBattleCoordinator`は対象GuildをGuildID昇順へ並べ, 共通時刻ベースSeedを新規生成してShuffleする. `PRELOAD_FAILED`のGuildBattleIDを昇順へ並べて新しいペアを割り当て, Private APIの`RematchPreloadFailedGuildBattles`へ保存を要求する. 保存後は`scheduled`かつ未割当へ戻し, `GuildBattleCoordinator`による通常の割当と開戦前Preloadを再実行する. 運営が当該対戦を中止する場合は, 対象Guildについて`SetGuildMembershipLock(..., false)`を実行して所属変更禁止を解除する.
+`GUILD_BATTLE_STATUS_PRELOAD_FAILED`となった対戦は運営判断待ちとする. 問題解決後に運営が同一ペアで再開する場合は`RetryPreloadFailedGuildBattle(GuildBattleID, RestartAt)`を実行し, 同一ペアを維持したまま`scheduled`かつ未割当へ戻して`GuildBattleCoordinator`による通常の割当・再Preloadを実行する. 問題解決後に運営が再抽選を選択した場合, `GuildBattleCoordinator`は対象GuildをGuildID昇順へ並べ, 共通時刻ベースSeedを新規生成してShuffleする. `PRELOAD_FAILED`のGuildBattleIDを昇順へ並べて新しいペアを割り当て, Private APIの`RematchPreloadFailedGuildBattles`へ保存を要求する. 保存後は`scheduled`かつ未割当へ戻し, `GuildBattleCoordinator`による通常の割当と開戦前Preloadを再実行する. 運営が当該対戦を中止する場合は, 対象Guildについて`SetGuildMembershipLock(..., false)`を実行して所属変更禁止を解除する.
 
 #### 騎士団戦中
 
@@ -250,10 +250,10 @@ GetGuildDataまたはGetGuildMembersを含む開戦前Preloadの必須データ�
 sequenceDiagram
     actor User
     participant Client
-    participant PublicAPIServer
+    participant PublicAPIServer as Public API Server
     participant GameServer
-    participant PrivateAPIServer
-    participant DB
+    participant PrivateAPIServer as Private API Server
+    participant Database
 
     loop 30分経過するまで
         User ->> Client: 出撃ボタン押下
@@ -269,13 +269,13 @@ sequenceDiagram
         alt キャッスルブレイク
             GameServer ->> GameServer: キャッスルブレイク処理
             GameServer->>GameServer: 成功した要求のRequestSequenceを1加算
-            GameServer -->> PublicAPIServer: GuildBattleSortie(NextRequestSequence)
-            PublicAPIServer -->> Client: GuildBattleSortie(NextRequestSequence)
+            GameServer -->> PublicAPIServer: GuildBattleCastleBreakResponse(NextRequestSequence)
+            PublicAPIServer -->> Client: GuildBattleCastleBreakResponse(NextRequestSequence)
         else 殲滅
             GameServer ->> GameServer: 戦闘処理
             GameServer->>GameServer: 成功した要求のRequestSequenceを1加算
-            GameServer ->> PublicAPIServer: GuildBattleSortie(NextRequestSequence)
-            PublicAPIServer ->> Client: GuildBattleSortie(NextRequestSequence)
+            GameServer ->> PublicAPIServer: GuildBattleAnnihilationResponse(NextRequestSequence)
+            PublicAPIServer ->> Client: GuildBattleAnnihilationResponse(NextRequestSequence)
         end
 
         GameServer ->> GameServer: 出撃完了条件を満たすBattle SpecialのBP/TP回復を評価・反映
@@ -307,7 +307,7 @@ GameServerが受信するあらゆる要求は先に到達した順に処理す�
 
 `GetGuildBattleStatus`は再接続用の状態復元APIとして扱う.
 ClientはAccessToken, PlayerID, GuildBattleIDだけを送信し, GameServerは現在のRequestSequenceを要求しない.
-GameServerは現在HP, BP, TP, 治療・復活状態と残り時間, 出撃待機時間, タクティクス状態, アイテム残数, 両騎士団スコア, チェイン, CBC状態, 現在RequestSequenceを返す.
+GameServerは現在HP, BP, TP, `HealState`, `ReviveState`と残り時間, 出撃待機時間, `TacticsActiveEffectState`, アイテム残数, 両騎士団スコア, チェイン, `GuildBattleCbcStatus`, 現在RequestSequenceを返す.
 `GetGuildBattleStatus`の実行ではRequestSequenceを加算しない.
 CharacterID, Follower, MainSkill, Ability, FormationID等の静的な編成構成はClientが編成確定時からローカルに保持する. `JoinGuildBattle`時にServer編成と照合し, 不一致の場合はServer編成でローカル情報を上書きする. 再接続時は照合済みのローカル情報から復元する. `GetGuildBattleStatus`では静的な編成構成を再送しない.
 
@@ -317,10 +317,10 @@ CharacterID, Follower, MainSkill, Ability, FormationID等の静的な編成構�
 sequenceDiagram
     actor User
     participant Client
-    participant PublicAPIServer
+    participant PublicAPIServer as Public API Server
     participant GameServer
-    participant PrivateAPIServer
-    participant DB
+    participant PrivateAPIServer as Private API Server
+    participant Database
 
     User->>Client: タクティクス使用
     Client->>Client: TP, 使用回数チェック
@@ -344,13 +344,13 @@ sequenceDiagram
         GameServer->>GameServer: タクティクス固有効果を適用
         GameServer->>GameServer: 継続効果はend_type・count_consume_trigger・発動元PlayerID/GuildIDを含むTacticsActiveEffectStateとして保持
         GameServer->>GameServer: 成功した要求のRequestSequenceを1加算
-        GameServer-->>PublicAPIServer: UseTactics(Seed)
-        PublicAPIServer-->>Client: UseTactics(Seed)
+        GameServer-->>PublicAPIServer: UseTacticsResponse(Seed)
+        PublicAPIServer-->>Client: UseTacticsResponse(Seed)
 
         GameServer ->> GameServer: タクティクス使用成立Replay EventをReplayQueueへ追加
     else 使用不可
-        GameServer-->>PublicAPIServer: UseTactics
-        PublicAPIServer-->>Client: UseTactics
+        GameServer-->>PublicAPIServer: ApiErrorResponse(API_ERROR_TACTICS_NOT_AVAILABLE)
+        PublicAPIServer-->>Client: ApiErrorResponse(API_ERROR_TACTICS_NOT_AVAILABLE)
     end
     
     Client->>Client: TP, 使用回数更新
@@ -367,10 +367,10 @@ sequenceDiagram
 sequenceDiagram
     actor User
     participant Client
-    participant PublicAPIServer
+    participant PublicAPIServer as Public API Server
     participant GameServer
-    participant PrivateAPIServer
-    participant DB
+    participant PrivateAPIServer as Private API Server
+    participant Database
 
     User->>Client: BP回復アイテム使用
     Client->>Client: 所持数チェック
@@ -383,17 +383,17 @@ sequenceDiagram
     alt 使用可能
         GameServer->>GameServer: アイテム使用処理
         GameServer->>PrivateAPIServer: UpdatePlayerItem(PlayerID, ItemID, 更新後所持数)
-        PrivateAPIServer->>DB: PLAYER_ITEM更新
-        DB-->>PrivateAPIServer: 更新完了
+        PrivateAPIServer->>Database: PLAYER_ITEM更新
+        Database-->>PrivateAPIServer: 更新完了
         PrivateAPIServer-->>GameServer: UpdatePlayerItem
         GameServer->>GameServer: 成功した要求のRequestSequenceを1加算
-        GameServer-->>PublicAPIServer: UseItem
-        PublicAPIServer-->>Client: UseItem
+        GameServer-->>PublicAPIServer: UseItemResponse
+        PublicAPIServer-->>Client: UseItemResponse
 
         GameServer ->> GameServer: アイテム使用成立Replay EventをReplayQueueへ追加
     else 使用不可
-        GameServer-->>PublicAPIServer: UseItem
-        PublicAPIServer-->>Client: UseItem
+        GameServer-->>PublicAPIServer: ApiErrorResponse
+        PublicAPIServer-->>Client: ApiErrorResponse
     end
 
 ```
@@ -404,33 +404,33 @@ sequenceDiagram
 sequenceDiagram
     actor User
     participant Client
-    participant PublicAPIServer
+    participant PublicAPIServer as Public API Server
     participant GameServer
-    participant PrivateAPIServer
-    participant DB
+    participant PrivateAPIServer as Private API Server
+    participant Database
 
     User->>Client: 治療開始
     Client->>PublicAPIServer: StartHeal(AccessToken, PlayerID, GuildBattleID, RequestSequence)
     PublicAPIServer->>GameServer: StartHeal(PlayerID, GuildBattleID, RequestSequence, AuthenticatedContext)
 
     GameServer->>GameServer: GuildBattleID・PlayerID・RequestSequence一致確認
-    GameServer->>GameServer: 回復状態でないことを確認
+    GameServer->>GameServer: HEAL_STATE_NONEを確認
 
     alt 開始可能
         GameServer->>GameServer: 回復待機時間算出
-        GameServer->>GameServer: 回復中状態へ変更
+        GameServer->>GameServer: HealState = HEAL_STATE_HEALING
         GameServer->>GameServer: 成功した要求のRequestSequenceを1加算
-        GameServer-->>PublicAPIServer: StartHeal
-        PublicAPIServer-->>Client: StartHeal
+        GameServer-->>PublicAPIServer: StartHealResponse
+        PublicAPIServer-->>Client: StartHealResponse
 
         GameServer ->> GameServer: 治療状態変更Replay EventをReplayQueueへ追加
 
         Note over GameServer: 回復待機時間経過
 
-        GameServer->>GameServer: 回復完了状態へ変更
+        GameServer->>GameServer: HealState = HEAL_STATE_COMPLETED
     else 開始不可
-        GameServer-->>PublicAPIServer: StartHeal
-        PublicAPIServer-->>Client: StartHeal
+        GameServer-->>PublicAPIServer: ApiErrorResponse
+        PublicAPIServer-->>Client: ApiErrorResponse
     end
 ```
 
@@ -441,35 +441,35 @@ sequenceDiagram
 sequenceDiagram
     actor User
     participant Client
-    participant PublicAPIServer
+    participant PublicAPIServer as Public API Server
     participant GameServer
-    participant PrivateAPIServer
-    participant DB
+    participant PrivateAPIServer as Private API Server
+    participant Database
 
     User->>Client: 治療キャンセル
     Client->>PublicAPIServer: CancelHeal(AccessToken, PlayerID, GuildBattleID, RequestSequence)
     PublicAPIServer->>GameServer: CancelHeal(PlayerID, GuildBattleID, RequestSequence, AuthenticatedContext)
 
     GameServer->>GameServer: GuildBattleID・PlayerID・RequestSequence一致確認
-    GameServer->>GameServer: 回復中状態を確認
+    GameServer->>GameServer: HealState = HEAL_STATE_HEALINGを確認
 
     alt キャンセル可能
         GameServer->>GameServer: 回復待機時間をリセット
-        GameServer->>GameServer: 回復中状態を解除
-        alt 治療開始前が全滅状態
-            GameServer->>GameServer: 全滅状態へ戻す
-        else 治療開始前が全滅状態ではない
-            GameServer->>GameServer: 通常状態へ戻す
+        GameServer->>GameServer: HealState = HEAL_STATE_NONE
+        alt 治療開始前のReviveState = REVIVE_STATE_ANNIHILATED
+            GameServer->>GameServer: ReviveState = REVIVE_STATE_ANNIHILATED
+        else 治療開始前のReviveState = REVIVE_STATE_NORMAL
+            GameServer->>GameServer: ReviveState = REVIVE_STATE_NORMAL
         end
         Note over GameServer: HP/BPは回復しない
         GameServer->>GameServer: 成功した要求のRequestSequenceを1加算
-        GameServer-->>PublicAPIServer: CancelHeal
-        PublicAPIServer-->>Client: CancelHeal
+        GameServer-->>PublicAPIServer: CancelHealResponse
+        PublicAPIServer-->>Client: CancelHealResponse
 
         GameServer ->> GameServer: 治療状態変更Replay EventをReplayQueueへ追加
     else キャンセル不可
-        GameServer-->>PublicAPIServer: CancelHeal
-        PublicAPIServer-->>Client: CancelHeal
+        GameServer-->>PublicAPIServer: ApiErrorResponse
+        PublicAPIServer-->>Client: ApiErrorResponse
     end
 ```
 
@@ -479,29 +479,29 @@ sequenceDiagram
 sequenceDiagram
     actor User
     participant Client
-    participant PublicAPIServer
+    participant PublicAPIServer as Public API Server
     participant GameServer
-    participant PrivateAPIServer
-    participant DB
+    participant PrivateAPIServer as Private API Server
+    participant Database
 
     User->>Client: 回復完了状態解除
     Client->>PublicAPIServer: CompleteHeal(AccessToken, PlayerID, GuildBattleID, RequestSequence)
     PublicAPIServer->>GameServer: CompleteHeal(PlayerID, GuildBattleID, RequestSequence, AuthenticatedContext)
 
     GameServer->>GameServer: GuildBattleID・PlayerID・RequestSequence一致確認
-    GameServer->>GameServer: 回復完了状態を確認
+    GameServer->>GameServer: HealState = HEAL_STATE_COMPLETEDを確認
 
     alt 完了可能
         GameServer->>GameServer: BP, HP回復処理
-        GameServer->>GameServer: 回復状態を解除
+        GameServer->>GameServer: HealState = HEAL_STATE_NONE
         GameServer->>GameServer: 成功した要求のRequestSequenceを1加算
-        GameServer-->>PublicAPIServer: CompleteHeal 
-        PublicAPIServer-->>Client: CompleteHeal
+        GameServer-->>PublicAPIServer: CompleteHealResponse
+        PublicAPIServer-->>Client: CompleteHealResponse
 
         GameServer ->> GameServer: 治療状態変更Replay EventをReplayQueueへ追加
     else 完了不可
-        GameServer-->>PublicAPIServer: CompleteHeal
-        PublicAPIServer-->>Client: CompleteHeal
+        GameServer-->>PublicAPIServer: ApiErrorResponse
+        PublicAPIServer-->>Client: ApiErrorResponse
     end
 ```
 
@@ -511,10 +511,10 @@ sequenceDiagram
 sequenceDiagram
     actor User
     participant Client
-    participant PublicAPIServer
+    participant PublicAPIServer as Public API Server
     participant GameServer
-    participant PrivateAPIServer
-    participant DB
+    participant PrivateAPIServer as Private API Server
+    participant Database
 
     User->>Client: 復活開始
     Client->>PublicAPIServer: StartRevive(AccessToken, PlayerID, GuildBattleID, RequestSequence)
@@ -526,20 +526,20 @@ sequenceDiagram
     alt 復活可能
         GameServer->>GameServer: パーティランク仕様に従ってパーティランクを算出
         GameServer->>GameServer: パーティランクに応じた復活待機時間を設定
-        GameServer->>GameServer: 復活中状態へ変更
+        GameServer->>GameServer: ReviveState = REVIVE_STATE_REVIVING
         GameServer->>GameServer: 成功した要求のRequestSequenceを1加算
-        GameServer-->>PublicAPIServer: StartRevive
-        PublicAPIServer-->>Client: StartRevive
+        GameServer-->>PublicAPIServer: StartReviveResponse
+        PublicAPIServer-->>Client: StartReviveResponse
 
         GameServer ->> GameServer: 復活状態変更Replay EventをReplayQueueへ追加
 
         Note over GameServer: パーティランクに応じた復活待機時間経過
 
-        GameServer->>GameServer: 復活完了状態へ変更
+        GameServer->>GameServer: ReviveState = REVIVE_STATE_COMPLETED
         Note over GameServer: この時点ではBP消費・HP回復なし
     else 復活不可
-        GameServer-->>PublicAPIServer: StartRevive
-        PublicAPIServer-->>Client: StartRevive
+        GameServer-->>PublicAPIServer: ApiErrorResponse
+        PublicAPIServer-->>Client: ApiErrorResponse
     end
 ```
 
@@ -550,29 +550,29 @@ sequenceDiagram
 sequenceDiagram
     actor User
     participant Client
-    participant PublicAPIServer
+    participant PublicAPIServer as Public API Server
     participant GameServer
-    participant PrivateAPIServer
-    participant DB
+    participant PrivateAPIServer as Private API Server
+    participant Database
 
     User->>Client: 復活キャンセル
     Client->>PublicAPIServer: CancelRevive(AccessToken, PlayerID, GuildBattleID, RequestSequence)
     PublicAPIServer->>GameServer: CancelRevive(PlayerID, GuildBattleID, RequestSequence, AuthenticatedContext)
 
     GameServer->>GameServer: GuildBattleID・PlayerID・RequestSequence一致確認
-    GameServer->>GameServer: 復活中状態を確認
+    GameServer->>GameServer: ReviveState = REVIVE_STATE_REVIVINGを確認
 
     alt キャンセル可能
         GameServer->>GameServer: 復活待機時間を破棄
-        GameServer->>GameServer: 全滅状態へ戻す
+        GameServer->>GameServer: ReviveState = REVIVE_STATE_ANNIHILATED
         GameServer->>GameServer: 成功した要求のRequestSequenceを1加算
-        GameServer-->>PublicAPIServer: CancelRevive
-        PublicAPIServer-->>Client: CancelRevive
+        GameServer-->>PublicAPIServer: CancelReviveResponse
+        PublicAPIServer-->>Client: CancelReviveResponse
 
         GameServer ->> GameServer: 復活状態変更Replay EventをReplayQueueへ追加
     else キャンセル不可
-        GameServer-->>PublicAPIServer: CancelRevive
-        PublicAPIServer-->>Client: CancelRevive
+        GameServer-->>PublicAPIServer: ApiErrorResponse
+        PublicAPIServer-->>Client: ApiErrorResponse
     end
 ```
 
@@ -583,29 +583,29 @@ sequenceDiagram
 sequenceDiagram
     actor User
     participant Client
-    participant PublicAPIServer
+    participant PublicAPIServer as Public API Server
     participant GameServer
-    participant PrivateAPIServer
-    participant DB
+    participant PrivateAPIServer as Private API Server
+    participant Database
 
     User->>Client: 復活完了状態解除
     Client->>PublicAPIServer: CompleteRevive(AccessToken, PlayerID, GuildBattleID, RequestSequence)
     PublicAPIServer->>GameServer: CompleteRevive(PlayerID, GuildBattleID, RequestSequence, AuthenticatedContext)
 
     GameServer->>GameServer: GuildBattleID・PlayerID・RequestSequence一致確認
-    GameServer->>GameServer: 復活完了状態を確認
+    GameServer->>GameServer: ReviveState = REVIVE_STATE_COMPLETEDを確認
 
     alt 完了可能
         GameServer->>GameServer: BP, HP処理
-        GameServer->>GameServer: 全滅状態を解除
+        GameServer->>GameServer: ReviveState = REVIVE_STATE_NORMAL
         GameServer->>GameServer: 成功した要求のRequestSequenceを1加算
-        GameServer-->>PublicAPIServer: CompleteRevive
-        PublicAPIServer-->>Client: CompleteRevive
+        GameServer-->>PublicAPIServer: CompleteReviveResponse
+        PublicAPIServer-->>Client: CompleteReviveResponse
 
         GameServer ->> GameServer: 復活状態変更Replay EventをReplayQueueへ追加
     else 完了不可
-        GameServer-->>PublicAPIServer: CompleteRevive
-        PublicAPIServer-->>Client: CompleteRevive
+        GameServer-->>PublicAPIServer: ApiErrorResponse
+        PublicAPIServer-->>Client: ApiErrorResponse
     end
 ```
 
@@ -627,16 +627,16 @@ DB障害発生状態では, それ以降の騎士団戦中Database送信を行�
 ```mermaid
 sequenceDiagram
     participant GameServer
-    participant PublicAPIServer
-    participant PrivateAPIServer
-    participant DB
-    participant Bot
+    participant PublicAPIServer as Public API Server
+    participant PrivateAPIServer as Private API Server
+    participant Database
+    participant DiscordBot as Discord Bot
 
     Note over GameServer: 騎士団戦開始から30:00到達
 
     GameServer->>GameServer: 新規処理受付停止
-    GameServer->>PrivateAPIServer: UpdateGuildBattleStatus(GuildBattleID, resolving)
-    PrivateAPIServer->>DB: GUILD_BATTLE.status = resolving
+    GameServer->>PrivateAPIServer: UpdateGuildBattleStatus(GuildBattleID, GUILD_BATTLE_STATUS_RESOLVING)
+    PrivateAPIServer->>Database: GUILD_BATTLE.status = GUILD_BATTLE_STATUS_RESOLVING
 
     loop 処理キューが空になるまで
         GameServer->>GameServer: キュー先頭の処理を実行
@@ -650,7 +650,7 @@ sequenceDiagram
         GameServer->>GameServer: Recoveryファイルを保存順に読込
         loop Recoveryレコード
             GameServer->>PrivateAPIServer: 元のPrivate API要求を同じX-Operation-IDで再送
-            PrivateAPIServer->>DB: Operation ID重複確認後, 未処理時のみ更新
+            PrivateAPIServer->>Database: Operation ID重複確認後, 未処理時のみ更新
             PrivateAPIServer-->>GameServer: 再送結果
         end
         alt 全Recoveryレコード再送成功
@@ -662,21 +662,21 @@ sequenceDiagram
 
     loop 対象騎士団
         GameServer->>PrivateAPIServer: SaveGuildBattleResult
-        PrivateAPIServer->>DB: スコア・勝敗結果保存
-        DB-->>PrivateAPIServer: 保存結果
+        PrivateAPIServer->>Database: スコア・勝敗結果保存
+        Database-->>PrivateAPIServer: 保存結果
         PrivateAPIServer-->>GameServer: SaveGuildBattleResult
 
         opt 初回保存失敗
             GameServer->>PrivateAPIServer: SaveGuildBattleResult 再試行（1回）
-            PrivateAPIServer->>DB: スコア・勝敗結果再保存
-            DB-->>PrivateAPIServer: 再保存結果
+            PrivateAPIServer->>Database: スコア・勝敗結果再保存
+            Database-->>PrivateAPIServer: 再保存結果
             PrivateAPIServer-->>GameServer: SaveGuildBattleResult
             opt 再試行も失敗
                 GameServer->>GameServer: エラーログ追記
                 GameServer->>PrivateAPIServer: SaveErrorLog
-                PrivateAPIServer->>DB: エラーログ保存
+                PrivateAPIServer->>Database: エラーログ保存
                 opt DiscordNotificationEnabled=true
-                    GameServer->>Bot: エラーメッセージ送信
+                    GameServer->>DiscordDiscordBot: エラーメッセージ送信
                 end
                 Note over GameServer: 原因調査および復旧は運営が手動で行う
             end
@@ -688,15 +688,15 @@ sequenceDiagram
         Note over GameServer: 最終結果保存成功後にPlayer勝敗数を更新
         loop 当該騎士団戦で1回以上出撃成立した通常Player + ダミーPlayerID 0
             GameServer->>PrivateAPIServer: UpdatePlayerGuildBattleRecord(PlayerID, Result)
-            PrivateAPIServer->>DB: 勝利ならwin_count+1 / 敗北ならlose_count+1 / 引き分けは更新なし
+            PrivateAPIServer->>Database: 勝利ならwin_count+1 / 敗北ならlose_count+1 / 引き分けは更新なし
         end
-        GameServer->>PrivateAPIServer: UpdateGuildBattleStatus(GuildBattleID, completed)
-        PrivateAPIServer->>DB: GUILD_BATTLE.status = completed
+        GameServer->>PrivateAPIServer: UpdateGuildBattleStatus(GuildBattleID, GUILD_BATTLE_STATUS_COMPLETED)
+        PrivateAPIServer->>Database: GUILD_BATTLE.status = GUILD_BATTLE_STATUS_COMPLETED
         GameServer->>PrivateAPIServer: GetGuildBattleExcludedGuilds(TargetDate, StartTime)
         PrivateAPIServer-->>GameServer: ExcludedGuildID[]
         GameServer->>PrivateAPIServer: SetGuildMembershipLock(対象2騎士団 + ExcludedGuildID, false)
         GameServer->>PrivateAPIServer: ClearGuildBattleExcludedGuilds(TargetDate, StartTime)
-        PrivateAPIServer->>DB: GUILD.membership_locked = false
+        PrivateAPIServer->>Database: GUILD.membership_locked = false
     else 再試行後も最終結果保存失敗
         Note over GameServer: ErrorLog保存済み. DiscordNotificationEnabled=trueの場合はBot通知済み. 運営が原因調査し手動復旧する
     end

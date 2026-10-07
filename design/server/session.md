@@ -133,18 +133,18 @@
 sequenceDiagram
     actor User
     participant Discord
-    participant Bot
+    participant DiscordBot as Discord Bot
     participant Client
-    participant PublicAPIServer
-    participant PrivateAPIServer
-    participant DB
+    participant PublicAPIServer as Public API Server
+    participant PrivateAPIServer as Private API Server
+    participant Database
 
     opt DiscordAuthorizationRequired=true
         User->>Discord: Discord追加認可Token要求
-        Discord->>Bot: DiscordUserID
-        Bot->>Bot: Guild・Role・前回要求時刻を検証
-        Bot->>Bot: DiscordAuthorizationToken生成・Ed25519署名
-        Bot-->>Discord: DiscordAuthorizationToken返答
+        Discord->>DiscordDiscordBot: DiscordUserID
+        DiscordBot->>DiscordDiscordBot: Guild・Role・前回要求時刻を検証
+        DiscordBot->>DiscordDiscordBot: DiscordAuthorizationToken生成・Ed25519署名
+        DiscordBot-->>Discord: DiscordAuthorizationToken返答
         Discord-->>User: DiscordAuthorizationToken返答(DM)
     end
 
@@ -155,10 +155,10 @@ sequenceDiagram
     PrivateAPIServer->>PrivateAPIServer: LoginID・Password・UserName検証
     PrivateAPIServer->>PrivateAPIServer: Argon2idでPasswordHash生成
     PrivateAPIServer->>PrivateAPIServer: AccountID・PlayerID生成
-    PrivateAPIServer->>DB: ACCOUNT・PLAYER・Token使用済み記録を同一トランザクションで保存
-    DB-->>PrivateAPIServer: 保存完了
-    PrivateAPIServer-->>PublicAPIServer: CreateAccount(PlayerID)
-    PublicAPIServer-->>Client: CreateAccount(PlayerID)
+    PrivateAPIServer->>Database: ACCOUNT・PLAYER・Token使用済み記録を同一トランザクションで保存
+    Database-->>PrivateAPIServer: 保存完了
+    PrivateAPIServer-->>PublicAPIServer: CreateAccountPrivateResponse(PlayerID)
+    PublicAPIServer-->>Client: CreateAccountResponse(PlayerID)
     Client->>Client: PlayerID保存・新規プレイヤーフラグ保持
 ```
 
@@ -175,18 +175,18 @@ sequenceDiagram
 sequenceDiagram
     actor User
     participant Discord
-    participant Bot
+    participant DiscordBot as Discord Bot
     participant Client
-    participant PublicAPIServer
-    participant PrivateAPIServer
-    participant DB
+    participant PublicAPIServer as Public API Server
+    participant PrivateAPIServer as Private API Server
+    participant Database
 
     opt DiscordAuthorizationRequired=true
         User->>Discord: Discord追加認可Token要求
-        Discord->>Bot: DiscordUserID
-        Bot->>Bot: Guild・Role・前回要求時刻を検証
-        Bot->>Bot: DiscordAuthorizationToken生成・Ed25519署名
-        Bot-->>Discord: DiscordAuthorizationToken返答
+        Discord->>DiscordDiscordBot: DiscordUserID
+        DiscordBot->>DiscordDiscordBot: Guild・Role・前回要求時刻を検証
+        DiscordBot->>DiscordDiscordBot: DiscordAuthorizationToken生成・Ed25519署名
+        DiscordBot-->>Discord: DiscordAuthorizationToken返答
         Discord-->>User: DiscordAuthorizationToken返答(DM)
     end
 
@@ -197,19 +197,19 @@ sequenceDiagram
     alt Version一致
         PublicAPIServer->>PublicAPIServer: 必要な場合DiscordAuthorizationToken検証
         PublicAPIServer->>PrivateAPIServer: AuthenticateAccount(LoginID, Password, DiscordUserID, DiscordAuthorizationTokenID)
-        PrivateAPIServer->>DB: LoginIDに対応するACCOUNT・PLAYER取得
-        DB-->>PrivateAPIServer: Account・Player
+        PrivateAPIServer->>Database: LoginIDに対応するACCOUNT・PLAYER取得
+        Database-->>PrivateAPIServer: Account・Player
         PrivateAPIServer->>PrivateAPIServer: 必要な場合DiscordUserID Binding検証
         PrivateAPIServer->>PrivateAPIServer: Argon2idでPassword検証
 
         alt 認証成功
-            PrivateAPIServer->>DB: 既存ACCOUNT_SESSION削除
+            PrivateAPIServer->>Database: 既存ACCOUNT_SESSION削除
             PrivateAPIServer->>PrivateAPIServer: SessionID・RefreshToken生成
-            PrivateAPIServer->>DB: ACCOUNT_SESSION保存(SessionID, RefreshTokenHash, 期限24時間後)・Token使用済み記録
+            PrivateAPIServer->>Database: ACCOUNT_SESSION保存(SessionID, RefreshTokenHash, 期限24時間後)・Token使用済み記録
             PrivateAPIServer->>PrivateAPIServer: AccessToken生成・Ed25519署名
-            PrivateAPIServer-->>PublicAPIServer: AuthenticateAccount(PlayerID, AccessToken, RefreshToken)
+            PrivateAPIServer-->>PublicAPIServer: AuthenticateAccountResponse(PlayerID, AccessToken, RefreshToken)
             PublicAPIServer->>PublicAPIServer: RefreshTokenをHttpOnly Cookieへ設定
-            PublicAPIServer-->>Client: Login(PlayerID, AccessToken)
+            PublicAPIServer-->>Client: LoginResponse(PlayerID, AccessToken)
             Client->>Client: AccessTokenをメモリへ保持
             opt 新規プレイヤーフラグあり
                 Client->>Client: 初期騎士団作成画面でGuildName・昼夜開始時刻を確定
@@ -227,7 +227,7 @@ sequenceDiagram
             end
         else 認証失敗
             PrivateAPIServer-->>PublicAPIServer: 認証失敗
-            PublicAPIServer-->>Client: API_ERROR_INVALID_CREDENTIALS
+            PublicAPIServer-->>Client: ApiErrorResponse(API_ERROR_INVALID_CREDENTIALS)
         end
     else Version不一致
         PublicAPIServer-->>Client: LoginVersionErrorResponse
@@ -246,33 +246,33 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     actor Client
-    participant PublicAPIServer
-    participant PrivateAPIServer
-    participant DB
+    participant PublicAPIServer as Public API Server
+    participant PrivateAPIServer as Private API Server
+    participant Database
 
     Client->>PublicAPIServer: RefreshAccessToken(__Host-RefreshToken Cookie)
     PublicAPIServer->>PublicAPIServer: Origin検証
     PublicAPIServer->>PrivateAPIServer: RefreshAccessToken(RefreshToken)
     PrivateAPIServer->>PrivateAPIServer: SHA-256(RefreshToken)
-    PrivateAPIServer->>DB: current/previous Hash・期限確認
-    DB-->>PrivateAPIServer: ACCOUNT_SESSION・PLAYER
+    PrivateAPIServer->>Database: current/previous Hash・期限確認
+    Database-->>PrivateAPIServer: ACCOUNT_SESSION・PLAYER
 
     alt 現在有効なRefreshToken
         PrivateAPIServer->>PrivateAPIServer: 新RefreshToken生成
-        PrivateAPIServer->>DB: previous Hash保存・current Hashを新しいHashへ更新
+        PrivateAPIServer->>Database: previous Hash保存・current Hashを新しいHashへ更新
         PrivateAPIServer->>PrivateAPIServer: 新AccessToken生成・Ed25519署名
-        PrivateAPIServer-->>PublicAPIServer: AccessToken・RefreshToken
+        PrivateAPIServer-->>PublicAPIServer: RefreshAccessTokenPrivateResponse(AccessToken, RefreshToken)
         PublicAPIServer->>PublicAPIServer: Rotation後RefreshTokenをHttpOnly Cookieへ設定
-        PublicAPIServer-->>Client: AccessToken
+        PublicAPIServer-->>Client: RefreshAccessTokenResponse(AccessToken)
     else previous Hashと一致
-        PrivateAPIServer->>DB: ACCOUNT_SESSION削除
+        PrivateAPIServer->>Database: ACCOUNT_SESSION削除
         PrivateAPIServer-->>PublicAPIServer: RefreshToken再利用
         PublicAPIServer->>PublicAPIServer: RefreshToken Cookie削除
-        PublicAPIServer-->>Client: API_ERROR_INVALID_REFRESH_TOKEN
+        PublicAPIServer-->>Client: ApiErrorResponse(API_ERROR_INVALID_REFRESH_TOKEN)
     else 無効
         PrivateAPIServer-->>PublicAPIServer: 無効
         PublicAPIServer->>PublicAPIServer: RefreshToken Cookie削除
-        PublicAPIServer-->>Client: API_ERROR_INVALID_REFRESH_TOKEN
+        PublicAPIServer-->>Client: ApiErrorResponse(API_ERROR_INVALID_REFRESH_TOKEN)
     end
 ```
 
@@ -284,19 +284,19 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     actor Client
-    participant PublicAPIServer
-    participant PrivateAPIServer
-    participant DB
+    participant PublicAPIServer as Public API Server
+    participant PrivateAPIServer as Private API Server
+    participant Database
 
     Client->>PublicAPIServer: Logout(__Host-RefreshToken Cookie)
     PublicAPIServer->>PublicAPIServer: Origin検証
     PublicAPIServer->>PrivateAPIServer: Logout(RefreshToken)
     PrivateAPIServer->>PrivateAPIServer: SHA-256(RefreshToken)
-    PrivateAPIServer->>DB: 該当ACCOUNT_SESSION削除
-    DB-->>PrivateAPIServer: 削除完了
-    PrivateAPIServer-->>PublicAPIServer: Logout
+    PrivateAPIServer->>Database: 該当ACCOUNT_SESSION削除
+    Database-->>PrivateAPIServer: 削除完了
+    PrivateAPIServer-->>PublicAPIServer: LogoutPrivateResponse
     PublicAPIServer->>PublicAPIServer: RefreshToken Cookie削除
-    PublicAPIServer-->>Client: Logout
+    PublicAPIServer-->>Client: LogoutResponse
     Client->>Client: AccessToken削除
 ```
 

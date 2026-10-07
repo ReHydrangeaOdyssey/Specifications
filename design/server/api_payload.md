@@ -1091,16 +1091,16 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| GuildBattleID | `GuildBattleID[]` | 再抽籤対象の`PRELOAD_FAILED`騎士団戦ID一覧. GuildBattleID昇順 |
-| Battles | `ScheduledGuildBattle[]` | GuildBattleCoordinatorが再抽籤したペア一覧. GuildBattleIDは対象IDを再利用する |
+| GuildBattleID | `GuildBattleID[]` | 再抽選対象の`PRELOAD_FAILED`騎士団戦ID一覧. GuildBattleID昇順 |
+| Battles | `ScheduledGuildBattle[]` | GuildBattleCoordinatorが再抽選したペア一覧. GuildBattleIDは対象IDを再利用する |
 
 ### RematchPreloadFailedGuildBattlesResponse
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| Battles | `ScheduledGuildBattle[]` | 保存後の再抽籤済み騎士団戦一覧 |
+| Battles | `ScheduledGuildBattle[]` | 保存後の再抽選済み騎士団戦一覧 |
 
-Private APIは再抽籤を行わない. `GuildBattleID[]`と`Battles[]`のID集合が一致すること, 対象がすべて`GUILD_BATTLE_STATUS_PRELOAD_FAILED`であることを確認し, `guild_a_id` / `guild_b_id`を更新して`status=scheduled`, `game_server_instance_id=NULL`へ戻す.
+Private APIは再抽選を行わない. `GuildBattleID[]`と`Battles[]`のID集合が一致すること, 対象がすべて`GUILD_BATTLE_STATUS_PRELOAD_FAILED`であることを確認し, `guild_a_id` / `guild_b_id`を更新して`status=scheduled`, `game_server_instance_id=NULL`へ戻す.
 
 ### RetryPreloadFailedGuildBattleRequest
 

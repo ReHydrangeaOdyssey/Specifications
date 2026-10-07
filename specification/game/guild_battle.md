@@ -91,11 +91,11 @@
 
 * 開戦前Preloadでいずれか1人のPlayerデータ取得に失敗した場合, そのPlayerが所属するGuildを含む当該1対戦だけを取りやめる. 他の騎士団戦は継続する.
 * 取りやめた対戦は`GUILD_BATTLE_STATUS_PRELOAD_FAILED`へ遷移し, `in_progress`へ遷移しない.
-* GameServerはErrorLogを保存し, `DiscordNotificationEnabled=true`の場合はBotへPreload失敗を通知する. その後の再開・再抽籤・中止は運営判断とする.
+* GameServerはErrorLogを保存し, `DiscordNotificationEnabled=true`の場合はBotへPreload失敗を通知する. その後の再開・再抽選・中止は運営判断とする.
 * 問題解決後に運営が同一ペアで再開する場合は, `RetryPreloadFailedGuildBattle`で新しい開始時刻を指定して`scheduled`かつ未割当へ戻し, 通常の割当と開戦前Preloadを再実行する.
-* 問題解決後に運営が再抽籤を選択した場合, GuildBattleCoordinatorが対象GuildをGuildID昇順へ並べ, 共通時刻ベースSeedを新たに生成してShuffleする. `PRELOAD_FAILED`のGuildBattleIDを昇順に並べ, 生成したペアを順に割り当てる.
-* 再抽籤結果はPrivate APIの`RematchPreloadFailedGuildBattles`で保存し, 対象対戦を`scheduled`かつ未割当へ戻す. 再抽籤後は通常の割当処理と開戦前Preloadを改めて実行する.
-* 運営が再抽籤せず中止すると判断した場合は, 対象Guildの`GUILD.membership_locked`を`false`へ戻して所属変更禁止を解除する.
+* 問題解決後に運営が再抽選を選択した場合, GuildBattleCoordinatorが対象GuildをGuildID昇順へ並べ, 共通時刻ベースSeedを新たに生成してShuffleする. `PRELOAD_FAILED`のGuildBattleIDを昇順に並べ, 生成したペアを順に割り当てる.
+* 再抽選結果はPrivate APIの`RematchPreloadFailedGuildBattles`で保存し, 対象対戦を`scheduled`かつ未割当へ戻す. 再抽選後は通常の割当処理と開戦前Preloadを改めて実行する.
+* 運営が再抽選せず中止すると判断した場合は, 対象Guildの`GUILD.membership_locked`を`false`へ戻して所属変更禁止を解除する.
 
 ## 勝敗条件
 タイムアップ時に最も合計「[pt](guild_battle.md#事前用語説明)」が高いほうが勝ちとなる.

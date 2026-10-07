@@ -84,17 +84,17 @@
 ## Preload失敗後の再処理
 
 * `GUILD_BATTLE_STATUS_PRELOAD_FAILED`の同一ペア再開は運営がPrivate APIの`RetryPreloadFailedGuildBattle`を実行し, `scheduled`かつ未割当へ戻した後に通常のCoordinator割当・Preload開始処理へ戻す.
-* 運営が再抽籤を選択した場合, 再抽籤ロジックは`GuildBattleCoordinator`が実行する.
-* 再抽籤対象GuildをGuildID昇順へ並べ, `GenerateTimeBasedSeed`でSeedを新規生成してShuffleする.
+* 運営が再抽選を選択した場合, 再抽選ロジックは`GuildBattleCoordinator`が実行する.
+* 再抽選対象GuildをGuildID昇順へ並べ, `GenerateTimeBasedSeed`でSeedを新規生成してShuffleする.
 * `PRELOAD_FAILED`のGuildBattleIDを昇順へ並べて新しいペアを割り当て, Private APIの`RematchPreloadFailedGuildBattles`へ保存を要求する.
 * 保存後は`scheduled`かつ未割当となるため, 通常のCoordinator割当・Preload開始処理へ戻す.
 
 ## 運営操作
 
-* 運営ComponentからGuildBattleCoordinatorへ送信する騎士団戦再割当・再抽籤等のCoordinator固有操作はmTLSを必須とする.
+* 運営ComponentからGuildBattleCoordinatorへ送信する騎士団戦再割当・再抽選等のCoordinator固有操作はmTLSを必須とする.
 * `RetryUnassignedGuildBattleAssignment`は要求`GuildBattleID[]`のうちDatabase上で`scheduled`かつ未割当の対戦について通常の容量確認・割当処理を直ちに実行する. 再割当先GameServerを運営Componentから指定しない.
 * 要求・レスポンスは「[API Payload](api_payload.md)」の`RetryUnassignedGuildBattleAssignmentRequest` / `RetryUnassignedGuildBattleAssignmentResponse`を参照する.
-* 運営が`PRELOAD_FAILED`対戦の再抽籤を要求した場合, GuildBattleCoordinatorが再抽籤を実行してPrivate APIの`RematchPreloadFailedGuildBattles`へ保存を要求する.
+* 運営が`PRELOAD_FAILED`対戦の再抽選を要求した場合, GuildBattleCoordinatorが再抽選を実行してPrivate APIの`RematchPreloadFailedGuildBattles`へ保存を要求する.
 * Databaseの直接更新は行わない.
 
 ## Discord Bot通知

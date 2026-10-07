@@ -7,19 +7,19 @@
 flowchart TD;
     Start[戦闘開始];
     End[戦闘終了];
-    TrunStart[ターン開始];
-    TurnStartAbility[EVERY_N_TURNS ターン開始評価];
-    BeforeActionAbility[EVERY_N_TURNS 行動前評価];
-    AfterActionAbility[EVERY_N_TURNS 行動後評価];
-    TurnEndAbility[EVERY_N_TURNS ターン終了評価];
-    TrunEnd[ターン終了];
+    TurnStart[ターン開始];
+    TurnStartAbility[ABILITY_CONDITION_EVERY_N_TURNS / ABILITY_TURN_TIMING_TURN_START];
+    BeforeActionAbility[ABILITY_CONDITION_EVERY_N_TURNS / ABILITY_TURN_TIMING_BEFORE_ACTION];
+    AfterActionAbility[ABILITY_CONDITION_EVERY_N_TURNS / ABILITY_TURN_TIMING_AFTER_ACTION];
+    TurnEndAbility[ABILITY_CONDITION_EVERY_N_TURNS / ABILITY_TURN_TIMING_TURN_END];
+    TurnEnd[ターン終了];
     Judgment[勝敗判定]
     CheckTurnLimit{指定ターン経過?};
     CheckAnnihilation{どちらか全滅している?};
     DetermineOrder[攻撃順の確定];
     PopQueue[行動待機キューからPOP];
     CharacterAttack[[キャラクター行動]];
-    Ability[アビリティ発動];
+    Ability[ABILITY_CONDITION_BATTLE_STARTを評価・発動];
     AddWaitCount[攻撃したキャラクターの待機時間を増加];
     NextTurn[1ターン進める];
     UpdateWaitCount[キャラクター速度に応じた待機カウントの更新];
@@ -27,8 +27,8 @@ flowchart TD;
     UpdateTurnEndEffect[[ターン終了時処理]];
 
     Start --> Ability --> DetermineOrder --> PopQueue --> NextTurn
-    NextTurn --> TrunStart --> TurnStartAbility --> BeforeActionAbility --> CharacterAttack --> AfterActionAbility --> UpdateStatusAbnormality --> UpdateTurnEndEffect --> TurnEndAbility --> AddWaitCount --> TrunEnd
-    TrunEnd --> CheckAnnihilation
+    NextTurn --> TurnStart --> TurnStartAbility --> BeforeActionAbility --> CharacterAttack --> AfterActionAbility --> UpdateStatusAbnormality --> UpdateTurnEndEffect --> TurnEndAbility --> AddWaitCount --> TurnEnd
+    TurnEnd --> CheckAnnihilation
     CheckAnnihilation -- Yes --> Judgment;
     CheckAnnihilation -- No --> CheckTurnLimit;
     CheckTurnLimit -- Yes --> Judgment;
@@ -40,11 +40,11 @@ flowchart TD;
 `状態異常更新`で毒ダメージによりHPが0になった場合は, 戦闘不能時アビリティを発動せず, そのままターン終了時処理へ進む.
 同一キャラクターで同一タイミングに複数アビリティの発動条件が成立した場合は, Abilityスロット番号の小さい順に判定・処理する. 複数キャラクターで同一タイミングに成立した場合は, 戦闘計算上の速度が速い順, 同一速度ならフォーメーション内部値が小さい順, 速度・内部値とも同一ならPlayerIDの小さい順で抽選対象リストを作成して疑似乱数の抽選順で処理する.
 戦闘開始時に`SkillBattleState.activation_count=0`とし, 各`AbilityBattleState.activation_count=0`, `activated_this_turn=false`で初期化する. ターン開始時にすべての`AbilityBattleState.activated_this_turn`をfalseへ戻す. スキル発動時は`SkillBattleState.activation_count`を1増加し, Ability発動時は対応するAbilityIDの`AbilityBattleState.activation_count`を1増加して`activated_this_turn=true`とする. 最大発動回数判定は各マスターデータの`max_activation_count`と戦闘中状態の`activation_count`を比較して行う.
-戦闘フロー内の「回避は発動済み?」「状態異常付与アビリティは発動済み?」「追撃は発動済み?」「反撃は発動済み?」は, 対応するAbilityIDの`AbilityBattleState.activated_this_turn`を参照する. 発動済み状態はAbilityEffectID単位では共有しない.
+戦闘フロー内の「`ABILITY_EFFECT_AVOIDANCE`は発動済み?」「`ABILITY_EFFECT_STATUS_ABNORMALITY_ATTACK`は発動済み?」「`ABILITY_EFFECT_PURSUIT`は発動済み?」「`ABILITY_EFFECT_COUNTER`は発動済み?」は, 対応するAbilityIDの`AbilityBattleState.activated_this_turn`を参照する. 発動済み状態はAbilityEffectID単位では共有しない.
 通常の行動順決定で敵味方の速度・フォーメーション内部値が同一となる場合も, PlayerIDの小さい順で抽選対象リストを作成する.
 戦闘中キャラクターは`BuffDebuffState`, `BuffDebuffEffectState`, `StatusAbnormalityState[]`を保持する. スキル・アビリティによるバフ・デバフ付与時は`BuffDebuffEffectState`の実値を更新し, その有無から`BuffDebuffState`を更新する. 状態異常付与・更新時は`StatusAbnormalityState[]`を更新する. フォーメーションおよびタクティクス補正はこれらのバフ・デバフ状態へ影響しない.
-暗闇状態の攻撃成功判定に失敗した場合は, `追撃は発動済み?`の判定を行わず, 直接`追撃率 > 乱数?`へ進む. この分岐は仕様上の意図した処理とする.
-`ABILITY_CONDITION_EVERY_N_TURNS`は`AbilityActivationConditionData.turn_timing`の`AbilityTurnTiming`に従い, `TURN_START`はターン開始直後, `BEFORE_ACTION`は行動キャラクターの行動直前, `AFTER_ACTION`は当該行動完了直後, `TURN_END`は状態異常更新・ターン終了時効果処理後かつターン終了直前に評価する. 現在ターン数が`condition_value`の倍数の場合に条件成立とする.
+`STATUS_ABNORMALITY_BLINDNESS`の攻撃成功判定に失敗した場合は, 「`ABILITY_EFFECT_PURSUIT`は発動済み?」の判定を行わず, 直接「`AbilityMasterData.activation_rate`（`ABILITY_EFFECT_PURSUIT`）> 乱数?」へ進む. この分岐は仕様上の意図した処理とする.
+`ABILITY_CONDITION_EVERY_N_TURNS`は`AbilityActivationConditionData.turn_timing`の`AbilityTurnTiming`に従い, `ABILITY_TURN_TIMING_TURN_START`はターン開始直後, `ABILITY_TURN_TIMING_BEFORE_ACTION`は行動キャラクターの行動直前, `ABILITY_TURN_TIMING_AFTER_ACTION`は当該行動完了直後, `ABILITY_TURN_TIMING_TURN_END`は状態異常更新・ターン終了時効果処理後かつターン終了直前に評価する. 現在ターン数が`condition_value`の倍数の場合に条件成立とする.
 
 ### TacticsBattleSpecialType適用
 
@@ -76,8 +76,8 @@ flowchart TD;
     Random[対象・HITごとに1.0以上1.03以下のダメージ乱数を取得];
     RandomDamage[ダメージ = 基礎ダメージ * ダメージ乱数];
     CheckNormalAttack{通常攻撃?};
-    CheckDamageIncrease{DAMAGE_INCREASE発動?};
-    DamageIncrease[ダメージ = ダメージ * correction_value];
+    CheckDamageIncrease{ABILITY_EFFECT_DAMAGE_INCREASE 発動?};
+    DamageIncrease[ダメージ = ダメージ * AbilityMasterData.effect_data.correction.correction_value];
     MaxDamage[ダメージ = min ダメージ, 99999];
     Apply[HP反映時に小数点以下を切り捨てて減算し, HPを0未満にしない];
     End[ダメージ計算終了];
@@ -101,7 +101,7 @@ flowchart TD;
 ```mermaid
 flowchart TD;
     Start[スキル発動開始];
-    Effect{SkillEffectID};
+    Effect{SkillMasterData.effect_id / SkillEffectID};
     Attack[[スキルダメージ計算]];
     Buff[バフ効果を適用];
     Debuff[デバフ効果を適用];
@@ -110,11 +110,11 @@ flowchart TD;
     End[スキル発動終了];
 
     Start --> Effect;
-    Effect -- ATTACK --> Attack --> End;
-    Effect -- BUFF --> Buff --> End;
-    Effect -- DEBUFF --> Debuff --> End;
-    Effect -- STATUS_ABNORMALITY --> Status --> End;
-    Effect -- HEAL --> Heal --> End;
+    Effect -- SKILL_EFFECT_ATTACK --> Attack --> End;
+    Effect -- SKILL_EFFECT_BUFF --> Buff --> End;
+    Effect -- SKILL_EFFECT_DEBUFF --> Debuff --> End;
+    Effect -- SKILL_EFFECT_STATUS_ABNORMALITY --> Status --> End;
+    Effect -- SKILL_EFFECT_HEAL --> Heal --> End;
 ```
 
 ### スキルダメージ計算フロー
@@ -124,7 +124,7 @@ flowchart TD;
 ```mermaid
 flowchart TD;
     Start[スキルダメージ計算開始];
-    DamageType{damage_value_type};
+    DamageType{SkillMasterData.damage_value_type};
     Mode{騎士団戦?};
     GuildAttack[騎士団戦攻撃者攻撃力を算出];
     GuildDefense[騎士団戦攻撃対象防御力を算出];
@@ -136,16 +136,16 @@ flowchart TD;
     RandomDamage[ダメージ = ダメージ * 乱数];
     Min[ダメージ = max ダメージ, 250];
     Fixed[ダメージ = SkillMasterData.correction_value];
-    FixedIncrease[発動したFIXED_DAMAGE_INCREASEのcorrection_valueを加算し250以上99999以下へクランプ];
+    FixedIncrease[AbilityMasterData.effect_data.correction.correction_value（ABILITY_EFFECT_FIXED_DAMAGE_INCREASE）を加算し250以上99999以下へクランプ];
     Apply[HP反映時に小数点以下を切り捨てて減算し, HPを0未満にしない];
     End[スキルダメージ計算終了];
 
     Start --> DamageType;
-    DamageType -- RATE --> Mode;
+    DamageType -- SKILL_DAMAGE_VALUE_TYPE_RATE --> Mode;
     Mode -- Yes --> GuildAttack --> GuildDefense --> Correction;
     Mode -- No --> ArenaAttack --> ArenaDefense --> Correction;
     Correction --> Base --> Random --> RandomDamage --> Min --> Apply --> End;
-    DamageType -- FIXED --> Fixed --> FixedIncrease --> Apply;
+    DamageType -- SKILL_DAMAGE_VALUE_TYPE_FIXED --> Fixed --> FixedIncrease --> Apply;
 ```
 
 ### ダメージ乱数の消費規則
@@ -164,25 +164,25 @@ flowchart TD;
     Start --> CheckSkillCount
 
     CheckEmptyList{攻撃対象リストが空?};
-    CheckDrawAggro{DRAW_AGGRO発動?};
-    ChangeAttackOrigin[攻撃範囲の起点をDRAW_AGGRO発動キャラクターへ変更];
+    CheckDrawAggro{ABILITY_EFFECT_DRAW_AGGRO 発動?};
+    ChangeAttackOrigin[攻撃範囲の起点をABILITY_EFFECT_DRAW_AGGRO発動キャラクターへ変更];
     GetAttackRange[攻撃対象リストの取得];
-    CheckCoverCandidate{COVER候補が存在する?};
+    CheckCoverCandidate{ABILITY_EFFECT_COVER候補が存在する?};
     SelectCover[候補をフォーメーション内部番号順に並べて1キャラクターを抽選];
-    CheckCoverRate{選択したCOVERの発動率 > 乱数?};
-    SetCover[取得済み攻撃対象リストに対するCOVER発動状態を保持];
+    CheckCoverRate{選択したAbilityMasterData.activation_rate > 乱数?};
+    SetCover[取得済み攻撃対象リストに対するABILITY_EFFECT_COVER発動状態を保持];
     PopAttackRange[攻撃対象リストからPOP];
 
     CalculateEnemyHP[[相手HP処理]];
-    CalculateCoverHP[[元の攻撃対象の値でダメージ算出しCOVER発動キャラクターへHP反映]];
+    CalculateCoverHP[[元の攻撃対象の値でダメージ算出しABILITY_EFFECT_COVER発動キャラクターへHP反映]];
     CalculateFriendHP[[味方HP処理]];
     CalculateEnemyHP2[[相手HP処理]];
 
     Attack[攻撃];
-    CheckCoverActive{COVER発動中?};
+    CheckCoverActive{ABILITY_EFFECT_COVER発動中?};
 
     CheckSkillCount{SkillBattleState.activation_count < 最大発動回数?};
-    CheckSilent{沈黙状態?};
+    CheckSilent{STATUS_ABNORMALITY_SILENCE?};
     CheckSkill{スキル発動率 > 乱数?};
     ActivateSkill[[スキル発動]];
 
@@ -205,11 +205,11 @@ flowchart TD;
     CheckEmptyList -- Yes --> CheckAttackerHP;
     CheckEmptyList -- No --> PopAttackRange;
 
-    CheckActivatedAvoidance{回避は発動済み?};
-    CheckAvoidance{回避率 > 乱数?};
-    CheckAvoidanceDisable{回避無効化率 > 乱数?};
-    AvoidanceAbility[回避アビリティ発動];
-    CheckTacticsAvoidance{回避効果中か?};
+    CheckActivatedAvoidance{ABILITY_EFFECT_AVOIDANCEは発動済み?};
+    CheckAvoidance{AbilityMasterData.activation_rate（ABILITY_EFFECT_AVOIDANCE） > 乱数?};
+    CheckAvoidanceDisable{AbilityMasterData.activation_rate（ABILITY_EFFECT_AVOIDANCE_DISABLE） > 乱数?};
+    AvoidanceAbility[ABILITY_EFFECT_AVOIDANCE発動];
+    CheckTacticsAvoidance{TACTICS_BATTLE_SPECIAL_ELYSIONの回避効果中?};
 
     PopAttackRange --> CheckActivatedAvoidance
     CheckActivatedAvoidance -- Yes --> CheckTacticsAvoidance;
@@ -222,7 +222,7 @@ flowchart TD;
     CheckTacticsAvoidance -- Yes --> CheckActivatedCounter;
     CheckTacticsAvoidance -- No --> CheckBlindness;
 
-    CheckBlindness{暗闇状態?};
+    CheckBlindness{STATUS_ABNORMALITY_BLINDNESS?};
     CheckBlindnessAttack{攻撃成功?};
 
     CheckBlindness -- Yes --> CheckBlindnessAttack;
@@ -230,10 +230,10 @@ flowchart TD;
     CheckBlindnessAttack -- Yes --> CheckActivatedStatusAbnormality;
     CheckBlindnessAttack -- No --> CheckPursuit;
 
-    CheckActivatedStatusAbnormality{状態異常付与アビリティは発動済み?};
-    CheckStatusAbnormalityAvoidance{状態異常回避 > 乱数?};
-    CheckStatusAbnormality{状態異常付与率 > 乱数?};
-    AddStatusAbnormality[状態異常付与]; 
+    CheckActivatedStatusAbnormality{ABILITY_EFFECT_STATUS_ABNORMALITY_ATTACKは発動済み?};
+    CheckStatusAbnormalityAvoidance{対象StatusAbnormalityIDに対応するAbilityMasterData.activation_rate（ABILITY_EFFECT_AVOIDANCE） > 乱数?};
+    CheckStatusAbnormality{AbilityMasterData.activation_rate（ABILITY_EFFECT_STATUS_ABNORMALITY_ATTACK） > 乱数?};
+    AddStatusAbnormality[StatusAbnormalityStateへ状態異常を反映]; 
 
     CheckActivatedStatusAbnormality -- Yes --> Attack;
     CheckActivatedStatusAbnormality -- No --> CheckStatusAbnormalityAvoidance;
@@ -247,19 +247,19 @@ flowchart TD;
     CheckCoverActive -- No --> CalculateEnemyHP --> CheckActivatedPursuit;
     CheckCoverActive -- Yes --> CalculateCoverHP --> CheckActivatedPursuit;
 
-    CheckActivatedPursuit{追撃は発動済み?};
-    CheckPursuit{追撃率 > 乱数?};
-    Pursuit[追撃アビリティ発動]; 
+    CheckActivatedPursuit{ABILITY_EFFECT_PURSUITは発動済み?};
+    CheckPursuit{AbilityMasterData.activation_rate（ABILITY_EFFECT_PURSUIT） > 乱数?};
+    Pursuit[ABILITY_EFFECT_PURSUIT発動]; 
     CheckActivatedPursuit -- Yes --> CheckActivatedCounter;
     CheckActivatedPursuit -- No --> CheckPursuit;
     CheckPursuit -- Yes --> Pursuit;
     CheckPursuit -- No --> CheckActivatedCounter;
     Pursuit --> CalculateEnemyHP2
 
-    CheckActivatedCounter{反撃は発動済み?};
-    CounterAbility[反撃アビリティ発動];
-    CheckCounter{反撃率 > 乱数?};
-    CheckCounterDisable{反撃無効化率 > 乱数?};
+    CheckActivatedCounter{ABILITY_EFFECT_COUNTERは発動済み?};
+    CounterAbility[ABILITY_EFFECT_COUNTER発動];
+    CheckCounter{AbilityMasterData.activation_rate（ABILITY_EFFECT_COUNTER） > 乱数?};
+    CheckCounterDisable{AbilityMasterData.activation_rate（ABILITY_EFFECT_COUNTER_DISABLE） > 乱数?};
 
     CheckActivatedCounter -- Yes --> CalculateEnemyHP2;
     CheckActivatedCounter -- No --> CheckCounter;
@@ -269,7 +269,7 @@ flowchart TD;
     CheckCounterDisable -- No --> CounterAbility;
 
     CheckEmptyHP{相手のHP > 0?};
-    KilledAbility[HP0時のアビリティ発動];
+    KilledAbility[ABILITY_CONDITION_INCAPACITATEDを評価・発動];
     CounterAbility --> CalculateFriendHP
     CalculateEnemyHP2 --> CheckEmptyHP
     CalculateFriendHP --> CalculateEnemyHP2
@@ -278,7 +278,7 @@ flowchart TD;
     KilledAbility --> CheckEmptyList
 
     CheckAttackerHP{攻撃者のHP > 0?};
-    KilledAttackerAbility[HP0時のアビリティ発動];
+    KilledAttackerAbility[ABILITY_CONDITION_INCAPACITATEDを評価・発動];
     CheckAttackerHP -- Yes --> End
     CheckAttackerHP -- No --> KilledAttackerAbility
     KilledAttackerAbility --> End
@@ -287,7 +287,7 @@ flowchart TD;
 
 `ABILITY_EFFECT_COVER`の候補抽選は取得済み攻撃対象リスト単位で1回だけ行う. 発動した場合もダメージ計算上の攻撃対象はリスト内の元キャラクターとし, HP減算先だけをかばうキャラクターへ変更する. リストに複数対象がある場合は各対象について個別にダメージを算出し, その回数だけかばうキャラクターへ反映する.
 `ABILITY_EFFECT_DRAW_AGGRO`が複数候補の場合はフォーメーション内部番号の小さい順に候補を並べて1キャラクターだけを抽選し, 選ばれた候補だけ発動率判定を行う. 成功時は対象リスト取得前に起点だけを変更し, 失敗時に別候補を再抽選しない.
-`TACTICS_BATTLE_SPECIAL_ELYSION`の回避効果は通常攻撃にだけ適用し, Ability回避処理の後に独立した`回避効果中か?`判定を行う. 効果中の場合は当該通常攻撃を回避したものとして反撃判定へ進む.
+`TACTICS_BATTLE_SPECIAL_ELYSION`の回避効果は通常攻撃にだけ適用し, `ABILITY_EFFECT_AVOIDANCE`処理の後に独立した「`TACTICS_BATTLE_SPECIAL_ELYSION`の回避効果中?」判定を行う. 効果中の場合は当該通常攻撃を回避したものとして反撃判定へ進む.
 
 戦闘フロー内の回避率, 状態異常回避率, 回避無効化率, 状態異常付与率, 追撃率, 反撃率, 反撃無効化率は, 対応するアビリティの`AbilityMasterData.activation_rate`を使用する.
 

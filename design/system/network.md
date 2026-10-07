@@ -5,7 +5,7 @@
 ```mermaid
 flowchart LR
     subgraph USER["User / Internet - Untrusted"]
-        client["Game Client"]
+        client["Client"]
         internet["Internet"]
         discord["Discord"]
         client --> internet
@@ -28,7 +28,7 @@ flowchart LR
 
             subgraph OPS["Optional Operations Container"]
                 bot["Discord Bot"]
-                ops["Operations Tool"]
+                ops["運営Component"]
             end
         end
     end
@@ -40,8 +40,8 @@ flowchart LR
     public_api -->|"mTLS<br/>Account / Guild"| private_api
     public_api -->|"mTLS<br/>Arena / GuildBattle"| game
 
-    coordinator -->|"mTLS Control API<br/>capacity / preload"| game
-    coordinator -->|"mTLS<br/>matching / assignment"| private_api
+    coordinator -->|"mTLS Control API<br/>GetGameServerCapacity / StartGuildBattlePreload"| game
+    coordinator -->|"mTLS<br/>騎士団戦生成・割当用Private API"| private_api
     game -->|"mTLS<br/>Private API calls / persistence"| private_api
 
     private_api -->|"DB connection<br/>only DB ingress path"| db
@@ -72,7 +72,7 @@ flowchart LR
 * Public API ServerとPrivate API Server間の通信はmTLSを必須とする. 双方は信頼済みCAによる相手証明書を検証し, 証明書検証に失敗した接続を受け付けない. Account/Guild系Public APIは本経路でPrivate API Serverへ直接中継する.
 * GameServerとPrivate API Server間の通信はmTLSを必須とする. 双方は信頼済みCAによる相手証明書を検証し, 証明書検証に失敗した接続を受け付けない.
 * GuildBattleCoordinatorとGameServer間のControl API通信はmTLSを必須とする. GameServerはGuildBattleCoordinatorのService Identityから`GetGameServerCapacity`および`StartGuildBattlePreload`だけを受け付ける.
-* GuildBattleCoordinatorとPrivate API Server間の通信はmTLSを必須とする. Private API ServerはGuildBattleCoordinatorのService Identityに対して騎士団戦生成・割当・再抽籤に必要なPrivate APIだけを許可する.
+* GuildBattleCoordinatorとPrivate API Server間の通信はmTLSを必須とする. Private API ServerはGuildBattleCoordinatorのService Identityに対して騎士団戦生成・割当・再抽選に必要なPrivate APIだけを許可する.
 * 運営ComponentからPrivate API Serverへの運用API通信はmTLSを必須とする. Private API Serverは運営用Service Identityを検証し, 運営API以外を許可しない.
 * 運営ComponentからGuildBattleCoordinatorへのCoordinator固有運用API通信もmTLSを必須とし, GuildBattleCoordinatorは運営用Service Identityから許可した運用操作だけを受け付ける.
 * `DiscordNotificationEnabled=true`の場合, GameServer, GuildBattleCoordinatorまたはPrivate API ServerからDiscord Botへ送信する運営通知通信はmTLSを必須とする. Discord Botは通知送信元のService Identityを検証する.
@@ -95,7 +95,7 @@ Private API ServerとDatabaseはKubernetes上のPublic API Server, GameServerお
 ```mermaid
 flowchart LR
     subgraph EXTERNAL["External / Untrusted Network"]
-        client["Game Client"]
+        client["Client"]
         internet["Internet"]
         discord_platform["Discord"]
         client --> internet
@@ -124,7 +124,7 @@ flowchart LR
 
     subgraph OPS["Optional Operations Environment"]
         bot["Discord Bot"]
-        operations_tool["Operations Tool"]
+        operations_tool["運営Component"]
     end
 
     internet -->|"Public API<br/>HTTP/2 + TLS 1.3 / Protobuf"| ingress
@@ -136,8 +136,8 @@ flowchart LR
     arena_service --> game_pods
     public_pods -->|"mTLS<br/>GuildBattle: owner Pod by Pod UID"| game_pods
 
-    coordinator -->|"mTLS Control API<br/>capacity / preload"| game_pods
-    coordinator -->|"mTLS<br/>battle creation / matching / assignment"| private_api
+    coordinator -->|"mTLS Control API<br/>GetGameServerCapacity / StartGuildBattlePreload"| game_pods
+    coordinator -->|"mTLS<br/>騎士団戦生成・割当用Private API"| private_api
     game_pods -->|"mTLS<br/>Private API calls / persistence"| private_api
 
     private_api -->|"DB connection<br/>only permitted DB client"| db

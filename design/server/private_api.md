@@ -7,7 +7,7 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 - Database保存・取得要求はGameServerおよびGuildBattleCoordinatorから受ける.
 - `DiscordAuthorizationRequired=true`の場合, Discord BotからはRole喪失時の`RevokeDiscordSessions`だけを受け付ける.
 - Public API Server, GameServer, GuildBattleCoordinatorおよびDiscord BotとPrivate API Server間の通信はmTLSを必須とし, 双方が信頼済みCAによる証明書を検証する. Clientからの直接接続を受け付けない.
-- mTLS証明書のService Identityを検証し, Public API Serverからは認証・Account・騎士団戦ルーティング関連API, GameServerからはゲームデータ関連API, GuildBattleCoordinatorからは騎士団戦生成・割当・再抽籤に必要なAPI, Discord Botからは`RevokeDiscordSessions`だけを受け付ける. 運営用APIはmTLSで識別した運営Componentからだけ受け付ける.
+- mTLS証明書のService Identityを検証し, Public API Serverからは認証・Account・騎士団戦ルーティング関連API, GameServerからはゲームデータ関連API, GuildBattleCoordinatorからは騎士団戦生成・割当・再抽選に必要なAPI, Discord Botからは`RevokeDiscordSessions`だけを受け付ける. 運営用APIはmTLSで識別した運営Componentからだけ受け付ける.
 - Databaseへ直接接続できるApplication ComponentはPrivate API Serverだけとする.
 - AccessToken署名用秘密鍵はPrivate API Serverだけが保持する.
 - Databaseとのデータ保存・取得を仲介する. Arenaの抽選はGameServer, 騎士団戦のマッチング生成はGuildBattleCoordinatorが行う.
@@ -632,7 +632,7 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 
 [API Payload](api_payload.md)の「UpdateGuildBattleStatusRequest」を参照する.
 
-### Preload失敗対戦の再抽籤結果保存
+### Preload失敗対戦の再抽選結果保存
 
 #### メソッド名
 
@@ -640,11 +640,11 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 
 #### 処理内容
 
-- 本APIは抽籤を行わない. 抽籤ロジックと疑似乱数消費はGuildBattleCoordinator側で行う.
+- 本APIは抽選を行わない. 抽選ロジックと疑似乱数消費はGuildBattleCoordinator側で行う.
 - 要求されたGuildBattleIDがすべて`GUILD_BATTLE_STATUS_PRELOAD_FAILED`であることを確認する.
 - 要求のGuildBattleID集合と`Battles[]`のGuildBattleID集合が一致することを確認する.
 - 同一トランザクションで各対象`GUILD_BATTLE.guild_a_id` / `guild_b_id`をGuildBattleCoordinator生成済みペアへ更新し, `status=scheduled`, `game_server_instance_id=NULL`へ戻す.
-- 問題解決後に運営が再抽籤を選択した場合だけGuildBattleCoordinatorから呼び出す.
+- 問題解決後に運営が再抽選を選択した場合だけGuildBattleCoordinatorから呼び出す.
 
 #### 要求・レスポンス
 

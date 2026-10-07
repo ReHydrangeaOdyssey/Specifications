@@ -62,7 +62,7 @@ Token本体やPasswordは識別子として使用しない.
 
 | 通知 | 初期確認 | 通常の対応 |
 |---|---|---|
-| GuildBattle Preload失敗 | GuildBattleID, 失敗Player取得処理, Error Log | 原因解消後に再Preload, 再抽籤, 中止のいずれかを判断する |
+| GuildBattle Preload失敗 | GuildBattleID, 失敗Player取得処理, Error Log | 原因解消後に再Preload, 再抽選, 中止のいずれかを判断する |
 | 0人候補エラー | 対象日, 開始時刻, 対象Guild | 自動でロック解除済みであることを確認する. 通常は追加操作不要 |
 | GameServer水平スケーリング失敗 | 未割当Battle数, ready GameServer数, Controller状態 | 原因解消後に未割当Battle再割当を実行する. 継続不能なら未割当Battleを削除する |
 | GuildBattle最終結果保存失敗 | GuildBattleID, Error Log, Database状態 | 自動で`completed`になっていないことを確認し, 手動復旧対象として扱う |
@@ -84,7 +84,7 @@ Bot通知に失敗してもゲーム状態を巻き戻さない.
 | 条件 | 運営判断 | 操作 |
 |---|---|---|
 | 原因が解消済みで, 同じ2Guildの対戦を維持する | 同一ペア再開 | `RetryPreloadFailedGuildBattle`へ新しい`RestartAt`を指定する |
-| 原因が解消済みで, 対戦組み合わせを変更する | 再抽籤 | GuildBattleCoordinatorへ再抽籤を要求し, `RematchPreloadFailedGuildBattles`で結果を保存する |
+| 原因が解消済みで, 対戦組み合わせを変更する | 再抽選 | GuildBattleCoordinatorへ再抽選を要求し, `RematchPreloadFailedGuildBattles`で結果を保存する |
 | 対戦を実施しない | 中止 | 対象Guildの`membership_locked=false`へ戻す |
 
 ### 同一ペア再開
@@ -97,10 +97,10 @@ Bot通知に失敗してもゲーム状態を巻き戻さない.
 6. GuildBattleCoordinatorが通常のGameServer割当とPreloadを再実行することを確認する.
 7. 再度`PRELOAD_FAILED`となった場合は同じ判断手順へ戻る.
 
-### 再抽籤
+### 再抽選
 
-1. 再抽籤対象となる`PRELOAD_FAILED` Battleを確定する.
-2. GuildBattleCoordinatorへ再抽籤を要求する.
+1. 再抽選対象となる`PRELOAD_FAILED` Battleを確定する.
+2. GuildBattleCoordinatorへ再抽選を要求する.
 3. GuildBattleCoordinatorが対象GuildをGuildID昇順へ並べ, 新しい時刻ベースSeedでShuffleする.
 4. `RematchPreloadFailedGuildBattles`保存後に対象Battleが`scheduled`かつ未割当へ戻ったことを確認する.
 5. 通常の割当とPreloadへ戻ることを確認する.
@@ -260,7 +260,7 @@ GuildBattle開始前処理ではDatabaseの`GUILD.membership_locked`を正本と
 | 操作 | API / Component | 使用条件 |
 |---|---|---|
 | Preload失敗の同一ペア再開 | `RetryPreloadFailedGuildBattle` | 対象が`PRELOAD_FAILED`で原因解消済み |
-| Preload失敗の再抽籤 | GuildBattleCoordinator + `RematchPreloadFailedGuildBattles` | 対象が`PRELOAD_FAILED`で再抽籤を選択 |
+| Preload失敗の再抽選 | GuildBattleCoordinator + `RematchPreloadFailedGuildBattles` | 対象が`PRELOAD_FAILED`で再抽選を選択 |
 | 未割当Battle再割当 | `RetryUnassignedGuildBattleAssignment` | `scheduled`かつ未割当 |
 | 未割当Battle削除 | `DeleteUnassignedGuildBattles` | `scheduled`かつ未割当で実施しないと判断 |
 | Guild lock変更 | `SetGuildMembershipLock` | 仕様で定義された中止・終了・開戦前処理 |
@@ -305,7 +305,7 @@ PlayerIDやGuildBattleID等の高Cardinality値をMetric Labelへ使用しない
 | 対象 | GuildBattleID, GuildID, GameServerInstanceID等 |
 | 発生事象 | Preload失敗, Scale-out失敗, DB障害等 |
 | Error Code | 存在する場合に記録する |
-| 判断 | 再Preload, 再抽籤, 中止, 再割当, 削除等 |
+| 判断 | 再Preload, 再抽選, 中止, 再割当, 削除等 |
 | 実行操作 | 実行した運営APIまたは確認作業 |
 | 結果 | 成功, 再失敗, 継続調査等 |
 

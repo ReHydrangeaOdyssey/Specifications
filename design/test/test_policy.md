@@ -69,7 +69,7 @@ Database, Public API Server, Private API Server, GameServer, GuildBattleCoordina
 * 複数の割当候補では`AvailableGuildBattleThreadCount`が多いGameServerを負荷判定で優先し, 同数の場合は`(TotalGuildBattleThreadCount - AvailableGuildBattleThreadCount) / TotalGuildBattleThreadCount`が低い順, `LastAssignedAt`が古い順, `GameServerInstanceID`昇順で決定する.
 * `PRELOAD_FAILED`への遷移.
 * `RetryPreloadFailedGuildBattle`による同一ペア再Preload.
-* `RematchPreloadFailedGuildBattles`による再抽籤後の再割当.
+* `RematchPreloadFailedGuildBattles`による再抽選後の再割当.
 * 未割当Battleの再割当および削除.
 * Database Recoveryファイルの生成, 再送, 削除.
 * `X-Operation-ID`によるDatabase更新の冪等性.
@@ -292,7 +292,7 @@ GuildBattle Replayは「[リプレイProtocol Buffers定義](../system/guild_bat
 以下を追加実行する.
 
 * Preload失敗からの再Preload.
-* Preload失敗からの再抽籤.
+* Preload失敗からの再抽選.
 * 未割当Battle再割当.
 * Database Recovery.
 * GuildBattle 30:00受付停止とQueue drain.

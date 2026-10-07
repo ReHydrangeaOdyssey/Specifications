@@ -6,9 +6,9 @@
 flowchart TD;
     Start[騎士団戦開始];
     ChackTimeLimit{30分経過?};
-    ChackAttack{出撃要求がある?};
-    CheckCBC{CBC発生中?};
-    CheckCBCCondition{CBC発生条件を満たした?};
+    ChackAttack{GuildBattleSortie要求がある?};
+    CheckCBC{GuildBattleCbcStatus.IsActive?};
+    CheckCBCCondition{キャッスルブレイクチャンス発生条件を満たした?};
     Reflected[結果反映];
     StopAccept[新規処理受付停止];
     CheckQueue{処理キューが空?};
@@ -33,9 +33,9 @@ flowchart TD;
     Reflected --> ChackTimeLimit
 
     subgraph 出撃
-        CheckChain{キリ番?};
-        CheckAssaultDisable{強襲無効効果中?};
-        CheckCB{CB発生?};
+        CheckChain{キリ番キャッスルブレイク?};
+        CheckAssaultDisable{強襲無効Battle Special有効?};
+        CheckCB{強襲キャッスルブレイク発生?};
         Attack[殲滅];
 
         StartPlayerAttack --> CheckCBC;        
@@ -55,7 +55,7 @@ flowchart TD;
 ```
 
 
-強襲無効効果は通常の確率による強襲キャッスルブレイク判定の直前だけで評価する. `CheckAssaultDisable=Yes`ではキャッスルブレイクへ進まず殲滅へ進む. CBC発生中, CBC発生条件成立, キリ番の確定キャッスルブレイクは従来どおり先に判定する.
+強襲無効Battle Specialは通常の確率による強襲キャッスルブレイク判定の直前だけで評価する. `CheckAssaultDisable=Yes`ではキャッスルブレイクへ進まず殲滅へ進む. `GuildBattleCbcStatus.IsActive=true`, キャッスルブレイクチャンス発生条件成立, キリ番キャッスルブレイクは従来どおり先に判定する.
 
 GameServerは各Playerについて騎士団戦単位の`GuildBattlePlayerRuntimeState`を保持し, 開戦時に`attack_count=0`, `acquired_score=0`で初期化する. 出撃可否・RequestSequence検証を通過して当該出撃の実行が確定した時点で`attack_count`を1増加し, 加算後の値を当該出撃のEXTERLIZE補正へ使用する. 結果スコア確定後, 当該出撃でPlayerが取得したスコアを`acquired_score`へ加算する.
 
@@ -67,19 +67,26 @@ GameServerは各Playerについて騎士団戦単位の`GuildBattlePlayerRuntime
 
 ```mermaid
 stateDiagram-v2
-    [*] --> 通常
+    state "REVIVE_STATE_NORMAL / HEAL_STATE_NONE" as Normal
+    state "REVIVE_STATE_ANNIHILATED / HEAL_STATE_NONE" as Annihilated
+    state "HEAL_STATE_HEALING" as Healing
+    state "HEAL_STATE_COMPLETED" as HealCompleted
+    state "REVIVE_STATE_REVIVING" as Reviving
+    state "REVIVE_STATE_COMPLETED" as ReviveCompleted
 
-    通常 --> 回復中: 治療開始
-    全滅 --> 回復中: 治療開始
-    回復中 --> 通常: 治療キャンセル（通常から開始）
-    回復中 --> 全滅: 治療キャンセル（全滅から開始）
-    回復中 --> 回復完了: 回復待機時間経過
-    回復完了 --> 通常: 治療完了
+    [*] --> Normal
 
-    全滅 --> 復活中: 復活開始
-    復活中 --> 全滅: 復活キャンセル
-    復活中 --> 復活完了: パーティランクに応じた復活待機時間経過
-    復活完了 --> 通常: 復活完了待機終了
+    Normal --> Healing: StartHeal
+    Annihilated --> Healing: StartHeal
+    Healing --> Normal: CancelHeal（治療開始前がREVIVE_STATE_NORMAL）
+    Healing --> Annihilated: CancelHeal（治療開始前がREVIVE_STATE_ANNIHILATED）
+    Healing --> HealCompleted: 回復待機時間経過
+    HealCompleted --> Normal: CompleteHeal
+
+    Annihilated --> Reviving: StartRevive
+    Reviving --> Annihilated: CancelRevive
+    Reviving --> ReviveCompleted: 復活待機時間経過
+    ReviveCompleted --> Normal: CompleteRevive
 ```
 
 出撃待機は上記のプレイヤー状態とは別の独立タイマーとして保持する. 出撃処理が成功した時点でタイマーを設定し, 0より大きい間は出撃のみ不可とする. 治療・復活・タクティクス等の状態とは併存できる.

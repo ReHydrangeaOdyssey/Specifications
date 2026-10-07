@@ -13,13 +13,16 @@ ClientはArena編成をローカル保存する. `StartArenaBattle`時にロー�
 ```mermaid
 stateDiagram-v2
     [*] --> アリーナ
-    アリーナ --> ランダム対戦
-    アリーナ --> フレンド対戦
+    state "ARENA_MODE_RANDOM" as ArenaModeRandom
+    state "ARENA_MODE_FRIEND" as ArenaModeFriend
+
+    アリーナ --> ArenaModeRandom
+    アリーナ --> ArenaModeFriend
     アリーナ --> 編成
     編成 --> アリーナ
 
-    ランダム対戦 --> 戦闘
-    フレンド対戦 --> 戦闘
+    ArenaModeRandom --> 戦闘
+    ArenaModeFriend --> 戦闘
     戦闘 --> 結果
     結果 --> アリーナ
 ```
