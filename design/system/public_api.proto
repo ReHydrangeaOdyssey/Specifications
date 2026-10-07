@@ -357,6 +357,8 @@ message TacticsActiveEffectState {
   TacticsCountConsumeTrigger count_consume_trigger = 8;
   TacticsEndType end_type = 9;
   bool erase_consumed = 10;
+  uint64 source_player_id = 11; // PlayerID that activated this effect.
+  uint64 source_guild_id = 12; // GuildID of the activating player at activation time.
 }
 
 message ApiErrorResponse {
