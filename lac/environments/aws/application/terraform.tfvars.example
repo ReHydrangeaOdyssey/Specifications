@@ -1,0 +1,36 @@
+manual_aws_application_confirmation = "CHANGE_ME"
+aws_region       = "ap-northeast-1"
+eks_cluster_name = "game-eks"
+
+public_api_image         = "CHANGE_ME.dkr.ecr.ap-northeast-1.amazonaws.com/public-api:CHANGE_ME"
+game_server_image        = "CHANGE_ME.dkr.ecr.ap-northeast-1.amazonaws.com/game-server:CHANGE_ME"
+coordinator_image        = "CHANGE_ME.dkr.ecr.ap-northeast-1.amazonaws.com/guild-battle-coordinator:CHANGE_ME"
+game_server_scaler_image = "CHANGE_ME.dkr.ecr.ap-northeast-1.amazonaws.com/game-server-scaler:CHANGE_ME"
+
+
+# Port番号はApplication実装と一致する値へ変更する. 0のままApplyしない.
+public_api_port          = 0
+game_server_port         = 0
+game_server_control_port = 0
+scaler_control_port      = 0
+private_api_port         = 0
+
+# Application固有の設定Keyは仕様/実装に合わせてここへ定義する. Terraform ModuleではKey名を仮定しない.
+public_api_env           = {}
+game_server_env          = {}
+coordinator_env          = {}
+game_server_scaler_env   = {}
+
+# Kubernetes volumeMountは絶対Pathが必要なため, ApplicationのWorking Directoryに合わせて明示する.
+replay_mount_path = "/CHANGE_ME/log/guild_battle"
+
+private_api_cidr     = "10.80.200.10/32"
+# EKS private endpointが存在するVPC CIDRを指定する.
+kubernetes_api_cidr  = "CHANGE_ME/32"
+
+mtls_secret_public_api  = "public-api-mtls"
+mtls_secret_game_server = "game-server-mtls"
+mtls_secret_coordinator = "coordinator-mtls"
+mtls_secret_scaler      = "game-server-scaler-mtls"
+
+public_api_max_replicas  = 12

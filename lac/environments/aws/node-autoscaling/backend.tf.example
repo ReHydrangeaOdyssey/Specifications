@@ -1,0 +1,9 @@
+# terraform {
+#   backend "s3" {
+#     bucket       = "CHANGE_ME"
+#     key          = "game/aws/node-autoscaling.tfstate"
+#     region       = "CHANGE_ME"
+#     use_lockfile = true
+#     encrypt      = true
+#   }
+# }

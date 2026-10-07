@@ -1,0 +1,9 @@
+manual_node_autoscaling_confirmation = "CHANGE_ME"
+aws_region       = "ap-northeast-1"
+eks_cluster_name = "game-eks"
+
+# environments/aws/infrastructure の output oidc_provider_arn を明示的に転記する.
+oidc_provider_arn = "CHANGE_ME"
+
+# EKS Kubernetes Versionと互換性のあるChart Versionを確認して固定する.
+cluster_autoscaler_chart_version = "CHANGE_ME"
