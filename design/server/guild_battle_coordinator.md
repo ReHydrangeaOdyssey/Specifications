@@ -40,7 +40,7 @@
 * Endpointが存在するGameServerへmTLSで`GetGameServerCapacity`を要求する.
 * `AcceptNewGuildBattle=true`かつ`AvailableGuildBattleCount > 0`のGameServerだけを新規割当候補とする.
 * `draining`状態のGameServerへ新しい騎士団戦を割り当てない.
-* 複数の割当候補が存在する場合も各GameServerの`AvailableGuildBattleCount`を超えて割り当てない. 候補間の選択順は運用設定とし, GameServer内部の戦闘ロジックには影響させない.
+* 複数の割当候補が存在する場合も各GameServerの`AvailableGuildBattleCount`を超えて割り当てない. 候補間の選択順は運用設定とし, 推奨初期順序を`Ready判定 → 負荷判定 → Capacity使用率 → 最終割当時刻 → InstanceID`とする. 左側の判定・比較を優先し, 同値の場合に次の項目を使用する. GameServer内部の戦闘ロジックには影響させない. 負荷判定に使用する具体的な観測値・閾値は別途運用設定とし, 本仕様では推測して固定しない.
 * 物理Worker NodeのCPU・Memory配置先は`GuildBattleCoordinator`が決定しない. GameServer PodをどのWorker Nodeへ配置するかはKubernetes Schedulerへ任せる.
 
 ## 騎士団戦割当
@@ -61,7 +61,7 @@
 * `GuildBattleCoordinator`は専用Kubernetes ControllerへGameServer水平スケーリングを要求する.
 * `GuildBattleCoordinator`自身へDeploymentまたはStatefulSetのreplica変更権限を付与しない.
 * 新しいGameServer Podが`ready`となりEndpointSliceへ反映された場合, GameServer容量を取得して未割当騎士団戦の割当を再実行する.
-* 水平スケーリング要求自体が失敗した場合, または運用設定されたScale-out待機時間内に新規`ready` GameServerを確保できない場合は水平スケーリング失敗とする.
+* 水平スケーリング要求自体が失敗した場合, または運用設定されたScale-out待機時間内に新規`ready` GameServerを確保できない場合は水平スケーリング失敗とする. Scale-out待機時間の推奨初期値は30秒とする.
 * 水平スケーリング失敗はError Logへ記録し, `DiscordNotificationEnabled=true`の場合はDiscord Botへ通知する.
 * 運営はGuildBattleCoordinatorの`RetryUnassignedGuildBattleAssignment`で未割当対戦の再割当を要求できる. 再割当先GameServerの選択とPrivate APIの`AssignScheduledGuildBattles`呼び出しはGuildBattleCoordinatorが行う.
 * 未割当対戦の削除は運営がPrivate APIの`DeleteUnassignedGuildBattles`を実行できる.
@@ -72,7 +72,7 @@
 * 起動時および定期Reconcile時にPrivate APIの`GetGuildBattleCoordinationState`を使用してDatabase上のすべての`scheduled`騎士団戦と割当状態を確認する. `RetryPreloadFailedGuildBattle`で固定開始時刻以外の`RestartAt`へ変更された対戦も対象とする.
 * `scheduled`かつ未割当の騎士団戦は通常の割当対象へ戻す.
 * `scheduled`かつ割当済みの騎士団戦は割当先GameServerへ`StartGuildBattlePreload`を再送してよい. `StartGuildBattlePreload`の冪等性により二重Preloadを防止する.
-* `scheduled`かつ割当済みで, 割当先`GameServerInstanceID`に対応するEndpointが運用設定された不在判定時間を超えて存在しない場合は, Private APIの`ReleaseScheduledGuildBattleAssignments`で当該割当を解除して未割当へ戻し, 別の`ready` GameServerへ再割当する.
+* `scheduled`かつ割当済みで, 割当先`GameServerInstanceID`に対応するEndpointが運用設定された不在判定時間を超えて連続して存在しない場合は, Private APIの`ReleaseScheduledGuildBattleAssignments`で当該割当を解除して未割当へ戻し, 別の`ready` GameServerへ再割当する. Endpoint不在判定時間の推奨初期値は15秒連続とする.
 * `in_progress`以降の騎士団戦についてEndpoint不在を理由とした割当解除・再割当は行わない.
 * `in_progress`, `resolving`, `completed`の騎士団戦についてGameServer割当を変更しない.
 * GameServer Podの異常終了により進行中騎士団戦を別GameServerへ自動復旧する処理は本仕様では定義しない.

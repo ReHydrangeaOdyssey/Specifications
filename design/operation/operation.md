@@ -20,6 +20,25 @@
 * Credential, Token, Password, mTLS秘密鍵を運営記録へ貼り付けない.
 * 手動対応を行った場合は対象ID, 実施時刻, 原因, 実施操作, 結果を簡単な運営記録へ残す.
 
+## 運用設定の推奨初期値
+
+以下を運用設定の推奨初期値とする. 運用環境で変更する場合も無制限値にはせず, 各Componentで明示的に設定する.
+
+| 項目 | 推奨初期値 | 適用単位・補足 |
+|---|---|---|
+| RequestSequence不一致ログの集約期間 | 60秒 | `GuildBattleID`, `PlayerID`, 拒否理由単位 |
+| Security Event集約期間 | 60秒 | 最初の1件は即時記録し, 以降を集約する |
+| Trace Sampling Rate | 正常系1% / Error 100% / Slow Request 100% | ErrorとSlow Requestは必ず保持する |
+| Slow Request判定閾値 | 100ms | Server側処理時間 |
+| Argon2id最大同時実行数 | 2 | Private API Serverの認証処理 |
+| GameServer割当候補の選択順 | Ready判定 → 負荷判定 → Capacity使用率 → 最終割当時刻 → InstanceID | 左から順に判定・比較する |
+| Scale-out待機時間 | 30秒 | 新規`ready` GameServer確保待ち |
+| Endpoint不在判定時間 | 15秒連続 | `scheduled`かつ割当済み騎士団戦の再割当判定 |
+| Source IP Rate Limit閾値 | 認証系合計20 requests/min/IP, burst 5 | `CreateAccount`と`Login`の合計 |
+| Recovery領域 | 2 GiB / 1,000 files / GameServer Instance | `/var/lib/game-server/recovery` |
+
+GameServer割当候補の「負荷判定」に使用する具体的な観測値および閾値は本修正内容では指定されていないため, 本書では追加定義しない. `Capacity使用率`はGameServerが返すCapacity情報に基づく比較項目とする.
+
 ## 運営確認に使用する識別子
 
 障害調査では該当する範囲で以下を使用する.

@@ -3,6 +3,7 @@
 ## 共通
 
 各項目の型は「[型定義](../shared/types.md)」を参照する.
+Public APIのProtocol Buffers field numberおよびwire schemaは「[public_api.proto](../system/public_api.proto)」を正とする. 本書は各Payloadの意味・固定長・利用条件を正とし, `.proto`と不一致がある場合は意味・制約を本書で確認した上でfield number/wire型を`.proto`へ合わせる.
 
 `ArenaMode`は「[型定義](../shared/types.md)」を参照する.
 

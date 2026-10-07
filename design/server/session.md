@@ -88,7 +88,7 @@
 * Passwordへ文字種の組み合わせ規則を設けない.
 * PasswordをApplication Log, Access Log, Traceへ出力しない.
 * Private API ServerはArgon2id処理を認証専用の同時実行制限対象とし, ゲームデータ処理用の処理枠をArgon2id処理で占有しない.
-* Argon2idの最大同時実行数は対象Server上のCPU・Memory計測値から運用設定で決定し, 無制限にはしない.
+* Argon2idの最大同時実行数は運用設定とし, 推奨初期値を2とする. 対象Server上のCPU・Memory計測値に応じて変更できるが, 無制限にはしない.
 
 ## AccessToken
 

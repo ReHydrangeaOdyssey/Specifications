@@ -48,13 +48,16 @@ flowchart TD;
 
 ### TacticsBattleSpecialType適用
 
-騎士団戦の戦闘開始・行動・被弾・敵全滅処理では, 有効な`TACTICS_EFFECT_BATTLE_SPECIAL`を確認し, `special_type`ごとに「[タクティクス仕様](../../specification/game/tactics.md#特殊効果系列)」の効果を適用する. 攻撃・防御・速度・スキル発動率・最大TP等の数値効果は`TacticsBattleSpecialParameters`の対応フィールドを使用する. 強襲無効, 最初の通常攻撃ダメージ0, 回避発動は`special_type`固有挙動として処理する. `ERASE`は`TacticsActiveEffectState.erase_consumed`を参照し, 最初の通常攻撃ダメージを0にした直後に`true`へ更新する.
+騎士団戦の戦闘開始・行動・被弾・敵全滅処理では, 有効な`TACTICS_EFFECT_BATTLE_SPECIAL`を確認し, `special_type`ごとに「[タクティクス仕様](../../specification/game/tactics.md#特殊効果系列)」の効果を適用する. 攻撃・防御・速度・スキル発動率・最大TP等の数値効果は`TacticsBattleSpecialParameters`の対応フィールドを使用する. 同じ計算項目へ複数タクティクス系列が作用する場合は「[効果値の統合規則](../../specification/game/tactics.md#効果値の統合規則)」に従い, 同系列を加算した後に異系列を乗算する. 速度だけは系列に関係なくすべて加算する. 強襲無効, 最初の通常攻撃ダメージ0, 回避発動は`special_type`固有挙動として処理する. `ERASE`は`TacticsActiveEffectState.erase_consumed`を参照し, 最初の通常攻撃ダメージを0にした直後に`true`へ更新する.
 
 ### ダメージ計算フロー
 
 ダメージ発生時は最初にスキルによるダメージかを判定する. スキルによるダメージは後述の「スキルダメージ計算フロー」を使用し, 通常攻撃・追撃・反撃は通常ダメージ計算を使用する.
 
-現時点で仕様上の適用位置が明確な処理だけを以下のフローへ反映する. `ABILITY_EFFECT_DAMAGE_INCREASE`, `ABILITY_EFFECT_FIXED_DAMAGE_INCREASE`, `ABILITY_EFFECT_HEAL`, `ABILITY_EFFECT_COVER`, `ABILITY_EFFECT_DRAW_AGGRO`は具体的な適用位置・対象処理が未確定のため, このフローにはまだ挿入しない.
+`ABILITY_EFFECT_DAMAGE_INCREASE`は通常攻撃ダメージへ適用し, 通常攻撃最大ダメージ上限99,999の適用前に`correction_value`を倍率として乗算する. 追撃・反撃・スキルダメージには適用しない.
+`ABILITY_EFFECT_COVER`は攻撃対象リスト取得後に候補選択と発動判定を1回行い, 発動した場合はその取得済みリストの各対象について対象側の計算値を使用したダメージをかばうキャラクターへ反映する.
+`ABILITY_EFFECT_DRAW_AGGRO`は攻撃対象リスト取得前に発動判定を行い, 発動した場合は攻撃範囲の起点を発動キャラクターへ変更してから対象リストを作成する.
+`ABILITY_EFFECT_FIXED_DAMAGE_INCREASE`は固定ダメージスキルに対する加算効果として仕様化済みだが, 現行Skill MasterDataに固定ダメージスキルの識別方法がないため, スキルダメージフローへはまだ挿入しない. `ABILITY_EFFECT_HEAL`も適用対象・回復式・適用位置が未確定のためフローへ挿入しない.
 
 ```mermaid
 flowchart TD;
@@ -70,6 +73,9 @@ flowchart TD;
     MinDamage[基礎ダメージ = max 基礎ダメージ, 250];
     Random[対象・HITごとに1.0以上1.03以下のダメージ乱数を取得];
     RandomDamage[ダメージ = 基礎ダメージ * ダメージ乱数];
+    CheckNormalAttack{通常攻撃?};
+    CheckDamageIncrease{DAMAGE_INCREASE発動?};
+    DamageIncrease[ダメージ = ダメージ * correction_value];
     MaxDamage[ダメージ = min ダメージ, 99999];
     Apply[HP反映時に小数点以下を切り捨てて減算し, HPを0未満にしない];
     End[ダメージ計算終了];
@@ -78,7 +84,12 @@ flowchart TD;
     SkillDamage -- No --> Mode;
     Mode -- Yes --> GuildAttack --> GuildDefense --> BaseDamage;
     Mode -- No --> ArenaAttack --> ArenaDefense --> BaseDamage;
-    BaseDamage --> MinDamage --> Random --> RandomDamage --> MaxDamage --> Apply --> End;
+    BaseDamage --> MinDamage --> Random --> RandomDamage --> CheckNormalAttack;
+    CheckNormalAttack -- No --> MaxDamage;
+    CheckNormalAttack -- Yes --> CheckDamageIncrease;
+    CheckDamageIncrease -- No --> MaxDamage;
+    CheckDamageIncrease -- Yes --> DamageIncrease --> MaxDamage;
+    MaxDamage --> Apply --> End;
 ```
 
 ### スキル発動
@@ -145,14 +156,22 @@ flowchart TD;
     Start --> CheckSkillCount
 
     CheckEmptyList{攻撃対象リストが空?};
+    CheckDrawAggro{DRAW_AGGRO発動?};
+    ChangeAttackOrigin[攻撃範囲の起点をDRAW_AGGRO発動キャラクターへ変更];
     GetAttackRange[攻撃対象リストの取得];
+    CheckCoverCandidate{COVER候補が存在する?};
+    SelectCover[候補をフォーメーション内部番号順に並べて1キャラクターを抽選];
+    CheckCoverRate{選択したCOVERの発動率 > 乱数?};
+    SetCover[取得済み攻撃対象リストに対するCOVER発動状態を保持];
     PopAttackRange[攻撃対象リストからPOP];
 
     CalculateEnemyHP[[相手HP処理]];
+    CalculateCoverHP[[元の攻撃対象の値でダメージ算出しCOVER発動キャラクターへHP反映]];
     CalculateFriendHP[[味方HP処理]];
     CalculateEnemyHP2[[相手HP処理]];
 
     Attack[攻撃];
+    CheckCoverActive{COVER発動中?};
 
     CheckSkillCount{SkillBattleState.activation_count < 最大発動回数?};
     CheckSilent{沈黙状態?};
@@ -160,15 +179,21 @@ flowchart TD;
     ActivateSkill[[スキル発動]];
 
     CheckSkillCount -- Yes --> CheckSilent;
-    CheckSkillCount -- No --> GetAttackRange;
-    CheckSilent -- Yes --> GetAttackRange;
+    CheckSkillCount -- No --> CheckDrawAggro;
+    CheckSilent -- Yes --> CheckDrawAggro;
     CheckSilent -- No --> CheckSkill;
     CheckSkill -- Yes --> ActivateSkill;
-    CheckSkill -- No --> GetAttackRange;
+    CheckSkill -- No --> CheckDrawAggro;
     
     ActivateSkill --> End
 
-    GetAttackRange --> CheckEmptyList
+    CheckDrawAggro -- Yes --> ChangeAttackOrigin --> GetAttackRange;
+    CheckDrawAggro -- No --> GetAttackRange;
+    GetAttackRange --> CheckCoverCandidate;
+    CheckCoverCandidate -- No --> CheckEmptyList;
+    CheckCoverCandidate -- Yes --> SelectCover --> CheckCoverRate;
+    CheckCoverRate -- No --> CheckEmptyList;
+    CheckCoverRate -- Yes --> SetCover --> CheckEmptyList;
     CheckEmptyList -- Yes --> CheckAttackerHP;
     CheckEmptyList -- No --> PopAttackRange;
 
@@ -207,7 +232,9 @@ flowchart TD;
     CheckStatusAbnormality -- No --> Attack;
 
     AddStatusAbnormality --> Attack;
-    Attack --> CalculateEnemyHP --> CheckActivatedPursuit;
+    Attack --> CheckCoverActive;
+    CheckCoverActive -- No --> CalculateEnemyHP --> CheckActivatedPursuit;
+    CheckCoverActive -- Yes --> CalculateCoverHP --> CheckActivatedPursuit;
 
     CheckActivatedPursuit{追撃は発動済み?};
     CheckPursuit{追撃率 > 乱数?};
@@ -246,6 +273,9 @@ flowchart TD;
     KilledAttackerAbility --> End
 ```
 
+
+`ABILITY_EFFECT_COVER`の候補抽選は取得済み攻撃対象リスト単位で1回だけ行う. 発動した場合もダメージ計算上の攻撃対象はリスト内の元キャラクターとし, HP減算先だけをかばうキャラクターへ変更する. リストに複数対象がある場合は各対象について個別にダメージを算出し, その回数だけかばうキャラクターへ反映する.
+`ABILITY_EFFECT_DRAW_AGGRO`が発動した場合は対象リスト取得前に起点だけを変更する. 複数キャラクターが同時に発動候補となった場合の起点競合規則は仕様未定義のため, 実装で任意に決定しない.
 
 戦闘フロー内の回避率, 状態異常回避率, 回避無効化率, 状態異常付与率, 追撃率, 反撃率, 反撃無効化率は, 対応するアビリティの`AbilityMasterData.activation_rate`を使用する.
 

@@ -8,8 +8,8 @@
 * Rust実装で使用する型, Protocol Buffersで使用する型, PostgreSQLで使用する型の対応を定義する.
 * `u64`を使用する論理型はPostgreSQLの`bigint`では全範囲を表現できないため`numeric(20,0)`を使用する.
 * Protocol Buffersに`u8`および`u16`は存在しないため, wire上では`uint32`を使用し, 受信時に論理型の範囲チェックを行う.
+* Public API PayloadのProtocol Buffers実装は「[public_api.proto](../system/public_api.proto)」を正とし, 本書の論理型・列挙値と一致させる.
 * 32bit浮動小数点数を使用する値はIEEE-754に従う.
-* Protocol Buffersの`.proto`ファイル自体は, 仕様および設計が確定した後に作成する. 本書では現時点で確定しているwire型と列挙値のみを定義する.
 * PostgreSQLで列挙型を保存する場合は`smallint`を使用し, 本書に定義するProtocol Buffers数値と同じ数値を保存する.
 
 ## ID
@@ -706,7 +706,7 @@ message TacticsBattleSpecialParameters {
   uint32 tp_recovery = 14; // 発動条件成立時に回復するTP固定値.
   float attack_count_score = 15; // 攻撃回数に応じたバトル獲得スコア増加に使用する補正値. 論理型CorrectionValue.
   float castle_break_score_limit = 16; // キリ番キャッスルブレイクのスコア上限増加値. 論理型CorrectionValue.
-  float hp_recovery_value = 17; // 生存キャラクターHP回復で使用する効果値. 具体的な回復式は別途仕様で定義する. 論理型CorrectionValue.
+  float hp_recovery_value = 17; // 生存キャラクターHP回復量. 値をそのまま回復量として使用する. 論理型CorrectionValue.
   float revive_rate = 18; // 戦闘不能キャラクター復帰判定で使用する発動確率. 論理型Rate.
   float attack_target_rate = 19; // 攻撃対象として選択される確率への補正値. HIDE / PROVOKEで使用する. 論理型CorrectionValue.
 }

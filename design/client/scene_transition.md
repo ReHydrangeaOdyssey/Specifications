@@ -35,19 +35,18 @@ stateDiagram-v2
 
 ### タイトル
 
-![title_image](images/title.png)
-
+![title_image](../../images/title.png)
 
 ### ホーム
 
-![home_image](images/home.png)
+-![home_image](../../images/home.png)
 
 
 ### 騎士団戦
 
-![guild_battle_image](images/guild_battle.png)
+![guild_battle_image](../../images/guild_battle.png)
 
 ### 騎士団戦編成
 
-![form_guild_battle_image](images/form_guild_battle.png)
+![form_guild_battle_image](../../images/form_guild_battle.png)
 

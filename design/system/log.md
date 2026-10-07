@@ -120,14 +120,14 @@ BP不足, CT中, 使用回数不足, 治療・復活状態等による正常な�
 
 GameServer保持値と一致しない`RequestSequence`は要求ごとにログ出力しない.
 `GuildBattleID`, `PlayerID`, 拒否理由単位でMemory上の件数を集約し, 最初の発生および一定期間ごとのSummaryだけを騎士団戦システムログへ出力する.
-集約期間は運用設定とする.
+集約期間は運用設定とし, 推奨初期値を60秒とする.
 Summaryには期待した`RequestSequence`, 受信した`RequestSequence`, 件数を含めてよい.
 
 ### 不正ゲーム要求
 
 不正CharacterID, 不正TacticsID, 所有していないGuildBattleID等のSecurity Eventは, 同一主体から大量発生した場合にログ増幅を防ぐため集約する.
-最初の発生を記録し, 以降は一定期間Memory上で件数を加算してSummaryを出力する.
-集約期間は運用設定とする.
+最初の1件は即時記録し, 以降は一定期間Memory上で件数を加算してSummaryを出力する.
+集約期間は運用設定とし, 推奨初期値を60秒とする.
 
 ## Metric
 
@@ -156,8 +156,9 @@ PlayerID, GuildBattleID, Request ID等の高Cardinality値をMetric Labelへ使�
 ## Trace
 
 分散Traceは常時全要求を保存せずSamplingを行う.
-通常成功要求のSampling Rateは運用設定とする.
-Errorとなった要求および処理時間が運用設定の閾値を超えた要求は調査対象として保持できる構成とする.
+通常成功要求のSampling Rateは運用設定とし, 推奨初期値を1%とする.
+Errorとなった要求はSampling Rate 100%とする.
+Server側処理時間がSlow Request判定閾値を超えた要求はSampling Rate 100%とする. Slow Request判定閾値の推奨初期値は100msとする. Client通信時間やNetwork RTTはこの判定時間へ含めず, Serverが要求処理を開始してからResponse生成を完了するまでの処理時間を使用する.
 本番GameServerではDamage計算, Ability適用, Tactics効果適用等の内部関数単位で常時Spanを生成しない.
 Public API ServerからGameServer, 必要な場合はPrivate API Serverまでの粗い処理単位をTrace対象とする.
 Trace Exportは騎士団戦処理スレッドから同期実行しない.

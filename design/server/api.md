@@ -5,7 +5,7 @@ APIはPublic APIとPrivate APIに分離する. 個別メソッドの仕様は以
 * Public APIは「[Public API仕様](public_api.md)」を参照する.
 * Private APIは「[Private API仕様](private_api.md)」を参照する.
 * 騎士団戦の生成・割当制御は「[騎士団戦コーディネーター](guild_battle_coordinator.md)」を参照する.
-* 要求およびレスポンスのデータ構造は「[API Payload](api_payload.md)」を参照する.
+* 要求およびレスポンスのデータ構造は「[API Payload](api_payload.md)」を参照する. Public APIのProtocol Buffers wire schemaは「[public_api.proto](../system/public_api.proto)」を参照する.
 
 ## Public API
 

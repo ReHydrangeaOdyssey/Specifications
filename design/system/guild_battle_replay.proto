@@ -1,0 +1,136 @@
+syntax = "proto3";
+
+package game.guildbattle.replay;
+
+// 騎士団戦リプレイファイルはGuildBattleReplayEnvelopeを
+// Protocol Buffersでserializeし, 各Messageの前にvarint長を付与した
+// length-delimited Message列として保存する.
+
+enum GuildBattleReplayProcessType {
+  GUILD_BATTLE_REPLAY_CREATE = 0;
+  GUILD_BATTLE_REPLAY_SORTIE = 1;
+  GUILD_BATTLE_REPLAY_TACTICS = 2;
+  GUILD_BATTLE_REPLAY_HEAL = 3;
+  GUILD_BATTLE_REPLAY_REVIVE = 4;
+  GUILD_BATTLE_REPLAY_ITEM = 5;
+  GUILD_BATTLE_REPLAY_JOIN = 6;
+}
+
+enum HealState {
+  HEAL_STATE_NONE = 0;
+  HEAL_STATE_HEALING = 1;
+  HEAL_STATE_COMPLETED = 2;
+}
+
+enum ReviveState {
+  REVIVE_STATE_ANNIHILATED = 0;
+  REVIVE_STATE_REVIVING = 1;
+  REVIVE_STATE_COMPLETED = 2;
+  REVIVE_STATE_NORMAL = 3;
+}
+
+message GuildBattlePartyCharacter {
+  uint32 character_id = 1;
+  uint32 priority_position = 2;
+  repeated uint32 follower_character_id = 3; // 0..2件. 空きは保存しない.
+  repeated uint32 ability_id = 4; // 0..2件. 空きは保存しない.
+  uint32 main_skill_id = 5;
+  uint32 party_slot_no = 6; // 0..9. 固定長配列上の編成スロットID.
+}
+
+message PlayerItemData {
+  uint32 item_id = 1;
+  uint32 quantity = 2;
+}
+
+message GuildLevelData {
+  uint64 guild_id = 1;
+  uint32 castle_level = 2;
+  uint32 armory_level = 3;
+  uint32 food_storage_level = 4;
+  uint32 smithy_level = 5;
+  uint32 strategy_office_level = 6;
+  uint32 tavern_level = 7;
+}
+
+message GuildBattleReplayPlayerSnapshot {
+  uint64 player_id = 1;
+  uint32 max_bp = 2;
+  uint32 formation_id = 3;
+  repeated GuildBattlePartyCharacter characters = 4; // 有効Characterだけをslot_no付きで保存する.
+  repeated PlayerItemData items = 5;
+}
+
+message GuildBattleReplayGuildSnapshot {
+  GuildLevelData guild = 1;
+  repeated uint64 member_player_id = 2;
+  repeated GuildBattleReplayPlayerSnapshot participants = 3;
+}
+
+message GuildBattleInitialSnapshot {
+  repeated GuildBattleReplayGuildSnapshot guilds = 1; // 必ず2件.
+}
+
+message GuildBattleCreateLogPayload {
+  uint64 time = 1; // UNIX epochからのマイクロ秒.
+  uint64 guild_battle_id = 2;
+  uint64 initial_seed = 3;
+  repeated uint64 guild_id = 4; // 必ず2件.
+  GuildBattleInitialSnapshot initial_snapshot = 5;
+  string version = 6;
+}
+
+message GuildBattleJoinLogPayload {
+  uint64 time = 1;
+  uint64 guild_battle_id = 2;
+  uint64 player_id = 3;
+}
+
+message GuildBattleSortieLogPayload {
+  uint64 time = 1;
+  uint64 guild_battle_id = 2;
+  uint64 sequence = 3;
+  uint64 player_id = 4;
+  repeated uint32 select_id = 5; // 有効な選択IDだけを順序どおり保存する. 最大5件.
+}
+
+message GuildBattleTacticsLogPayload {
+  uint64 time = 1;
+  uint64 guild_battle_id = 2;
+  uint64 player_id = 3;
+  uint32 tactics_id = 4;
+}
+
+message GuildBattleItemLogPayload {
+  uint64 time = 1;
+  uint64 guild_battle_id = 2;
+  uint64 player_id = 3;
+  uint32 item_id = 4;
+}
+
+message GuildBattleHealLogPayload {
+  uint64 time = 1;
+  uint64 guild_battle_id = 2;
+  uint64 player_id = 3;
+  HealState heal_state = 4;
+}
+
+message GuildBattleReviveLogPayload {
+  uint64 time = 1;
+  uint64 guild_battle_id = 2;
+  uint64 player_id = 3;
+  ReviveState revive_state = 4;
+}
+
+message GuildBattleReplayEnvelope {
+  GuildBattleReplayProcessType process_type = 1;
+  oneof payload {
+    GuildBattleCreateLogPayload create = 2;
+    GuildBattleSortieLogPayload sortie = 3;
+    GuildBattleTacticsLogPayload tactics = 4;
+    GuildBattleHealLogPayload heal = 5;
+    GuildBattleReviveLogPayload revive = 6;
+    GuildBattleItemLogPayload item = 7;
+    GuildBattleJoinLogPayload join = 8;
+  }
+}

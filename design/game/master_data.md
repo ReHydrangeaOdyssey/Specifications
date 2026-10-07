@@ -207,9 +207,10 @@ Player, Guild, 所属, 役職等の実行時可変データは加工済みマス
 * 段階レベル`n`の最終効果値は`基本効果値 + (n - 1) * 1段階あたり増加値`で算出する. BP固定回復は`uint_value`と`increase_uint_value`, 通常補正・割合は`correction_value`と`increase_value`, Battle Specialは各パラメータと`battle_special_increase`を対応させて同じ式を適用する.
 * `TacticsStageEffectData.effect_index`は同じ`TacticsMasterData.effects`の0始まりIndexを指す. `effects[effect_index].effect_id`と`TacticsStageEffectData.effect_id`, `effects[effect_index].target`と`TacticsStageEffectData.target`は一致必須とし, 不一致はマスターデータ不正とする. 同一`effect_id + target`を複数持つ場合でも`effect_index`で対象効果を一意に識別する.
 
-## 効果値の合算規則
+## 効果値の合算・統合規則
 
 * スキル, アビリティ, タクティクスの効果値は加工済みマスターデータに保持する. フォーメーション補正はDatabaseの`FORMATION_POSITION`を固定参照データとして使用する.
-* 同一系列の効果値はすべて加算する.
-* スキルは同じ`SkillEffectID`系列, アビリティは同じ`AbilityEffectID`系列, タクティクスは同じ`TacticsEffectID`系列として扱う.
-* `SkillEffectID`, `AbilityEffectID`, `TacticsEffectID`は相互に別の列挙型であり, 異なる種別間で列挙値を共有しない.
+* スキルは同じ`SkillEffectID`系列, アビリティは同じ`AbilityEffectID`系列として扱い, 同一系列の効果値を加算する.
+* タクティクスの通常効果は同じ`TacticsEffectID`を系列として扱う. `TACTICS_EFFECT_BATTLE_SPECIAL`の各数値パラメータは`TacticsBattleSpecialType`を系列として扱う.
+* タクティクスが同じ計算項目へ複数系列から作用する場合は「[タクティクス仕様](../../specification/game/tactics.md#効果値の統合規則)」を正とし, 系列内を加算した後に異系列の結果を乗算する. 速度だけは全系列を加算する.
+* `SkillEffectID`, `AbilityEffectID`, `TacticsEffectID`, `TacticsBattleSpecialType`は相互に意味の異なる列挙型であり, 異なる種別間で列挙値を共有しない.

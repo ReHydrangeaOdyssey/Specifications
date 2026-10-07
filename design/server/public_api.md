@@ -7,7 +7,7 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 - ゲーム系APIはGameServerへ中継する.
 - Public API Serverは認証状態およびゲーム状態を正本として保持しないstateless構成とする.
 - テスト環境では Private Network の外側に配置される.
-- 要求/レスポンスのデータ構造は[API Payload](api_payload.md)を参照する.
+- 要求/レスポンスの意味・制約は[API Payload](api_payload.md), Protocol Buffersのwire schemaとfield numberは「[public_api.proto](../system/public_api.proto)」を参照する. `public_api.proto`はPayload schemaを定義し, gRPC Service・HTTP method・HTTP pathは追加定義しない.
 - `DiscordAuthorizationRequired=true`の場合, `CreateAccount`および`Login`は処理前にDiscordAuthorizationTokenを「[セッション仕様](session.md)」に従って検証する.
 - `AccessToken`を要求するPublicAPIは, 処理前にAccessTokenを検証する.
   - 署名, `alg`, `iss`, `aud`, `exp`, `player_id`を「[セッション仕様](session.md)」に従って検証する.
@@ -20,7 +20,7 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 - Public APIのRequest Bodyには有限の最大サイズを設定し, IngressおよびPublic API Serverの双方で上限を適用する. 上限超過要求はPayloadの完全なdeserializeおよび認証処理より前に拒否する.
 - Request Body最大サイズは各Public API Payloadについて仕様上取り得る最大serialization sizeを満たす値として設定し, 無制限にはしない.
 - `AccessToken`および`DiscordAuthorizationToken`にはwire上の有限の最大長を設定し, JWT構文解析および署名検証より前に上限超過を拒否する. 最大長は定義済みClaimと設定値から生成される正規Tokenを格納可能な値として設定し, 無制限にはしない.
-- `CreateAccount`および`Login`はLoginID単位のApplication Level Rate Limitに加えてSource IP単位のNetwork Level Rate Limitを必須とする. Source IP単位の閾値は運用設定とし, 無制限にはしない.
+- `CreateAccount`および`Login`はLoginID単位のApplication Level Rate Limitに加えてSource IP単位のNetwork Level Rate Limitを必須とする. Source IP単位の閾値は`CreateAccount`と`Login`の合計で推奨初期値20 requests/min/IP, burst 5とする. 閾値は運用設定で変更可能とするが, 無制限にはしない.
 - Source IPは信頼済みIngressが付与した値だけを使用し, Clientから直接送信されたForwarded/X-Forwarded-For相当HeaderをそのままRate Limit keyとして使用しない.
 - `GuildBattleID`を含む要求は`GuildBattleID -> GameServerInstanceID`を解決し, 当該騎士団戦を所有するGameServerへ中継する. 解決結果はPublic API Serverのメモリへキャッシュしてよいが正本とはしない.
   - 本番Kubernetes環境ではGameServer用EndpointSliceをwatchし, `GameServerInstanceID`に一致するPod UIDのEndpointへ直接中継する.

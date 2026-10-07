@@ -47,6 +47,18 @@
 
 
 
+## 効果値の統合規則
+
+同時に有効な複数タクティクスが同じ計算項目へ作用する場合, 以下の規則でタクティクス効果値を統合する.
+
+* 同一系列の効果値は加算する.
+* 異なる系列の効果値は, 系列ごとの加算結果を乗算する.
+* 例えば系列Aに`A1`, `A2`, 系列Bに`B1`, `B2`, 系列Cに`C1`がある場合, 統合効果値は`(A1 + A2) * (B1 + B2) * C1`とする.
+* 速度へ作用する効果だけは例外とし, 系列が異なる場合もすべての効果値を加算する. 上記例では速度の統合効果値を`A1 + A2 + B1 + B2 + C1`とする.
+* 通常のタクティクス効果は`TacticsEffectID`を系列として扱う. `TACTICS_EFFECT_BATTLE_SPECIAL`はコンテナ効果として扱い, その数値パラメータについては`TacticsBattleSpecialType`を系列として扱う.
+* 同じ計算項目へ通常`TacticsEffectID`系列と`TacticsBattleSpecialType`系列の双方が作用する場合, それぞれを異なる系列として上記規則で統合する.
+* 本項で求めた値は各計算式の「タクティクス補正」または対応するBattle Special数値効果として使用する. 各計算式に存在する`1.0 + 補正`, 基礎値への加算, clamp等の処理はその計算式どおりに行う.
+
 ## 回復効果
 
 ### BP回復
@@ -148,12 +160,14 @@
 * TP固定回復量.
 * 攻撃回数連動スコア補正.
 * キリ番キャッスルブレイク最大値補正.
-* 生存キャラクターHP回復効果値. 具体的な回復式は別途仕様で定義する.
+* 生存キャラクターHP回復量. `hp_recovery_value`の値をそのまま回復量として使用する.
 * 攻撃対象選択確率補正.
 * 戦闘不能キャラクター復帰発動率.
 
 強襲無効, 最初の通常攻撃ダメージ0, 回避発動等の真偽型挙動は`special_type`自体の意味として判定し, 数値パラメータを使用しない.
-`ENDER_BREAK`のキリ番CB最大値補正は`castle_break_score_limit`, `HEAL`のHP回復効果値は`hp_recovery_value`, `REVIVE` / `RESURRECTION`の復帰判定は`revive_rate`, `HIDE` / `PROVOKE`の攻撃対象選択確率補正は`attack_target_rate`を使用する. `PHALANX`の強襲CB率低下は`assault_castle_break_rate`を低下方向へ適用する. `HEAL`の具体的なHP回復式および`REVIVE` / `RESURRECTION`の復帰時HP量は本項では定義しない.
+`ENDER_BREAK`のキリ番CB最大値補正は`castle_break_score_limit`, `HEAL`のHP回復量は`hp_recovery_value`, `REVIVE` / `RESURRECTION`の復帰判定は`revive_rate`, `HIDE` / `PROVOKE`の攻撃対象選択確率補正は`attack_target_rate`を使用する. `PHALANX`の強襲CB率低下は`assault_castle_break_rate`を低下方向へ適用する.
+`HEAL`は生存している対象キャラクターについて`回復量 = hp_recovery_value`とし, その値をそのままHP回復量として使用する. `hp_recovery_value`適用後に最大HPを超えた場合の扱いは, 今回提示された仕様では定義されていないため未確定とする.
+`REVIVE`および`RESURRECTION`で`revive_rate`による復帰判定に成功したキャラクターは, 復帰時の現在HPを最大HPと同じ値にする.
 `ERASE`は`TacticsActiveEffectState.erase_consumed=false`で開始し, 敵から受ける最初の通常攻撃ダメージを0にした時点で`erase_consumed=true`へ更新する. `erase_consumed=true`の間は以後の通常攻撃ダメージを0にしない.
 
 ### 適用箇所

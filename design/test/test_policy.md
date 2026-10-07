@@ -174,8 +174,23 @@ GuildBattle Replayは「[リプレイProtocol Buffers定義](../system/guild_bat
 * `EVERY_N_TURNS`を`AbilityTurnTiming`の4タイミングそれぞれで評価する.
 * 状態異常回避判定を状態異常付与率判定より先に行う.
 * AbilityによるBUFF / DEBUFFをSkillと同じ`BuffDebuffEffectState`へ反映する.
+* `ABILITY_EFFECT_DAMAGE_INCREASE`は通常攻撃だけへ適用し, `correction_value`乗算後に通常攻撃最大ダメージ上限99,999を適用する.
+* `ABILITY_EFFECT_COVER`は攻撃対象リスト取得後に候補をフォーメーション内部番号順で抽選し, 発動時は元対象の計算値を使用したダメージを対象数分だけかばうキャラクターへ反映する.
+* `ABILITY_EFFECT_DRAW_AGGRO`は攻撃対象リスト取得前に発動し, 発動キャラクターを攻撃範囲の起点として対象リストを生成する.
 
-仕様上未確定と明記されたAbility Effectは, 適用位置が確定するまで結果値を固定するテストを作成しない.
+`ABILITY_EFFECT_HEAL`は適用対象・回復式・適用位置が未確定のため結果値を固定するテストを作成しない. `ABILITY_EFFECT_FIXED_DAMAGE_INCREASE`は固定ダメージスキルの識別方法がSkill仕様へ追加されるまで適用対象を固定しない. `ABILITY_EFFECT_DRAW_AGGRO`の複数保持時競合規則も未確定のため, 複数候補時の最終起点を固定するテストを作成しない.
+
+### Tactics
+
+以下を確認する.
+
+* 同一系列の効果値を加算し, 異なる系列の系列内合計を乗算する.
+* 速度補正だけは系列に関係なく全効果値を加算する.
+* `TACTICS_EFFECT_BATTLE_SPECIAL`の数値パラメータは`TacticsBattleSpecialType`を系列として統合する.
+* `TACTICS_BATTLE_SPECIAL_HEAL`のHP回復量に`hp_recovery_value`の値をそのまま使用する.
+* `TACTICS_BATTLE_SPECIAL_REVIVE`および`TACTICS_BATTLE_SPECIAL_RESURRECTION`の復帰成功時に現在HPを最大HPと同じ値へ設定する.
+
+`TACTICS_BATTLE_SPECIAL_HEAL`で回復後HPが最大HPを超える場合の扱いは未確定のため, その境界だけは期待値を固定しない.
 
 ## Arenaテスト
 

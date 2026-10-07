@@ -78,6 +78,35 @@
 
 `ABILITY_EFFECT_COUNTER`, `ABILITY_EFFECT_AVOIDANCE_DISABLE`, `ABILITY_EFFECT_COUNTER_DISABLE`, `ABILITY_EFFECT_COVER`, `ABILITY_EFFECT_DRAW_AGGRO`, `ABILITY_EFFECT_PURSUIT`は効果固有の数値パラメータを使用しない. 加工済みマスターデータでは`effect_data.no_parameter`を設定する.
 
+
+### ダメージ増加
+
+`ABILITY_EFFECT_DAMAGE_INCREASE`は通常攻撃時だけ適用する. 発動した場合, `AbilityMasterData.effect_data.correction.correction_value`を倍率として通常攻撃ダメージへ乗算する.
+通常攻撃の最大ダメージ上限99,999は本効果適用後のダメージへ適用する.
+追撃・反撃・スキルダメージには本効果を適用しない.
+
+### 固定ダメージ増加
+
+`ABILITY_EFFECT_FIXED_DAMAGE_INCREASE`は, 発動対象のスキルが固定ダメージとして扱われる場合だけ適用する. 固定ダメージへ`AbilityMasterData.effect_data.correction.correction_value`を固定値として加算する.
+現行の「[スキル仕様](skill.md)」には固定ダメージスキルを識別するデータ構造および固定ダメージ値の保持方法が定義されていないため, その定義が追加されるまでは適用対象スキルの判定方法を未確定とする.
+
+### 回復
+
+`ABILITY_EFFECT_HEAL`の具体的な適用対象・回復式・適用位置は未確定とする.
+
+### かばう
+
+`ABILITY_EFFECT_COVER`は攻撃対象リスト取得後に1回判定する. `AbilityMasterData.activation_rate`による発動条件を満たした場合, 取得済み攻撃対象リスト内の各キャラクターには当該攻撃のダメージを反映せず, `ABILITY_EFFECT_COVER`を発動したキャラクターへ代わりにダメージを反映する.
+
+* ダメージ計算に使用する攻撃対象側の値は, かばう前に攻撃対象リストへ含まれていた各キャラクターの値を使用する.
+* 攻撃対象リストの要素数と同じ回数だけ個別にダメージ計算し, その各ダメージをかばうキャラクターへ反映する.
+* `ABILITY_EFFECT_COVER`を保持する候補キャラクターが複数いる場合は, フォーメーション内部番号の小さい順に候補リストを作成し, 「[疑似乱数](../../design/game/pseudorandom.md)」の「抽選」で1キャラクターだけを選ぶ. 発動確率判定は選ばれた1キャラクターについて行う.
+
+### ひきつけ
+
+`ABILITY_EFFECT_DRAW_AGGRO`は攻撃対象リスト取得前に判定する. `AbilityMasterData.activation_rate`による発動条件を満たした場合, 当該攻撃の攻撃範囲を決定する起点を`ABILITY_EFFECT_DRAW_AGGRO`を発動したキャラクターへ変更してから攻撃対象リストを取得する.
+複数キャラクターが同時に`ABILITY_EFFECT_DRAW_AGGRO`の発動候補となった場合に, 最終的な起点をどのキャラクターにするかの競合規則は現時点では未定義とする.
+
 ### 追撃
 
 ダメージ計算式は通常攻撃と同じ.

@@ -39,13 +39,13 @@
     - 現在値は最大値を超えることはない.
     - ともに0未満になることはない.
   - 最大TP増加タクティクスを使用していない場合の最大値は100とする.
-  - 最大TP増加タクティクスの`TACTICS_EFFECT_MAX_TP_CORRECTION`系列の効果値を最大TPへ加算する.
+  - 最大TPへ作用する`TACTICS_EFFECT_MAX_TP_CORRECTION`および`TACTICS_EFFECT_BATTLE_SPECIAL.parameters.max_tp`を「[タクティクス](tactics.md#効果値の統合規則)」に従って統合し, 最大TPへ加算する.
   - 最大TPの絶対上限は255とし, 補正適用後も255を超えない.
   - 「[騎士団戦](guild_battle.md)」開始時の現在「[TP](guild_battle.md#事前用語説明)」は0とする.
 
 ```
 基礎最大TP = 100
-最大TP補正 = マスターデータに定義された`TACTICS_EFFECT_MAX_TP_CORRECTION`系列のタクティクス効果値合計
+最大TP補正 = `TACTICS_EFFECT_MAX_TP_CORRECTION`の効果値と, 適用対象となる`TACTICS_EFFECT_BATTLE_SPECIAL.parameters.max_tp`を「[タクティクス](tactics.md#効果値の統合規則)」に従って系列統合した値
 補正後最大TP = 基礎最大TP + 最大TP補正
 補正後最大TP = max(補正後最大TP, 0)
 補正後最大TPの小数点以下を切り捨てる
@@ -260,9 +260,9 @@
 撃破ボーナス = HPが0になった敵キャラクター数 * 500
 
 出撃補正 = 「出撃」時の選択「突」属性数 * 0.01
-タクティクス補正 = マスターデータに定義された`TACTICS_EFFECT_SCORE_CORRECTION`系列のタクティクス効果値合計
+タクティクス補正 = `TACTICS_EFFECT_SCORE_CORRECTION`, 適用対象となる`TACTICS_EFFECT_BATTLE_SPECIAL.parameters.battle_score`, `parameters.guild_battle_score`を「[タクティクス](tactics.md#効果値の統合規則)」に従って系列統合した値
 
-タクティクススコアリミット補正 = マスターデータに定義された`TACTICS_EFFECT_SCORE_LIMIT_CORRECTION`系列のタクティクス効果値合計
+タクティクススコアリミット補正 = `TACTICS_EFFECT_SCORE_LIMIT_CORRECTION`系列の有効な効果値を加算した値
 スコアリミット = 99,999 + タクティクススコアリミット補正
 
 殲滅スコア = (出撃基本スコア + 与ダメスコア + 撃破ボーナス) * (1.0 + チェイン補正) * (1.0 + 出撃補正 + タクティクス補正)
@@ -295,15 +295,14 @@
 累計スコア = 出撃基本スコア
 
 相手平均防御力 = GameServerが当該騎士団戦の騎士団戦データとして保持する相手プレイヤー全員の編成する全キャラクターの防御力 / 同キャラクター数
-城レベルUP効果タクティクス = 有効な城Lv上昇効果タクティクスの効果値合計
-城レベルDOWN効果タクティクス = 有効な城Lv低下効果タクティクスの効果値合計
-補正後城レベル = 「城レベル」 + (城レベルUP効果タクティクス - 城レベルDOWN効果タクティクス)
-タクティクス防御力補正 = マスターデータに定義された`TACTICS_EFFECT_DEFENSE_CORRECTION`系列のタクティクス効果値合計
+タクティクス城レベル補正 = 適用対象となる`TACTICS_EFFECT_BATTLE_SPECIAL.parameters.castle_level`を, 上昇効果は正値, 低下効果は負値として「[タクティクス](tactics.md#効果値の統合規則)」に従って系列統合した値
+補正後城レベル = 「城レベル」 + タクティクス城レベル補正
+タクティクス防御力補正 = `TACTICS_EFFECT_DEFENSE_CORRECTION`の効果値と, 適用対象となる`TACTICS_EFFECT_BATTLE_SPECIAL.parameters.defense`を「[タクティクス](tactics.md#効果値の統合規則)」に従って系列統合した値
 相手城防御補正 = 補正後城レベル * 10
 最終防御力 = 相手平均防御力 * (1.0 + タクティクス防御力補正)
 
 for キャラクター in 「出撃」時の選択キャラクター {
-    タクティクス攻撃力補正 = マスターデータに定義された`TACTICS_EFFECT_ATTACK_CORRECTION`系列のタクティクス効果値合計
+    タクティクス攻撃力補正 = `TACTICS_EFFECT_ATTACK_CORRECTION`の効果値と, 適用対象となる`TACTICS_EFFECT_BATTLE_SPECIAL.parameters.attack`を「[タクティクス](tactics.md#効果値の統合規則)」に従って系列統合した値
     フォーメーション攻撃力補正 = Databaseの`FORMATION_POSITION`に定義された該当補正系列のフォーメーション補正値合計
     攻撃力 = キャラクターの攻撃力 * (1.0 + フォーメーション攻撃力補正) * (1.0 + タクティクス攻撃力補正)
 
@@ -316,14 +315,16 @@ for キャラクター in 「出撃」時の選択キャラクター {
     累計スコア += 個別スコア
 }
 
-タクティクススコア補正 = マスターデータに定義された`TACTICS_EFFECT_SCORE_CORRECTION`系列のタクティクス効果値合計
+タクティクススコア補正 = `TACTICS_EFFECT_SCORE_CORRECTION`, 適用対象となる`TACTICS_EFFECT_BATTLE_SPECIAL.parameters.guild_battle_score`, `parameters.castle_break_score`を「[タクティクス](tactics.md#効果値の統合規則)」に従って系列統合した値
 
-タクティクススコアリミット補正 = マスターデータに定義された`TACTICS_EFFECT_SCORE_LIMIT_CORRECTION`系列のタクティクス効果値合計
+タクティクススコアリミット補正 = `TACTICS_EFFECT_SCORE_LIMIT_CORRECTION`系列の有効な効果値を加算した値. 出撃開始時チェインが10以上かつ10の倍数のキリ番キャッスルブレイクでは, 適用対象となる`TACTICS_EFFECT_BATTLE_SPECIAL.parameters.castle_break_score_limit`も「[タクティクス](tactics.md#効果値の統合規則)」に従って統合する
 スコアリミット = 99,999 + タクティクススコアリミット補正
 
 キャッスルブレイクスコア = 累計スコア * (1.0 + チェイン補正) * (1.0 + タクティクススコア補正)
 キャッスルブレイクスコア = min(キャッスルブレイクスコア, スコアリミット)
 ```
+
+強襲キャッスルブレイクの場合は, `タクティクススコア補正`の系列統合対象へ`TACTICS_EFFECT_BATTLE_SPECIAL.parameters.assault_castle_break_score`を追加する.
 
 
 ### キャッスルブレイク確率
@@ -335,9 +336,9 @@ for キャラクター in 「出撃」時の選択キャラクター {
 味方戦況 = (味方騎士団の「回復状態」数 + 味方騎士団の「全滅状態」数) / 味方騎士団の計算対象プレイヤー数
 戦況補正 = (敵戦況 - 味方戦況) * 0.2
 出撃補正 = 「出撃」時の選択「斬」属性数 * 0.01
-強襲CB率UP効果タクティクス = 有効な強襲CB率上昇効果タクティクスの効果値合計
-強襲CB率DOWN効果タクティクス = 有効な強襲CB率低下効果タクティクスの効果値合計
-タクティクスCB率補正 = 強襲CB率UP効果タクティクス - 強襲CB率DOWN効果タクティクス
+強襲CB率UP効果タクティクス = `TACTICS_EFFECT_ASSAULT_CASTLE_BREAK_RATE_CORRECTION`および`TACTICS_EFFECT_BATTLE_SPECIAL.parameters.assault_castle_break_rate`のうち上昇方向へ作用する有効値
+強襲CB率DOWN効果タクティクス = `TACTICS_EFFECT_ASSAULT_CASTLE_BREAK_RATE_CORRECTION`および`TACTICS_EFFECT_BATTLE_SPECIAL.parameters.assault_castle_break_rate`のうち低下方向へ作用する有効値
+タクティクスCB率補正 = 上昇方向・低下方向を符号へ反映した各値を「[タクティクス](tactics.md#効果値の統合規則)」に従って系列統合した値
 
 キャッスルブレイク確率 = 0.05 + 戦況補正 + 出撃補正 + タクティクスCB率補正
 キャッスルブレイク確率 = clamp(キャッスルブレイク確率, 0, 1)

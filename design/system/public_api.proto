@@ -1,0 +1,720 @@
+syntax = "proto3";
+
+package game.publicapi;
+
+// Public APIのRequest/Response Payload wire schema.
+// Transportはdesign/system/network.md, 各APIの処理・成功/失敗Response選択は
+// design/server/public_api.md, 論理型の範囲制約はdesign/shared/types.mdを正とする.
+// 本ファイルはgRPC Service, HTTP method, HTTP pathを追加定義しない.
+// repeatedで固定長を表すフィールドはコメントに記載した要素数をApplication層で検証する.
+
+// -----------------------------------------------------------------------------
+// Enums
+// -----------------------------------------------------------------------------
+
+enum ArenaMode {
+  ARENA_MODE_RANDOM = 0;
+  ARENA_MODE_FRIEND = 1;
+}
+
+enum ArenaBattleErrorCode {
+  ARENA_BATTLE_ERROR_NO_OPPONENT_AVAILABLE = 0;
+  ARENA_BATTLE_ERROR_PLAYER_NOT_FOUND = 1;
+  ARENA_BATTLE_ERROR_ARENA_PARTY_NOT_REGISTERED = 2;
+  ARENA_BATTLE_ERROR_REQUESTER_ARENA_PARTY_NOT_REGISTERED = 3;
+}
+
+enum TacticsEffectID {
+  TACTICS_EFFECT_ATTACK_CORRECTION = 0;
+  TACTICS_EFFECT_DEFENSE_CORRECTION = 1;
+  TACTICS_EFFECT_SPEED_CORRECTION = 2;
+  TACTICS_EFFECT_SCORE_CORRECTION = 3;
+  TACTICS_EFFECT_CASTLE_DEFENSE_CORRECTION = 4;
+  TACTICS_EFFECT_SCORE_LIMIT_CORRECTION = 5;
+  TACTICS_EFFECT_MAX_TP_CORRECTION = 6;
+  TACTICS_EFFECT_BP_RECOVERY = 7;
+  TACTICS_EFFECT_HP_RECOVERY = 8;
+  TACTICS_EFFECT_ASSAULT_CASTLE_BREAK_RATE_CORRECTION = 9;
+  TACTICS_EFFECT_BATTLE_SPECIAL = 10;
+  TACTICS_EFFECT_OPPONENT_SORTIE_SELECTION_RATE_CORRECTION = 11;
+}
+
+enum TacticsHpRecoveryType {
+  TACTICS_HP_RECOVERY_INCAPACITATED_FULL = 0;
+  TACTICS_HP_RECOVERY_POSITIVE_HP_RATE = 1;
+}
+
+enum TacticsBattleSpecialType {
+  TACTICS_BATTLE_SPECIAL_ACCELERATOR = 0;
+  TACTICS_BATTLE_SPECIAL_ASSAULT = 1;
+  TACTICS_BATTLE_SPECIAL_ERASE = 2;
+  TACTICS_BATTLE_SPECIAL_ACE = 3;
+  TACTICS_BATTLE_SPECIAL_EXTERLIZE = 4;
+  TACTICS_BATTLE_SPECIAL_EX_DRIVE = 5;
+  TACTICS_BATTLE_SPECIAL_EDGE_NOTE = 6;
+  TACTICS_BATTLE_SPECIAL_ELYSION = 7;
+  TACTICS_BATTLE_SPECIAL_ENDER_BREAK = 8;
+  TACTICS_BATTLE_SPECIAL_ORACLE = 9;
+  TACTICS_BATTLE_SPECIAL_ORATORIO = 10;
+  TACTICS_BATTLE_SPECIAL_CURSE = 11;
+  TACTICS_BATTLE_SPECIAL_COUNTER = 12;
+  TACTICS_BATTLE_SPECIAL_CASTLE_WEAKNESS = 13;
+  TACTICS_BATTLE_SPECIAL_CASTLE_VEIL = 14;
+  TACTICS_BATTLE_SPECIAL_CLAUSTRUM = 15;
+  TACTICS_BATTLE_SPECIAL_GRAVITY_ASSAULT = 16;
+  TACTICS_BATTLE_SPECIAL_CLEVER_NOTE = 17;
+  TACTICS_BATTLE_SPECIAL_JUGGERNAUT = 18;
+  TACTICS_BATTLE_SPECIAL_SHADOW = 19;
+  TACTICS_BATTLE_SPECIAL_STEALTH = 20;
+  TACTICS_BATTLE_SPECIAL_STREAM = 21;
+  TACTICS_BATTLE_SPECIAL_SLASHER = 22;
+  TACTICS_BATTLE_SPECIAL_SLOW_RATE = 23;
+  TACTICS_BATTLE_SPECIAL_TARANTELLA = 24;
+  TACTICS_BATTLE_SPECIAL_DIVINE_ACTIVE = 25;
+  TACTICS_BATTLE_SPECIAL_DIVINE_ETOILE = 26;
+  TACTICS_BATTLE_SPECIAL_DIVINE_THRUST = 27;
+  TACTICS_BATTLE_SPECIAL_DIVINE_RAPID = 28;
+  TACTICS_BATTLE_SPECIAL_BERSERK = 29;
+  TACTICS_BATTLE_SPECIAL_HIDE = 30;
+  TACTICS_BATTLE_SPECIAL_PANZER = 31;
+  TACTICS_BATTLE_SPECIAL_HEAL = 32;
+  TACTICS_BATTLE_SPECIAL_PHALANX = 33;
+  TACTICS_BATTLE_SPECIAL_FORCE_OF_WISH = 34;
+  TACTICS_BATTLE_SPECIAL_FORCE_OF_PLAY = 35;
+  TACTICS_BATTLE_SPECIAL_FORTRESS = 36;
+  TACTICS_BATTLE_SPECIAL_BLITZ = 37;
+  TACTICS_BATTLE_SPECIAL_PROVOKE = 38;
+  TACTICS_BATTLE_SPECIAL_POINT_RISE = 39;
+  TACTICS_BATTLE_SPECIAL_MENACE = 40;
+  TACTICS_BATTLE_SPECIAL_RAMPAGE = 41;
+  TACTICS_BATTLE_SPECIAL_REVIVE = 42;
+  TACTICS_BATTLE_SPECIAL_RECONTRACT = 43;
+  TACTICS_BATTLE_SPECIAL_RESURRECTION = 44;
+  TACTICS_BATTLE_SPECIAL_RECT_NOTE = 45;
+  TACTICS_BATTLE_SPECIAL_WISE_NOTE = 46;
+  TACTICS_BATTLE_SPECIAL_ASSAULT_ORDER = 47;
+  TACTICS_BATTLE_SPECIAL_ACE_ORDER = 48;
+  TACTICS_BATTLE_SPECIAL_SHADOW_ORDER = 49;
+}
+
+enum TacticsBattleSpecialApplyTarget {
+  TACTICS_BATTLE_SPECIAL_APPLY_ALLY_GUILD = 0;
+  TACTICS_BATTLE_SPECIAL_APPLY_ENEMY_GUILD = 1;
+  TACTICS_BATTLE_SPECIAL_APPLY_BATTLE_ALLY_PARTY = 2;
+  TACTICS_BATTLE_SPECIAL_APPLY_BATTLE_ENEMY_PARTY = 3;
+  TACTICS_BATTLE_SPECIAL_APPLY_CASTLE_BREAK = 4;
+}
+
+enum TacticsBattleSpecialTrigger {
+  TACTICS_BATTLE_SPECIAL_TRIGGER_NONE = 0;
+  TACTICS_BATTLE_SPECIAL_TRIGGER_BATTLE = 1;
+  TACTICS_BATTLE_SPECIAL_TRIGGER_ENEMY_ANNIHILATED = 2;
+  TACTICS_BATTLE_SPECIAL_TRIGGER_CASTLE_BREAK = 3;
+  TACTICS_BATTLE_SPECIAL_TRIGGER_ASSAULT_CASTLE_BREAK = 4;
+  TACTICS_BATTLE_SPECIAL_TRIGGER_INTERCEPTION = 5;
+}
+
+enum TacticsTarget {
+  TACTICS_TARGET_SELF_PARTY = 0;
+  TACTICS_TARGET_OPPONENT_PARTY = 1;
+  TACTICS_TARGET_ALLY_GUILD = 2;
+  TACTICS_TARGET_ENEMY_GUILD = 3;
+}
+
+enum TacticsEndType {
+  TACTICS_END_TYPE_DURATION = 0;
+  TACTICS_END_TYPE_COUNT = 1;
+  TACTICS_END_TYPE_ON_ACTIVATION = 2;
+}
+
+enum TacticsCountConsumeTrigger {
+  TACTICS_COUNT_CONSUME_TRIGGER_CASTLE_BREAK = 0;
+  TACTICS_COUNT_CONSUME_TRIGGER_ANNIHILATION = 1;
+  TACTICS_COUNT_CONSUME_TRIGGER_ANNIHILATION_ALL_ENEMIES = 2;
+  TACTICS_COUNT_CONSUME_TRIGGER_SORTIE = 3;
+}
+
+enum GuildBattleStartTime {
+  GUILD_BATTLE_START_1130 = 0;
+  GUILD_BATTLE_START_1215 = 1;
+  GUILD_BATTLE_START_1300 = 2;
+  GUILD_BATTLE_START_2100 = 3;
+  GUILD_BATTLE_START_2200 = 4;
+  GUILD_BATTLE_START_2300 = 5;
+}
+
+enum ApiErrorCode {
+  API_ERROR_UNSPECIFIED = 0;
+  API_ERROR_INVALID_ACCESS_TOKEN = 2;
+  API_ERROR_INVALID_USER_NAME = 3;
+  API_ERROR_INVALID_PLAYER_ID = 4;
+  API_ERROR_NO_OPPONENT_AVAILABLE = 6;
+  API_ERROR_GUILD_BATTLE_JOIN_NOT_ALLOWED = 7;
+  API_ERROR_GUILD_BATTLE_PARTY_UPDATE_NOT_ALLOWED = 8;
+  API_ERROR_GUILD_BATTLE_SORTIE_NOT_ALLOWED = 9;
+  API_ERROR_TACTICS_NOT_AVAILABLE = 10;
+  API_ERROR_ITEM_NOT_AVAILABLE = 11;
+  API_ERROR_HEAL_NOT_AVAILABLE = 12;
+  API_ERROR_HEAL_CANCEL_NOT_ALLOWED = 13;
+  API_ERROR_HEAL_COMPLETE_NOT_ALLOWED = 14;
+  API_ERROR_REVIVE_NOT_AVAILABLE = 15;
+  API_ERROR_REVIVE_CANCEL_NOT_ALLOWED = 16;
+  API_ERROR_REVIVE_COMPLETE_NOT_ALLOWED = 17;
+  API_ERROR_INVALID_GUILD_BATTLE_SEQUENCE = 18;
+  API_ERROR_GUILD_FULL = 19;
+  API_ERROR_GUILD_MEMBERSHIP_CHANGE_NOT_ALLOWED = 20;
+  API_ERROR_INVALID_PARTY = 21;
+  API_ERROR_RATE_LIMIT_EXCEEDED = 22;
+  API_ERROR_INVALID_GUILD_NAME = 23;
+  API_ERROR_CLIENT_VERSION_MISMATCH = 24;
+  API_ERROR_GUILD_LEADERSHIP_CHANGE_NOT_ALLOWED = 25;
+  API_ERROR_INVALID_CREDENTIALS = 26;
+  API_ERROR_INVALID_LOGIN_ID = 27;
+  API_ERROR_INVALID_PASSWORD = 28;
+  API_ERROR_INVALID_REFRESH_TOKEN = 30;
+  API_ERROR_GAME_SERVER_UNAVAILABLE = 31;
+  API_ERROR_DISCORD_AUTHORIZATION_REQUIRED = 32;
+  API_ERROR_INVALID_DISCORD_AUTHORIZATION_TOKEN = 33;
+  API_ERROR_GUILD_JOIN_APPLICATION_NOT_FOUND = 34;
+  API_ERROR_GUILD_JOIN_APPROVAL_NOT_ALLOWED = 35;
+  API_ERROR_GUILD_INVITATION_NOT_ALLOWED = 36;
+  API_ERROR_GUILD_INVITATION_NOT_FOUND = 37;
+  API_ERROR_INVALID_GUILD_LEADERSHIP_TARGET = 38;
+  API_ERROR_GUILD_LEADER_MOVE_NOT_ALLOWED = 39;
+  API_ERROR_ACCOUNT_CREATION_FAILED = 40;
+  API_ERROR_REQUIRED_OPERATION_FAILED = 41;
+}
+
+enum SpeedRank {
+  SPEED_RANK_SS9 = 0;
+  SPEED_RANK_SS8 = 1;
+  SPEED_RANK_SS7 = 2;
+  SPEED_RANK_SS6 = 3;
+  SPEED_RANK_SS5 = 4;
+  SPEED_RANK_SS4 = 5;
+  SPEED_RANK_SS3 = 6;
+  SPEED_RANK_SS2 = 7;
+  SPEED_RANK_SS1 = 8;
+  SPEED_RANK_SS_PLUS = 9;
+  SPEED_RANK_SS = 10;
+  SPEED_RANK_SS_MINUS = 11;
+  SPEED_RANK_S_PLUS = 12;
+  SPEED_RANK_S = 13;
+  SPEED_RANK_S_MINUS = 14;
+  SPEED_RANK_A_PLUS = 15;
+  SPEED_RANK_A = 16;
+  SPEED_RANK_A_MINUS = 17;
+  SPEED_RANK_B_PLUS = 18;
+  SPEED_RANK_B = 19;
+  SPEED_RANK_B_MINUS = 20;
+  SPEED_RANK_C_PLUS = 21;
+  SPEED_RANK_C = 22;
+  SPEED_RANK_C_MINUS = 23;
+  SPEED_RANK_D_PLUS = 24;
+  SPEED_RANK_D = 25;
+  SPEED_RANK_D_MINUS = 26;
+  SPEED_RANK_E_PLUS = 27;
+  SPEED_RANK_E = 28;
+  SPEED_RANK_E_MINUS = 29;
+  SPEED_RANK_F_PLUS = 30;
+  SPEED_RANK_F = 31;
+  SPEED_RANK_F_MINUS = 32;
+}
+
+enum HealState {
+  HEAL_STATE_NONE = 0;
+  HEAL_STATE_HEALING = 1;
+  HEAL_STATE_COMPLETED = 2;
+}
+
+enum ReviveState {
+  REVIVE_STATE_ANNIHILATED = 0;
+  REVIVE_STATE_REVIVING = 1;
+  REVIVE_STATE_COMPLETED = 2;
+  REVIVE_STATE_NORMAL = 3;
+}
+
+// -----------------------------------------------------------------------------
+// Common payload messages
+// -----------------------------------------------------------------------------
+
+message CharacterHP {
+  uint32 character_id = 1; // CharacterID.
+  uint32 current_hp = 2; // HP.
+}
+
+message BattleCharacterStatus {
+  uint32 character_id = 1; // CharacterID.
+  uint32 position = 2; // FormationSlotID. 0..255.
+  float hp = 3;
+  float attack = 4;
+  float defense = 5;
+  SpeedRank speed_rank = 6;
+  repeated uint32 ability_id = 7; // AbilityID. Exactly 2 elements.
+  uint32 main_skill_id = 8; // SkillID.
+}
+
+message TacticsStatEffectResult {
+  float attack = 1;
+  float defense = 2;
+  float speed = 3;
+}
+
+message TacticsHpRecoveryEffectResult {
+  TacticsHpRecoveryType recovery_type = 1;
+  float recovery_rate = 2;
+}
+
+message TacticsBattleSpecialParameters {
+  float attack = 1;
+  float defense = 2;
+  float speed = 3;
+  float skill_activation_rate = 4;
+  float max_tp = 5;
+  float battle_score = 6;
+  float guild_battle_score = 7;
+  float castle_break_score = 8;
+  float assault_castle_break_rate = 9;
+  float assault_castle_break_score = 10;
+  float hate = 11;
+  sint32 castle_level = 12;
+  uint32 bp_recovery = 13;
+  uint32 tp_recovery = 14;
+  float attack_count_score = 15;
+  float castle_break_score_limit = 16;
+  float hp_recovery_value = 17;
+  float revive_rate = 18;
+  float attack_target_rate = 19;
+}
+
+message TacticsBattleSpecialData {
+  TacticsBattleSpecialType special_type = 1;
+  TacticsBattleSpecialParameters parameters = 2;
+  TacticsBattleSpecialApplyTarget apply_target = 3;
+  TacticsBattleSpecialTrigger trigger = 4;
+}
+
+message TacticsBattleSpecialEffectResult {
+  TacticsBattleSpecialType special_type = 1;
+  TacticsBattleSpecialParameters parameters = 2;
+  TacticsBattleSpecialApplyTarget apply_target = 3;
+  TacticsBattleSpecialTrigger trigger = 4;
+}
+
+message TacticsEffectResultData {
+  oneof value {
+    float scalar_value = 1;
+    uint32 uint_value = 2;
+    TacticsStatEffectResult status_effect = 3;
+    TacticsHpRecoveryEffectResult hp_recovery = 4;
+    TacticsBattleSpecialEffectResult battle_special = 5;
+  }
+}
+
+message TacticsEffectResult {
+  TacticsEffectID tactics_effect_id = 1;
+  TacticsTarget target = 2;
+  TacticsEffectResultData effect_data = 3;
+}
+
+message FormationCharacterHP {
+  uint32 formation_slot_id = 1; // FormationSlotID. 255 means unused.
+  uint32 current_hp = 2;
+}
+
+message GuildBattleTacticsStatus {
+  uint32 tactics_id = 1;
+  uint32 remaining_use_count = 2;
+}
+
+message GuildBattleItemStatus {
+  uint32 item_id = 1;
+  uint32 remaining_count = 2;
+}
+
+message GuildBattleCbcStatus {
+  bool is_active = 1;
+  uint64 initiator_guild_id = 2;
+  uint32 remaining_time = 3;
+  uint32 remaining_count = 4;
+}
+
+message ArenaPartyCharacter {
+  uint32 character_id = 1;
+  uint32 position = 2; // FormationSlotID.
+  repeated uint32 follower_character_id = 3; // Exactly 2 elements. Empty uses uint32 max.
+  repeated uint32 ability_id = 4; // Exactly 2 elements. Empty uses uint32 max.
+  uint32 main_skill_id = 5;
+}
+
+message GuildBattlePartyCharacter {
+  uint32 character_id = 1; // uint32 max means unused element.
+  uint32 priority_position = 2; // FormationSlotID.
+  repeated uint32 follower_character_id = 3; // Exactly 2 elements. Empty uses uint32 max.
+  repeated uint32 ability_id = 4; // Exactly 2 elements. Empty uses uint32 max.
+  uint32 main_skill_id = 5;
+}
+
+message TacticsActiveEffectState {
+  uint32 tactics_id = 1;
+  TacticsEffectID effect_id = 2;
+  TacticsTarget target = 3;
+  float effect_value = 4;
+  uint64 expires_at = 5;
+  uint32 remaining_count = 6;
+  TacticsBattleSpecialData battle_special = 7;
+  TacticsCountConsumeTrigger count_consume_trigger = 8;
+  TacticsEndType end_type = 9;
+  bool erase_consumed = 10;
+}
+
+message ApiErrorResponse {
+  ApiErrorCode error_code = 1;
+}
+
+message RequiredOperationErrorResponse {
+  ApiErrorCode error_code = 1; // API_ERROR_REQUIRED_OPERATION_FAILED.
+  string message = 2; // Fixed: 必要な処理が実行できませんでした
+}
+
+// -----------------------------------------------------------------------------
+// System / Account / Guild
+// -----------------------------------------------------------------------------
+
+message CreateAccountRequest {
+  string login_id = 1;
+  string password = 2;
+  string user_name = 3;
+  string discord_authorization_token = 4;
+}
+
+message CreateAccountResponse {
+  uint64 player_id = 1;
+}
+
+message LoginRequest {
+  string login_id = 1;
+  string password = 2;
+  string client_version = 3;
+  string discord_authorization_token = 4;
+}
+
+message LoginResponse {
+  uint64 player_id = 1;
+  string access_token = 2;
+}
+
+message LoginVersionErrorResponse {
+  ApiErrorCode error_code = 1; // API_ERROR_CLIENT_VERSION_MISMATCH.
+  string required_version = 2;
+}
+
+message ClientVersionMismatchResponse {
+  ApiErrorCode error_code = 1; // API_ERROR_CLIENT_VERSION_MISMATCH.
+  string required_version = 2;
+}
+
+message RefreshAccessTokenRequest {
+  // Request body is empty. RefreshToken is read from __Host-RefreshToken Cookie.
+}
+
+message RefreshAccessTokenResponse {
+  string access_token = 1;
+}
+
+message LogoutRequest {
+  // Request body is empty. RefreshToken is read from __Host-RefreshToken Cookie.
+}
+
+message LogoutResponse {}
+
+message CreateGuildRequest {
+  string access_token = 1;
+  uint64 player_id = 2;
+  string guild_name = 3;
+  GuildBattleStartTime daytime_start_time = 4;
+  GuildBattleStartTime nighttime_start_time = 5;
+}
+
+message CreateGuildResponse {
+  uint64 guild_id = 1;
+}
+
+message ApplyGuildJoinRequest {
+  string access_token = 1;
+  uint64 player_id = 2;
+  uint64 guild_id = 3;
+}
+
+message ApplyGuildJoinResponse {}
+
+message ApproveGuildJoinApplicationRequest {
+  string access_token = 1;
+  uint64 player_id = 2;
+  uint64 guild_id = 3;
+  uint64 applicant_player_id = 4;
+}
+
+message ApproveGuildJoinApplicationResponse {
+  uint64 guild_id = 1;
+  uint64 joined_player_id = 2;
+}
+
+message SendGuildInvitationRequest {
+  string access_token = 1;
+  uint64 player_id = 2;
+  uint64 guild_id = 3;
+  uint64 invitee_player_id = 4;
+}
+
+message SendGuildInvitationResponse {}
+
+message AcceptGuildInvitationRequest {
+  string access_token = 1;
+  uint64 player_id = 2;
+  uint64 guild_id = 3;
+}
+
+message AcceptGuildInvitationResponse {
+  uint64 guild_id = 1;
+}
+
+message LeaveGuildRequest {
+  string access_token = 1;
+  uint64 player_id = 2;
+}
+
+message LeaveGuildResponse {
+  uint64 guild_id = 1;
+}
+
+message UpdateGuildLeadershipRequest {
+  string access_token = 1;
+  uint64 player_id = 2;
+  uint64 guild_id = 3;
+  uint64 leader_player_id = 4;
+  uint64 subleader_player_id = 5; // 0 means unset.
+}
+
+message UpdateGuildLeadershipResponse {
+  uint64 guild_id = 1;
+  uint64 leader_player_id = 2;
+  uint64 subleader_player_id = 3;
+}
+
+// -----------------------------------------------------------------------------
+// Arena
+// -----------------------------------------------------------------------------
+
+message UpdateArenaPartyRequest {
+  string access_token = 1;
+  uint64 player_id = 2;
+  uint32 formation_id = 3;
+  repeated ArenaPartyCharacter characters = 4; // 1..5 elements.
+}
+
+message UpdateArenaPartyResponse {}
+
+message ArenaBattleRequest {
+  string access_token = 1;
+  uint64 player_id = 2;
+  string client_version = 3;
+  ArenaMode mode = 4;
+  uint64 opponent_id = 5;
+  uint32 local_formation_id = 6;
+  repeated ArenaPartyCharacter local_characters = 7; // 1..5 elements.
+}
+
+message ArenaBattleResponse {
+  bool own_party_matched = 1;
+  uint32 own_formation_id = 2;
+  repeated ArenaPartyCharacter own_characters = 3; // 1..5 elements.
+  uint32 enemy_formation_id = 4;
+  repeated BattleCharacterStatus enemy_characters = 5; // Up to 5 elements.
+  uint64 seed = 6;
+}
+
+message ArenaBattleErrorResponse {
+  ArenaBattleErrorCode error_code = 1;
+}
+
+// -----------------------------------------------------------------------------
+// Guild Battle
+// -----------------------------------------------------------------------------
+
+message UpdateGuildBattlePartyRequest {
+  string access_token = 1;
+  uint64 player_id = 2;
+  uint32 formation_id = 3;
+  repeated GuildBattlePartyCharacter characters = 4; // Exactly 10 elements.
+}
+
+message UpdateGuildBattlePartyResponse {}
+
+message JoinGuildBattleRequest {
+  string access_token = 1;
+  uint64 player_id = 2;
+  string client_version = 3;
+  uint64 guild_id = 4;
+  uint64 guild_battle_id = 5;
+  uint32 local_formation_id = 6;
+  repeated GuildBattlePartyCharacter local_characters = 7; // Exactly 10 elements.
+}
+
+message GuildBattleJoinResponse {
+  bool party_matched = 1;
+  uint32 server_formation_id = 2;
+  repeated GuildBattlePartyCharacter server_characters = 3; // Exactly 10 elements.
+  repeated FormationCharacterHP characters = 4; // Exactly 10 elements.
+  uint64 request_sequence = 5;
+}
+
+message GetGuildBattleStatusRequest {
+  string access_token = 1;
+  uint64 player_id = 2;
+  uint64 guild_battle_id = 3;
+}
+
+message GetGuildBattleStatusResponse {
+  repeated FormationCharacterHP characters = 1; // Exactly 10 elements.
+  uint32 bp = 2;
+  uint32 max_bp = 3;
+  uint32 tp = 4;
+  uint32 max_tp = 5;
+  HealState heal_state = 6;
+  uint32 heal_remaining_time = 7;
+  ReviveState revive_state = 8;
+  uint32 revive_remaining_time = 9;
+  uint32 sortie_wait_remaining_time = 10;
+  repeated GuildBattleTacticsStatus tactics = 11;
+  repeated TacticsActiveEffectState active_tactics_effects = 12;
+  repeated GuildBattleItemStatus items = 13;
+  uint64 ally_score = 14;
+  uint64 enemy_score = 15;
+  uint32 chain = 16;
+  GuildBattleCbcStatus cbc_status = 17;
+  uint64 request_sequence = 18;
+}
+
+message GuildBattleSortieRequest {
+  string access_token = 1;
+  uint64 player_id = 2;
+  uint64 guild_battle_id = 3;
+  uint64 request_sequence = 4;
+  repeated uint32 select_id = 5; // Exactly 5 elements. Unused slot is 255.
+}
+
+message GuildBattleCastleBreakResponse {
+  uint64 score = 1;
+  uint64 seed = 2;
+  uint64 next_request_sequence = 3;
+}
+
+message GuildBattleAnnihilationResponse {
+  uint64 score = 1;
+  repeated BattleCharacterStatus enemy_characters = 2; // Up to 5 elements.
+  uint64 seed = 3;
+  repeated uint32 enemy_tactics_id = 4;
+  uint64 next_request_sequence = 5;
+}
+
+message UseTacticsRequest {
+  string access_token = 1;
+  uint64 player_id = 2;
+  uint64 guild_battle_id = 3;
+  uint64 request_sequence = 4;
+  uint32 tactics_id = 5;
+}
+
+message UseTacticsResponse {
+  uint32 tp = 1;
+  uint32 remaining_count = 2;
+  repeated TacticsEffectResult effects = 3;
+  uint64 next_request_sequence = 4;
+}
+
+message UseItemRequest {
+  string access_token = 1;
+  uint64 player_id = 2;
+  uint64 guild_battle_id = 3;
+  uint64 request_sequence = 4;
+  uint32 item_id = 5;
+}
+
+message UseItemResponse {
+  uint32 bp = 1;
+  uint32 remaining_count = 2;
+  uint64 next_request_sequence = 3;
+}
+
+message StartHealRequest {
+  string access_token = 1;
+  uint64 player_id = 2;
+  uint64 guild_battle_id = 3;
+  uint64 request_sequence = 4;
+}
+
+message StartHealResponse {
+  uint32 wait_time = 1;
+  uint64 next_request_sequence = 2;
+}
+
+message CancelHealRequest {
+  string access_token = 1;
+  uint64 player_id = 2;
+  uint64 guild_battle_id = 3;
+  uint64 request_sequence = 4;
+}
+
+message CancelHealResponse {
+  uint64 next_request_sequence = 1;
+}
+
+message CompleteHealRequest {
+  string access_token = 1;
+  uint64 player_id = 2;
+  uint64 guild_battle_id = 3;
+  uint64 request_sequence = 4;
+}
+
+message CompleteHealResponse {
+  uint32 bp = 1;
+  repeated CharacterHP character_hp = 2;
+  uint64 next_request_sequence = 3;
+}
+
+message StartReviveRequest {
+  string access_token = 1;
+  uint64 player_id = 2;
+  uint64 guild_battle_id = 3;
+  uint64 request_sequence = 4;
+}
+
+message StartReviveResponse {
+  uint32 wait_time = 1;
+  uint64 next_request_sequence = 2;
+}
+
+message CancelReviveRequest {
+  string access_token = 1;
+  uint64 player_id = 2;
+  uint64 guild_battle_id = 3;
+  uint64 request_sequence = 4;
+}
+
+message CancelReviveResponse {
+  uint64 next_request_sequence = 1;
+}
+
+message CompleteReviveRequest {
+  string access_token = 1;
+  uint64 player_id = 2;
+  uint64 guild_battle_id = 3;
+  uint64 request_sequence = 4;
+}
+
+message CompleteReviveResponse {
+  uint32 bp = 1;
+  repeated CharacterHP character_hp = 2;
+  uint64 next_request_sequence = 3;
+}
