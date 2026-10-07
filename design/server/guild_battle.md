@@ -206,8 +206,8 @@ sequenceDiagram
                 GameServer->>PrivateAPIServer: GetGuildBattleAssignment(GuildBattleID)
                 PrivateAPIServer-->>GameServer: GameServerInstanceID
                 alt 自身への割当が継続している
-                    GameServer->>PrivateAPIServer: UpdateGuildBattleStatus(GuildBattleID, preload_failed)
-                    PrivateAPIServer->>Database: GUILD_BATTLE.status = preload_failed
+                    GameServer->>PrivateAPIServer: MarkGuildBattlePreloadFailed(GuildBattleID, GameServerInstanceID)
+                    PrivateAPIServer->>Database: scheduled -> preload_failed (所有権確認と同一Transaction)
                     opt DiscordNotificationEnabled=true
                         GameServer->>DiscordDiscordBot: Preload失敗通知
                     end
@@ -223,12 +223,8 @@ sequenceDiagram
                 PrivateAPIServer-->>GameServer: GameServerInstanceID
                 alt 自身への割当が継続している
                     GameServer->>GameServer: 開戦時に保持する騎士団戦データを確定しGuildBattleInitialSnapshotを生成
-                    GameServer->>PrivateAPIServer: SaveGuildBattleInitialSeed(GuildBattleID, InitialSeed)
-                    PrivateAPIServer->>Database: GUILD_BATTLE.initial_seed = InitialSeed
-                    GameServer->>PrivateAPIServer: SaveGuildBattleCreateLog(GuildBattleID, InitialSeed, GuildID[2], InitialSnapshot, Version)
-                    PrivateAPIServer->>Database: リプレイ作成ログ・開戦時スナップショット保存
-                    GameServer->>PrivateAPIServer: UpdateGuildBattleStatus(GuildBattleID, in_progress)
-                    PrivateAPIServer->>Database: GUILD_BATTLE.status更新
+                    GameServer->>PrivateAPIServer: StartGuildBattle(GameServerInstanceID, CreateLog)
+                    PrivateAPIServer->>Database: InitialSeed + Create Replay + scheduled -> in_progressを同一Transactionで確定
                 else 割当解除または別GameServerへ変更済み
                     GameServer->>GameServer: 当該騎士団戦のPreload済み保持データを破棄して開戦しない
                 end
@@ -241,6 +237,7 @@ sequenceDiagram
 ```
 
 GetGuildDataまたはGetGuildMembersを含む開戦前Preloadの必須データ取得に失敗した場合も, Player単位の取得失敗と同様に当該GuildBattleIDをPreload失敗として扱う.
+Database上の状態遷移は「[騎士団戦永続ライフサイクル](guild_battle_lifecycle.md)」を正とし, GameServerは任意statusを指定せずLifecycle APIで遷移を要求する.
 
 `GUILD_BATTLE_STATUS_PRELOAD_FAILED`となった対戦は運営判断待ちとする. 問題解決後に運営が同一ペアで再開する場合は`RetryPreloadFailedGuildBattle(GuildBattleID, RestartAt)`を実行し, 同一ペアを維持したまま`scheduled`かつ未割当へ戻して`GuildBattleCoordinator`による通常の割当・再Preloadを実行する. 問題解決後に運営が再抽選を選択した場合, `GuildBattleCoordinator`は対象GuildをGuildID昇順へ並べ, 共通時刻ベースSeedを新規生成してShuffleする. `PRELOAD_FAILED`のGuildBattleIDを昇順へ並べて新しいペアを割り当て, Private APIの`RematchPreloadFailedGuildBattles`へ保存を要求する. 保存後は`scheduled`かつ未割当へ戻し, `GuildBattleCoordinator`による通常の割当と開戦前Preloadを再実行する. 運営が当該対戦を中止する場合は, 対象Guildについて`SetGuildMembershipLock(..., false)`を実行して所属変更禁止を解除する.
 
@@ -635,8 +632,8 @@ sequenceDiagram
     Note over GameServer: 騎士団戦開始から30:00到達
 
     GameServer->>GameServer: 新規処理受付停止
-    GameServer->>PrivateAPIServer: UpdateGuildBattleStatus(GuildBattleID, GUILD_BATTLE_STATUS_RESOLVING)
-    PrivateAPIServer->>Database: GUILD_BATTLE.status = GUILD_BATTLE_STATUS_RESOLVING
+    GameServer->>PrivateAPIServer: BeginGuildBattleResolving(GuildBattleID, GameServerInstanceID)
+    PrivateAPIServer->>Database: in_progress -> resolving (所有権確認と同一Transaction)
 
     loop 処理キューが空になるまで
         GameServer->>GameServer: キュー先頭の処理を実行
@@ -660,45 +657,28 @@ sequenceDiagram
         end
     end
 
-    loop 対象騎士団
-        GameServer->>PrivateAPIServer: SaveGuildBattleResult
-        PrivateAPIServer->>Database: スコア・勝敗結果保存
-        Database-->>PrivateAPIServer: 保存結果
-        PrivateAPIServer-->>GameServer: SaveGuildBattleResult
+    GameServer->>GameServer: GuildResults[2]とPlayerRecords[]を生成
+    GameServer->>PrivateAPIServer: CompleteGuildBattle(GuildBattleID, GameServerInstanceID, GuildResults, PlayerRecords)
+    PrivateAPIServer->>Database: 結果保存 + Player勝敗数更新 + resolving -> completed + membership lock解除 + excluded削除を同一Transactionで確定
+    Database-->>PrivateAPIServer: 完了結果
+    PrivateAPIServer-->>GameServer: CompleteGuildBattle
 
-        opt 初回保存失敗
-            GameServer->>PrivateAPIServer: SaveGuildBattleResult 再試行（1回）
-            PrivateAPIServer->>Database: スコア・勝敗結果再保存
-            Database-->>PrivateAPIServer: 再保存結果
-            PrivateAPIServer-->>GameServer: SaveGuildBattleResult
-            opt 再試行も失敗
-                GameServer->>GameServer: エラーログ追記
-                GameServer->>PrivateAPIServer: SaveErrorLog
-                PrivateAPIServer->>Database: エラーログ保存
-                opt DiscordNotificationEnabled=true
-                    GameServer->>DiscordDiscordBot: エラーメッセージ送信
-                end
-                Note over GameServer: 原因調査および復旧は運営が手動で行う
+    alt CompleteGuildBattle成功
+        Note over GameServer: 騎士団戦の永続終了処理完了
+    else 初回失敗
+        GameServer->>PrivateAPIServer: CompleteGuildBattle 同一X-Operation-IDで再試行（1回）
+        PrivateAPIServer->>Database: 同一Transactionを再実行
+        Database-->>PrivateAPIServer: 再試行結果
+        PrivateAPIServer-->>GameServer: CompleteGuildBattle
+        opt 再試行も失敗
+            GameServer->>GameServer: エラーログ追記
+            GameServer->>PrivateAPIServer: SaveErrorLog
+            PrivateAPIServer->>Database: エラーログ保存
+            opt DiscordNotificationEnabled=true
+                GameServer->>DiscordBot: エラーメッセージ送信
             end
+            Note over GameServer: TransactionはRollbackされcompletedへ遷移しない. 原因調査および復旧は運営が手動で行う
         end
-    end
-
-
-    alt 最終結果保存が完了
-        Note over GameServer: 最終結果保存成功後にPlayer勝敗数を更新
-        loop 当該騎士団戦で1回以上出撃成立した通常Player + ダミーPlayerID 0
-            GameServer->>PrivateAPIServer: UpdatePlayerGuildBattleRecord(PlayerID, Result)
-            PrivateAPIServer->>Database: 勝利ならwin_count+1 / 敗北ならlose_count+1 / 引き分けは更新なし
-        end
-        GameServer->>PrivateAPIServer: UpdateGuildBattleStatus(GuildBattleID, GUILD_BATTLE_STATUS_COMPLETED)
-        PrivateAPIServer->>Database: GUILD_BATTLE.status = GUILD_BATTLE_STATUS_COMPLETED
-        GameServer->>PrivateAPIServer: GetGuildBattleExcludedGuilds(TargetDate, StartTime)
-        PrivateAPIServer-->>GameServer: ExcludedGuildID[]
-        GameServer->>PrivateAPIServer: SetGuildMembershipLock(対象2騎士団 + ExcludedGuildID, false)
-        GameServer->>PrivateAPIServer: ClearGuildBattleExcludedGuilds(TargetDate, StartTime)
-        PrivateAPIServer->>Database: GUILD.membership_locked = false
-    else 再試行後も最終結果保存失敗
-        Note over GameServer: ErrorLog保存済み. DiscordNotificationEnabled=trueの場合はBot通知済み. 運営が原因調査し手動復旧する
     end
 ```
 

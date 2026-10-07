@@ -1073,19 +1073,26 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 |---|---|---|
 | Guild | `GuildLevelData` | 騎士団レベル情報 |
 
-### SaveGuildBattleInitialSeedRequest
+### MarkGuildBattlePreloadFailedRequest
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| GuildBattleID | `GuildBattleID` | 対象騎士団戦ID |
-| InitialSeed | `Seed` | 開戦前Preload成功後に生成した初期Seed |
+| GuildBattleID | `GuildBattleID` | `scheduled -> preload_failed`へ遷移する騎士団戦ID |
+| GameServerInstanceID | `GameServerInstanceID` | 遷移を要求する所有GameServer. Database上の割当と一致必須 |
 
-### UpdateGuildBattleStatusRequest
+### StartGuildBattleRequest
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| GuildBattleID | `GuildBattleID` | 対象騎士団戦ID |
-| Status | `GuildBattleStatus` | 更新後の状態 |
+| GameServerInstanceID | `GameServerInstanceID` | 開戦を要求する所有GameServer. Database上の割当と一致必須 |
+| CreateLog | `GuildBattleCreateLogPayload` | InitialSeed, 対戦Guild, 開戦時Snapshot, Versionを含む作成Replay情報 |
+
+### BeginGuildBattleResolvingRequest
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| GuildBattleID | `GuildBattleID` | `in_progress -> resolving`へ遷移する騎士団戦ID |
+| GameServerInstanceID | `GameServerInstanceID` | 遷移を要求する所有GameServer. Database上の割当と一致必須 |
 
 ### RematchPreloadFailedGuildBattlesRequest
 
@@ -1150,21 +1157,29 @@ Private APIは再抽選を行わない. `GuildBattleID[]`と`Battles[]`のID集�
 | GuildBattleID | `GuildBattleID` | 騎士団戦に紐づく場合の騎士団戦ID. 騎士団戦未生成の時間帯エラー等では`0`を指定し, Database保存時はNULLとして扱う |
 | ErrorLog | `ErrorLogMessage` | 追記するエラーログ文字列 |
 
-### UpdatePlayerGuildBattleRecordRequest
+### CompleteGuildBattleRequest
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| GuildBattleID | `GuildBattleID` | `resolving -> completed`へ遷移する騎士団戦ID |
+| GameServerInstanceID | `GameServerInstanceID` | 完了を要求する所有GameServer. Database上の割当と一致必須 |
+| GuildResults | `GuildBattleFinalGuildResult[2]` | 対戦2Guildの最終スコア・勝敗. GuildID集合はDatabase上の対戦Guildと一致必須 |
+| PlayerRecords | `GuildBattlePlayerRecordUpdate[]` | 1回以上出撃成立した通常PlayerとDummy PlayerID `0`の勝敗数更新情報. PlayerID重複不可 |
+
+### GuildBattleFinalGuildResult
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| GuildID | `GuildID` | 最終結果を保存する騎士団ID |
+| Score | `Score` | 最終スコア |
+| Result | `GuildBattleResult` | 勝敗結果 |
+
+### GuildBattlePlayerRecordUpdate
 
 | 項目 | 型 | 内容 |
 |---|---|---|
 | PlayerID | `PlayerID` | 更新対象PlayerID |
-| Result | `GuildBattleResult` | 当該Playerの勝敗.drawの場合は更新しない |
-
-### GuildBattleResultSaveRequest
-
-| 項目 | 型 | 内容 |
-|---|---|---|
-| GuildBattleID | `GuildBattleID` | 騎士団戦ID |
-| GuildID | `GuildID` | 騎士団ID |
-| Score | `Score` | 最終スコア |
-| Result | `GuildBattleResult` | 勝敗結果 |
+| Result | `GuildBattleResult` | 当該Playerの勝敗. drawの場合は勝敗数を更新しない |
 
 
 騎士団戦Replayのwire形式は「[guild_battle_replay.proto](../system/guild_battle_replay.proto)」を正本とする. `ProcessType`は各個別Payloadではなく`GuildBattleReplayEnvelope.process_type`に保持する. 以下のReplay Payload表は`oneof payload`へ格納する論理項目の説明として維持する.

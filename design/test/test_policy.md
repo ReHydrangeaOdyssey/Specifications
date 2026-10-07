@@ -67,7 +67,12 @@ Database, Public API Server, Private API Server, GameServer, GuildBattleCoordina
 * `membership_locked`中のGuild所属変更拒否.
 * GameServer割当とPreload開始.
 * 複数の割当候補では`AvailableGuildBattleThreadCount`が多いGameServerを負荷判定で優先し, 同数の場合は`(TotalGuildBattleThreadCount - AvailableGuildBattleThreadCount) / TotalGuildBattleThreadCount`が低い順, `LastAssignedAt`が古い順, `GameServerInstanceID`昇順で決定する.
-* `PRELOAD_FAILED`への遷移.
+* `MarkGuildBattlePreloadFailed`による`scheduled -> PRELOAD_FAILED`遷移と所有GameServer不一致時の拒否.
+* `StartGuildBattle`でInitialSeed保存, Create Replay保存, `scheduled -> in_progress`が同一トランザクションで確定すること.
+* `BeginGuildBattleResolving`による`in_progress -> resolving`以外の遷移拒否.
+* `CompleteGuildBattle`で最終結果, Player勝敗数, `completed`, membership lock解除, 除外一覧削除が同一トランザクションで確定すること.
+* `CompleteGuildBattle`で対戦外Player, PlayerID重複, Guild結果とPlayer結果の不一致, 最終Scoreと不整合な2Guild勝敗組み合わせを拒否すること.
+* Lifecycle APIで定義されていない`GuildBattleStatus`遷移を拒否すること.
 * `RetryPreloadFailedGuildBattle`による同一ペア再Preload.
 * `RematchPreloadFailedGuildBattles`による再抽選後の再割当.
 * 未割当Battleの再割当および削除.
@@ -118,7 +123,7 @@ GuildBattle Replayは「[リプレイProtocol Buffers定義](../system/guild_bat
 * 2回目も失敗した場合にRecoveryファイルへ切り替える.
 * Recovery再送で同一`X-Operation-ID`が二重適用されない.
 * GameServer再起動時にRecoveryファイルを検出して再送する.
-* 最終結果保存が2回とも失敗した場合に`completed`へ遷移しない.
+* `CompleteGuildBattle`が2回とも失敗した場合にTransaction全体がRollbackされ, `completed`, Player勝敗数, membership lock, 除外一覧のいずれも部分更新されない.
 * GuildBattleCoordinator再起動時にDatabase状態から`scheduled` BattleをReconcileできる.
 
 ## 数値テスト
@@ -235,7 +240,7 @@ GuildBattle Replayは「[リプレイProtocol Buffers定義](../system/guild_bat
 * Join初回だけGuildBattle本体PRNGを1回消費し, 再Joinでは現在RequestSequenceを返す.
 * 30:00時点で新規受付を停止し, 受付済みQueueをすべて解決してから勝敗判定する.
 * 勝敗数は1回以上出撃成立した通常PlayerとDummy PlayerID `0`だけを対象にする.
-* 最終結果保存成功後だけPlayer勝敗数を更新する.
+* `CompleteGuildBattle`成功時だけ最終結果, Player勝敗数, `completed`, membership lock解除, 除外一覧削除を同時に確定する.
 
 ## Guildテスト
 

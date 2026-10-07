@@ -11,10 +11,11 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 - Databaseへ直接接続できるApplication ComponentはPrivate API Serverだけとする.
 - AccessToken署名用秘密鍵はPrivate API Serverだけが保持する.
 - Databaseとのデータ保存・取得を仲介する. Arenaの抽選はGameServer, 騎士団戦のマッチング生成はGuildBattleCoordinatorが行う.
+- Database上の`GUILD_BATTLE.status`遷移はPrivate API Server内の`GuildBattleLifecycleService`が所有する. 状態遷移規則は「[騎士団戦永続ライフサイクル](guild_battle_lifecycle.md)」を正とし, 任意statusを指定する汎用更新APIは公開しない.
 - 要求/レスポンスのデータ構造は[API Payload](api_payload.md)を参照する.
 - 騎士団戦中のDatabase送信失敗時は同一要求を1回だけ再試行する. Replay Workerによるリプレイログ送信も同じ規則を使用する. 再試行も失敗した場合, GameServerはDB障害発生状態へ移行し, それ以降の騎士団戦中DB送信を行わず, 本来送信するデータを`/var/lib/game-server/recovery`配下のUTF-8 JSONファイルへ保存する. Replay EventのRecovery保存はReplay Worker側で行い, 騎士団戦処理スレッドはファイルI/O完了を待機しない. 本番Kubernetes環境では同PathをGameServer専用Persistent Volumeへmountし, GameServer実行Userだけが読み書き可能とする. Recovery保存領域にはGameServer Instanceごとに運用設定で容量上限およびファイル数上限を必須設定し, 推奨初期値を2 GiBおよび1,000 filesとする. 無制限に増加させない. ファイルはGameServer再起動後も保持する. 騎士団戦終了時およびGameServer起動時に残存Recoveryファイルを保存順に再送し, 全件成功時だけ対応ファイルを削除し, 途中失敗時は削除せず残す.
-- 騎士団戦中にDatabase状態を変更する要求は共通HTTP Header `X-Operation-ID`を必須とする. 値は128bit UUIDとし, 同一論理操作の初回送信, 1回再試行, Recovery再送で同じ値を使用する. Private API ServerはDatabaseトランザクション内でOperation IDの重複を検査し, 処理済みの場合は更新を再適用せず初回成功時レスポンスを返す.
-- `SaveGuildBattleResult`は専用の失敗処理を使用し, 1回再試行しても失敗した場合はErrorLogを保存し, `DiscordNotificationEnabled=true`の場合はBot通知を行った後, 運営による手動復旧対象とする.
+- `GuildBattleLifecycleService`による状態変更および騎士団戦中にDatabase状態を変更する要求は共通HTTP Header `X-Operation-ID`を必須とする. 値は128bit UUIDとし, 同一論理操作の初回送信, 1回再試行, Recovery再送で同じ値を使用する. Private API ServerはDatabaseトランザクション内でOperation IDの重複を検査し, 処理済みの場合は更新を再適用せず初回成功時レスポンスを返す.
+- `CompleteGuildBattle`は専用の失敗処理を使用し, 1回再試行しても失敗した場合はErrorLogを保存し, `DiscordNotificationEnabled=true`の場合はBot通知を行った後, 運営による手動復旧対象とする.
 
 ## 認証・アカウント関連
 
@@ -602,35 +603,68 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 
 [API Payload](api_payload.md)の「UpdatePlayerItemRequest」を参照する.
 
-### 騎士団戦初期Seed保存
+### Preload失敗遷移
 
 #### メソッド名
 
-`SaveGuildBattleInitialSeed`
+`MarkGuildBattlePreloadFailed`
+
+#### 呼び出し元
+
+- mTLSで認証済みのGameServerだけが呼び出せる.
 
 #### 処理内容
 
-- 開戦前Preload成功後にGameServerが生成した`InitialSeed`を`GUILD_BATTLE.initial_seed`へ保存する.
-- 対象`GuildBattleID`の`initial_seed`が既に同じ値で保存済みの場合は成功として返す.
-- 異なる値が既に保存済みの場合は更新せずエラーとする.
+- `GuildBattleLifecycleService`で`scheduled -> preload_failed`だけを実行する.
+- 対象`GuildBattleID`が`status=scheduled`であることを確認する.
+- `GUILD_BATTLE.game_server_instance_id`が要求`GameServerInstanceID`と一致することを同一トランザクション内で確認する.
+- `initial_seed`が未保存であることを確認する.
+- 所有権不一致または許可されていない状態の場合は更新しない.
 
 #### 要求データ
 
-[API Payload](api_payload.md)の「SaveGuildBattleInitialSeedRequest」を参照する.
+[API Payload](api_payload.md)の「MarkGuildBattlePreloadFailedRequest」を参照する.
 
-### 騎士団戦状態更新
+### 騎士団戦開始
 
 #### メソッド名
 
-`UpdateGuildBattleStatus`
+`StartGuildBattle`
+
+#### 呼び出し元
+
+- mTLSで認証済みのGameServerだけが呼び出せる.
 
 #### 処理内容
 
-- `GUILD_BATTLE.status`を指定状態へ更新する.
+- `GuildBattleLifecycleService`で`scheduled -> in_progress`を実行する.
+- 現在statusと所有GameServerを確認した上で, InitialSeed保存, GuildBattle Create Replay保存, `status=in_progress`更新を同一Databaseトランザクションで実行する.
+- 要求GuildIDがDatabase上の対戦Guildと一致することを確認する.
+- 開戦処理の途中状態をDatabaseへ残さない.
 
 #### 要求データ
 
-[API Payload](api_payload.md)の「UpdateGuildBattleStatusRequest」を参照する.
+[API Payload](api_payload.md)の「StartGuildBattleRequest」を参照する.
+
+### 騎士団戦解決開始
+
+#### メソッド名
+
+`BeginGuildBattleResolving`
+
+#### 呼び出し元
+
+- mTLSで認証済みのGameServerだけが呼び出せる.
+
+#### 処理内容
+
+- `GuildBattleLifecycleService`で`in_progress -> resolving`だけを実行する.
+- 対象`GuildBattleID`の所有GameServerが要求`GameServerInstanceID`と一致することを同一トランザクション内で確認する.
+- 所有権不一致または許可されていない状態の場合は更新しない.
+
+#### 要求データ
+
+[API Payload](api_payload.md)の「BeginGuildBattleResolvingRequest」を参照する.
 
 ### Preload失敗対戦の再抽選結果保存
 
@@ -640,7 +674,7 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 
 #### 処理内容
 
-- 本APIは抽選を行わない. 抽選ロジックと疑似乱数消費はGuildBattleCoordinator側で行う.
+- 本APIは`GuildBattleLifecycleService`の`preload_failed -> scheduled`遷移として扱う. 本API自身は抽選を行わず, 抽選ロジックと疑似乱数消費はGuildBattleCoordinator側で行う.
 - 要求されたGuildBattleIDがすべて`GUILD_BATTLE_STATUS_PRELOAD_FAILED`であることを確認する.
 - 要求のGuildBattleID集合と`Battles[]`のGuildBattleID集合が一致することを確認する.
 - 同一トランザクションで各対象`GUILD_BATTLE.guild_a_id` / `guild_b_id`をGuildBattleCoordinator生成済みペアへ更新し, `status=scheduled`, `game_server_instance_id=NULL`へ戻す.
@@ -662,7 +696,7 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 
 #### 処理内容
 
-- 運営が問題解決後に同一ペアで再開すると判断した場合に使用する.
+- 運営が問題解決後に同一ペアで再開すると判断した場合に使用し, `GuildBattleLifecycleService`の`preload_failed -> scheduled`遷移として扱う.
 - 対象`GuildBattleID`が`GUILD_BATTLE_STATUS_PRELOAD_FAILED`であることを確認する.
 - `guild_a_id` / `guild_b_id`は変更しない.
 - 要求`RestartAt`を新しい`start_at`とし, `end_at = RestartAt + 30分`, `initial_seed=NULL`, `status=scheduled`, `game_server_instance_id=NULL`へ更新する.
@@ -697,18 +731,8 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 
 騎士団戦中の成立した各種処理について, GameServerのReplay WorkerからPrivate API Serverへリプレイログ送信が行われる. 各論理Payloadは「[guild_battle_replay.proto](../system/guild_battle_replay.proto)」の`GuildBattleReplayEnvelope`へ変換してProtocol BuffersでSerializeし, `GUILD_BATTLE_REPLAY_LOG.payload`へバイナリ保存する.
 通常の騎士団戦要求処理スレッドはPrivate API Serverへのリプレイログ保存完了を待機しない. 処理成立時はReplay EventをReplayQueueへ追加し, Replay Workerが成立順に送信する.
-騎士団戦作成ログだけは開戦時初期状態の保存を保証するため同期保存し, 保存成功後に`GUILD_BATTLE.status=in_progress`へ遷移する.
+騎士団戦作成ログだけは`StartGuildBattle`のDatabaseトランザクション内で同期保存し, InitialSeed保存と`GUILD_BATTLE.status=in_progress`遷移を同時に確定する.
 ReplayQueueおよびDatabase送信失敗時の扱いは「[ログ仕様](../system/log.md)」および「騎士団戦DB送信失敗時」に従う.
-
-#### 騎士団戦作成
-
-#### メソッド名
-
-`SaveGuildBattleCreateLog`
-
-#### 処理内容
-
-[API Payload](api_payload.md)の「GuildBattleCreateLogPayload」を参照する.
 
 #### 参加
 
@@ -786,29 +810,27 @@ ReplayQueueおよびDatabase送信失敗時の扱いは「[ログ仕様](../syst
 
 [API Payload](api_payload.md)の「SaveErrorLogRequest」を参照する.
 
-### 騎士団戦最終結果保存
+### 騎士団戦完了
 
 #### メソッド名
 
-`SaveGuildBattleResult`
+`CompleteGuildBattle`
+
+#### 呼び出し元
+
+- mTLSで認証済みのGameServerだけが呼び出せる.
 
 #### 処理内容
 
-[API Payload](api_payload.md)の「GuildBattleResultSaveRequest」を参照する.
-
-### プレイヤー騎士団戦勝敗数更新
-
-#### メソッド名
-
-`UpdatePlayerGuildBattleRecord`
-
-#### 処理内容
-
-- GameServerが騎士団戦最終結果の処理を完了した後に更新する.
-- 勝利の場合は対象Playerの`guild_battle_win_count`を1加算する.
-- 敗北の場合は対象Playerの`guild_battle_lose_count`を1加算する.
-- 引き分けの場合は更新しない.
+- `GuildBattleLifecycleService`で`resolving -> completed`だけを実行する.
+- 対象`GuildBattleID`の所有GameServerが要求`GameServerInstanceID`と一致することを確認する.
+- 最終結果2Guild分の保存, 対象Playerの勝敗数更新, `status=completed`, 対戦2Guildと同時間帯除外Guildの`membership_locked=false`, 対応する`GUILD_BATTLE_EXCLUDED_GUILD`削除を同一Databaseトランザクションで実行する.
+- `GuildResults`のGuildID集合がDatabase上の対戦2Guildと一致し, 2件の勝敗組み合わせが最終Scoreと整合することを確認する. Scoreが異なる場合は高い側`WIN`・低い側`LOSE`, 同値の場合は両側`DRAW`だけを許可する.
+- `PlayerRecords`で同一PlayerIDを重複指定できない. PlayerID `0`以外はDatabase上で対戦2Guildのいずれかに所属していることを確認し, 指定`Result`が所属Guildの`GuildResults.Result`と一致することを確認する.
+- 勝利の場合は対象Playerの`guild_battle_win_count`を1加算し, 敗北の場合は`guild_battle_lose_count`を1加算する. 引き分けの場合は更新しない.
+- いずれかの処理が失敗した場合はトランザクション全体をRollbackし, `completed`へ遷移しない.
+- 初回失敗時は同一`X-Operation-ID`で1回だけ再試行する. 再試行も失敗した場合はError Logを保存し, `DiscordNotificationEnabled=true`の場合はBot通知後に運営による手動復旧対象とする.
 
 #### 要求データ
 
-[API Payload](api_payload.md)の「UpdatePlayerGuildBattleRecordRequest」を参照する.
+[API Payload](api_payload.md)の「CompleteGuildBattleRequest」を参照する.

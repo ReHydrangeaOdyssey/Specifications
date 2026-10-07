@@ -7,6 +7,7 @@
 * Clientから直接接続させない.
 * Databaseへ直接接続せず, Database保存・取得はPrivate API Server経由で行う.
 * 騎士団戦の戦闘状態, `RequestSequence`, ReplayQueue, 戦闘計算結果は保持しない.
+* Database上の`GUILD_BATTLE.status`を任意値へ更新しない. `preload_failed -> scheduled`はPrivate APIの`RetryPreloadFailedGuildBattle`または`RematchPreloadFailedGuildBattles`だけを使用し, その他の永続状態遷移は「[騎士団戦永続ライフサイクル](guild_battle_lifecycle.md)」に従う.
 * Arena処理は担当しない.
 * 固定シード値はGameServerと同じ`202205311459`とする.
   - これは機密情報ではないので公開されても問題ない.

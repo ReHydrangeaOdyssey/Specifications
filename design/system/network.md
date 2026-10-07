@@ -3,7 +3,7 @@
 ### テスト環境
 
 ```mermaid
-flowchart LR
+flowchart TD
     subgraph USER["User / Internet - Untrusted"]
         client["Client"]
         internet["Internet"]
@@ -93,7 +93,7 @@ GuildBattleCoordinatorはKubernetes上で`replicas=1`の専用Workloadとして�
 Private API ServerとDatabaseはKubernetes上のPublic API Server, GameServerおよびGuildBattleCoordinatorとは分離した単一Server上で稼働する.
 
 ```mermaid
-flowchart LR
+flowchart TD
     subgraph EXTERNAL["External / Untrusted Network"]
         client["Client"]
         internet["Internet"]

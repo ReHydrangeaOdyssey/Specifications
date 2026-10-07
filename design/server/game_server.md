@@ -56,6 +56,7 @@
 * 本番Kubernetes環境ではPublic API ServerがGameServer用EndpointSliceをwatchし, `endpoint.targetRef.uid`とEndpoint Addressの対応をメモリ上に保持する. `GameServerInstanceID`に一致するPod UIDのEndpointへ直接中継する.
 * 騎士団戦要求を通常のKubernetes Service Load Balancingへ渡して所有GameServer以外へ到達させない.
 * 所有していないGameServerは対象`GuildBattleID`の状態変更要求を処理しない.
+* Database上の`GUILD_BATTLE.status`はGameServerが任意値へ更新せず, Private APIの`GuildBattleLifecycleService`へ`MarkGuildBattlePreloadFailed`, `StartGuildBattle`, `BeginGuildBattleResolving`, `CompleteGuildBattle`の各意図を要求する. 永続状態遷移規則は「[騎士団戦永続ライフサイクル](guild_battle_lifecycle.md)」を正とする.
 * 同一騎士団戦の状態を複数GameServer間で共有メモリ同期する方式とはしない.
 
 ### GuildBattleCoordinator向け内部API
@@ -80,7 +81,7 @@
 * 自身へ割り当てられていない騎士団戦はPreloadしない.
 * 同一`GuildBattleID`がすでにPreload中, Preload済み, `in_progress`, `resolving`または`completed`の場合は二重に状態を生成しない.
 * 新規対象だけをPreload対象Queueへ追加し, 実際の開戦前Preloadは「[騎士団戦](guild_battle.md)」に従って実行する.
-* Preload結果をDatabaseへ反映する前と開戦時にPrivate APIの`GetGuildBattleAssignment`で所有権を再確認する. 自身への割当が解除または変更されている場合は`preload_failed`への状態更新, InitialSeed・Replay作成ログ保存および開戦を行わず保持データを破棄する.
+* Preload結果をDatabaseへ反映する前と開戦時にPrivate APIの`GetGuildBattleAssignment`で所有権を再確認する. 自身への割当が解除または変更されている場合は`MarkGuildBattlePreloadFailed`および`StartGuildBattle`を呼び出さず保持データを破棄する. `StartGuildBattle`成功時だけInitialSeed・Replay作成ログ・`in_progress`遷移が同一トランザクションで確定する.
 * 本APIは同一要求を再送可能な冪等処理とする.
 * 要求・レスポンスは「[API Payload](api_payload.md)」の`StartGuildBattlePreloadRequest` / `StartGuildBattlePreloadResponse`を参照する.
 

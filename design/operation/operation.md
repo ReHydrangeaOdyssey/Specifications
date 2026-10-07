@@ -195,18 +195,18 @@ Recoveryファイルが長時間残る場合は以下を確認する.
 Recoveryファイルを手作業で編集しない.
 成功確認前に削除しない.
 
-## GuildBattle最終結果保存失敗
+## GuildBattle最終完了処理失敗
 
-`SaveGuildBattleResult`は初回失敗時に1回だけ再試行する.
-2回とも失敗した場合はError Log保存とBot通知を行い, `completed`へ遷移しない.
-Player勝敗数も更新しない.
+`CompleteGuildBattle`は最終結果保存, Player勝敗数更新, `completed`遷移, membership lock解除, 除外一覧削除を1つのDatabaseトランザクションで実行する.
+初回失敗時は同一`X-Operation-ID`で1回だけ再試行する.
+2回とも失敗した場合はTransactionをRollbackしてError Log保存とBot通知を行い, `completed`へ遷移しない. Player勝敗数, membership lock, 除外一覧も部分更新しない.
 
 運営は以下を確認する.
 
 1. GuildBattleIDを特定する.
 2. Replay Logが存在し, 最終状態を再現可能であることを確認する.
-3. Database上の`GUILD_BATTLE_RESULT`と`GUILD_BATTLE.status`を確認する.
-4. 同一GuildBattleについて勝敗数更新が行われていないことを確認する.
+3. Database上の`GUILD_BATTLE_RESULT`, `GUILD_BATTLE.status`, `GUILD.membership_locked`, `GUILD_BATTLE_EXCLUDED_GUILD`を確認する.
+4. 同一GuildBattleについて勝敗数を含む`CompleteGuildBattle`の一部だけが反映されていないことを確認する.
 5. 原因を解消する.
 
 現行仕様には最終結果を運営から再送する専用APIが定義されていない.
