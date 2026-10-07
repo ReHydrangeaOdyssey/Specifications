@@ -1,101 +1,154 @@
-# Public API Server大枠設計
+# Public API Serverプログラミング設計
 
 ## 結論
 
-Public API Serverは単一Deploymentのstateless Edge APIとし、Domain Logicを持たない薄いAdapterとして実装する。
+Public API ServerはstatelessなEdge Adapterとして実装し、Domain状態・Database transaction・戦闘状態を所有しません。
 
-## Module構成
-
-資料で以下の論理Module構成が明示されている。
-
-```text
-PublicApiServer
-├── transport
-│   ├── tls_http2
-│   └── protobuf_codec
-├── security
-│   ├── access_token_verifier
-│   ├── discord_authorization_verifier
-│   ├── origin_validator
-│   └── request_limits
-├── rate_limit
-├── routing
-│   ├── private_api_router
-│   ├── game_server_router
-│   └── guild_battle_owner_resolver
-├── session_cookie
-└── upstream
-    ├── private_api_client
-    └── game_server_client
-```
-
-## クラス図
+## 論理Module
 
 ```mermaid
 classDiagram
-    class PublicApiServer {
-        <<component>>
+    class PublicApiApplication {
+        <<logical module>>
     }
-    class transport {
-        tls_http2
-        protobuf_codec
+    class Transport {
+        HTTP2
+        TLS1_3
+        ProtobufCodec
     }
-    class security {
-        access_token_verifier
-        discord_authorization_verifier
-        origin_validator
-        request_limits
-    }
-    class rate_limit
-    class routing {
-        private_api_router
-        game_server_router
-        guild_battle_owner_resolver
-    }
-    class session_cookie
-    class upstream {
-        private_api_client
-        game_server_client
-    }
+    class BoundaryValidation
+    class AccessTokenVerifier
+    class DiscordAuthorizationVerifier
+    class OriginValidator
+    class RateLimiter
+    class AuthenticatedContextFactory
+    class SessionCookieAdapter
+    class RequestRouter
+    class GuildBattleOwnerResolver
+    class EndpointResolver
+    class PrivateApiClient
+    class GameServerClient
+    class ErrorMapper
 
-    PublicApiServer --> transport
-    PublicApiServer --> security
-    PublicApiServer --> rate_limit
-    PublicApiServer --> routing
-    PublicApiServer --> session_cookie
-    PublicApiServer --> upstream
-    routing --> upstream
+    PublicApiApplication --> Transport
+    PublicApiApplication --> BoundaryValidation
+    PublicApiApplication --> AccessTokenVerifier
+    PublicApiApplication --> DiscordAuthorizationVerifier
+    PublicApiApplication --> OriginValidator
+    PublicApiApplication --> RateLimiter
+    PublicApiApplication --> AuthenticatedContextFactory
+    PublicApiApplication --> SessionCookieAdapter
+    PublicApiApplication --> RequestRouter
+    RequestRouter --> GuildBattleOwnerResolver
+    GuildBattleOwnerResolver --> EndpointResolver
+    RequestRouter --> PrivateApiClient
+    RequestRouter --> GameServerClient
+    PublicApiApplication --> ErrorMapper
 ```
 
-## Request処理
+## Request Pipeline
 
 ```mermaid
 flowchart TD
-    Receive[Request受信] --> Boundary[形式 / Size / Token等のBoundary Validation]
-    Boundary --> Auth[AccessToken等の検証]
-    Auth --> Rate[Rate Limit]
-    Rate --> Context[AuthenticatedContext生成]
-    Context --> Route{Routing}
-    Route -->|Account / Guild| Private[Private API Server]
-    Route -->|Arena| Game[GameServer]
-    Route -->|GuildBattle| Resolve[所有GameServer解決]
-    Resolve --> Game
-    Private --> Convert[Domain Result/Error変換]
-    Game --> Convert
-    Convert --> Response[Response]
+    R[Request受信] --> L[Request Size / Token長等の境界確認]
+    L --> D[Protocol Buffers Decode]
+    D --> V[Wire値から論理型へValidation]
+    V --> RL[Rate Limit]
+    RL --> A{認証が必要か}
+    A -->|Yes| AV[AccessTokenをローカル検証]
+    AV --> C[AuthenticatedContext生成]
+    A -->|No| DA[必要時DiscordAuthorizationToken検証]
+    C --> O[必要時Origin / Cookie処理]
+    DA --> O
+    O --> RT[責務先へRouting]
+    RT --> M[内部Response/ErrorをPublic形式へ変換]
+    M --> S[Response]
 ```
 
-## Public APIへ置かないもの
+処理のうちDomain invariantはPublic APIで確定しません。
 
-- Guild権限・所属制約等のDomain判定
-- Arena編成制約、対戦相手抽選、Seed生成、戦闘計算
-- GuildBattle参加・出撃・Tactics・Item・Heal・Revive等のゲームルール判定
-- Database transaction / row lock
-- ゲーム状態・認証状態の正本
+## AccessToken検証
+
+Public API ServerはAccessTokenをDatabaseへ問い合わせずローカル検証します。
+
+検証対象は仕様で定義された以下です。
+
+- Ed25519署名
+- `alg=EdDSA`
+- `iss`
+- `aud=game-api`
+- `exp`等のToken時刻
+- `sub`のAccountID
+- `player_id`
+- `sid`
+- PlayerID Binding
+
+署名秘密鍵は保持しません。
+
+## CreateAccount / Login
+
+`DiscordAuthorizationRequired=true`ではDiscord Botが発行した`DiscordAuthorizationToken`をPublic API Serverでローカル検証します。
+
+LoginではClientVersionをPublic API Serverが要求するVersionと比較し、不一致時は定義済みVersion Errorを返します。
+
+Private APIからRefreshTokenを受け取った場合、Client Bodyへ返さず`__Host-RefreshToken` Cookieへ設定します。
+
+## Refresh / Logout
+
+- RefreshTokenはHttpOnly Cookieから取得します。
+- Origin検証を行います。
+- Refresh成功時は回転後RefreshTokenをCookieへ再設定します。
+- Logout成功時はCookieを無効化します。
+
+Cookie属性の正本はSession仕様を使用します。
+
+## Rate Limit / Boundary Limit
+
+Public APIのRate LimitはTransportの接続制限だけではなくApplicationレベルでも適用します。Ingress側のSource IP Rate Limitは別レイヤです。
+
+具体的な値は仕様で固定値または推奨値として記載されたものだけをConfigurationとして扱い、本設計で新しい値を追加しません。
+
+## GuildBattle Owner解決
+
+- `GUILD_BATTLE.game_server_instance_id`がOwnerの正本です。
+- EndpointSlice等からInstanceIDと到達Endpointを対応させます。
+- 通常のService Load Balancingで任意GameServerへ送信しません。
+- GameServer自身もOwner一致を再確認します。
+
+## Stateless条件
+
+Public APIで保持してよいCacheはRoutingや検証を高速化するための派生情報に限定します。以下を正本として保持しません。
+
+- Account Session状態
+- Guild Membership状態
+- Arena Party状態
+- GuildBattle runtime状態
+- GuildBattle ownerの永続状態
+
+## Retry
+
+仕様でRetry回数・冪等性が明示されていない内部要求について、Public API共通機構で自動Retryを追加しません。GuildBattle DB更新等のRetryは責務を持つGameServer / Private API側の仕様に従います。
+
+## メリット・デメリット
+
+### メリット
+
+- 水平スケール時にSession affinityを要求しません。
+- 認証・RoutingとDomain Logicの責務が分離されます。
+- 内部Componentが自身の状態で最終認可するためEdge状態への依存を減らせます。
+
+### デメリット
+
+- GuildBattleはOwner解決とEndpoint解決が必要です。
+- Token失効を毎要求Database照会しないため、Logout後のAccessTokenは有効期限まで有効というSession仕様を受け入れる必要があります。
 
 ## 情報源
 
 - `design/server/public_api_responsibility.md`
 - `design/server/public_api.md`
+- `design/server/api.md`
+- `design/server/api_payload.md`
+- `design/server/session.md`
+- `design/server/game_server.md`
 - `design/system/network.md`
 - `design/system/public_api.proto`

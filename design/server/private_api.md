@@ -3,16 +3,17 @@
 API全体の分類は「[API仕様](api.md)」を参照する.
 
 - Private Network 内に配置される.
-- 認証・Account・騎士団戦ルーティング関連要求はPublic API Serverから受ける.
+- 認証・Account・Guild・騎士団戦ルーティング関連要求はPublic API Serverから受ける.
 - Database保存・取得要求はGameServerおよびGuildBattleCoordinatorから受ける.
 - `DiscordAuthorizationRequired=true`の場合, Discord BotからはRole喪失時の`RevokeDiscordSessions`だけを受け付ける.
 - Public API Server, GameServer, GuildBattleCoordinatorおよびDiscord BotとPrivate API Server間の通信はmTLSを必須とし, 双方が信頼済みCAによる証明書を検証する. Clientからの直接接続を受け付けない.
-- mTLS証明書のService Identityを検証し, Public API Serverからは認証・Account・騎士団戦ルーティング関連API, GameServerからはゲームデータ関連API, GuildBattleCoordinatorからは騎士団戦生成・割当・再抽選に必要なAPI, Discord Botからは`RevokeDiscordSessions`だけを受け付ける. 運営用APIはmTLSで識別した運営Componentからだけ受け付ける.
+- mTLS証明書のService Identityを検証し, Public API Serverからは認証・Account・Guild・騎士団戦ルーティング関連API, GameServerからはゲームデータ関連API, GuildBattleCoordinatorからは騎士団戦生成・割当・再抽選に必要なAPI, Discord Botからは`RevokeDiscordSessions`だけを受け付ける. 運営用APIはmTLSで識別した運営Componentからだけ受け付ける.
 - Databaseへ直接接続できるApplication ComponentはPrivate API Serverだけとする.
 - AccessToken署名用秘密鍵はPrivate API Serverだけが保持する.
 - Databaseとのデータ保存・取得を仲介する. Arenaの抽選はGameServer, 騎士団戦のマッチング生成はGuildBattleCoordinatorが行う.
 - Database上の`GUILD_BATTLE.status`遷移はPrivate API Server内の`GuildBattleLifecycleService`が所有する. 状態遷移規則は「[騎士団戦永続ライフサイクル](guild_battle_lifecycle.md)」を正とし, 任意statusを指定する汎用更新APIは公開しない.
 - 要求/レスポンスのデータ構造は[API Payload](api_payload.md)を参照する.
+- Public API Serverから受信するAccessToken認証済みのAccount/Guild系内部要求では`AuthenticatedContext`を内部Request Contextとして必須とする. Caller Identityは`AuthenticatedContext.PlayerID`を正とし, Client由来のPlayerIDをCaller Identityとして使用しない. 内部PayloadにCaller PlayerIDと同義のフィールドが存在する場合はPublic API Serverが`AuthenticatedContext`から設定し, Private API Serverは不一致を拒否する.
 - 騎士団戦中のDatabase送信失敗時は同一要求を1回だけ再試行する. Replay Workerによるリプレイログ送信も同じ規則を使用する. 再試行も失敗した場合, GameServerはDB障害発生状態へ移行し, それ以降の騎士団戦中DB送信を行わず, 本来送信するデータを`/var/lib/game-server/recovery`配下のUTF-8 JSONファイルへ保存する. Replay EventのRecovery保存はReplay Worker側で行い, 騎士団戦処理スレッドはファイルI/O完了を待機しない. 本番Kubernetes環境では同PathをGameServer専用Persistent Volumeへmountし, GameServer実行Userだけが読み書き可能とする. Recovery保存領域にはGameServer Instanceごとに運用設定で容量上限およびファイル数上限を必須設定し, 推奨初期値を2 GiBおよび1,000 filesとする. 無制限に増加させない. ファイルはGameServer再起動後も保持する. 騎士団戦終了時およびGameServer起動時に残存Recoveryファイルを保存順に再送し, 全件成功時だけ対応ファイルを削除し, 途中失敗時は削除せず残す.
 - `GuildBattleLifecycleService`による状態変更および騎士団戦中にDatabase状態を変更する要求は共通HTTP Header `X-Operation-ID`を必須とする. 値は128bit UUIDとし, 同一論理操作の初回送信, 1回再試行, Recovery再送で同じ値を使用する. Private API ServerはDatabaseトランザクション内でOperation IDの重複を検査し, 処理済みの場合は更新を再適用せず初回成功時レスポンスを返す.
 - `CompleteGuildBattle`は専用の失敗処理を使用し, 1回再試行しても失敗した場合はErrorLogを保存し, `DiscordNotificationEnabled=true`の場合はBot通知を行った後, 運営による手動復旧対象とする.
@@ -139,31 +140,34 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 
 ## プレイヤー・騎士団関連
 
-### 騎士団保存
+### 初期騎士団作成
 
 #### メソッド名
 
-`SaveGuild`
+`CreateGuildPrivate`
 
 #### 処理内容
 
-- 新規騎士団をDatabaseへ保存する.
-- 初期騎士団作成時は`subleader_player_id=0`, `membership_locked=false`で初期化する.
+- Public API ServerのService Identityと`AuthenticatedContext`を検証し, `AuthenticatedContext.PlayerID`を作成Playerとして使用する.
+- GuildName, DaytimeStartTime, NighttimeStartTimeのDomain Validationを行う. GuildNameの重複は許可する.
+- `GuildID = AuthenticatedContext.PlayerID`として初期Guildを作成する.
+- `castle_level`, `armory_level`, `food_storage_level`, `smithy_level`, `strategy_office_level`, `tavern_level`をすべて1, `leader_player_id=AuthenticatedContext.PlayerID`, `subleader_player_id=0`, `membership_locked=false`で初期化する.
+- `GUILD_MEMBER`へ作成Playerを所属させる. Guild作成, 施設初期値, 役職初期値, 開始時刻, 所属追加は同一Databaseトランザクションで行う.
 
-#### 要求データ
+#### 要求・レスポンス
 
-[API Payload](api_payload.md)の「SaveGuildRequest」を参照する.
+[API Payload](api_payload.md)の「CreateGuildPrivateRequest」「CreateGuildPrivateResponse」を参照する.
 
-### 騎士団役職保存
+### 騎士団役職変更
 
 #### メソッド名
 
-`SaveGuildLeadership`
+`UpdateGuildLeadershipPrivate`
 
 #### 処理内容
 
-- `SaveGuildLeadershipRequest.RequesterPlayerID`が更新対象`GUILD.leader_player_id`と一致することをDatabase上で確認する.
-- 一致しない場合は更新せず, 団長権限なしとしてGameServerへ返す.
+- `AuthenticatedContext.PlayerID`が更新対象`GUILD.leader_player_id`と一致することをDatabase上で確認する.
+- 一致しない場合は更新せず, 団長権限なしとしてPublic API Serverへ返す.
 - LeaderPlayerIDが対象Guildの`GUILD_MEMBER`に存在することを確認する.
 - SubleaderPlayerIDが`0`の場合は副団長未設定として許可する. `0`以外の場合だけ対象Guildの`GUILD_MEMBER`に存在することを確認する.
 - SubleaderPlayerIDが`0`以外でLeaderPlayerIDと同一値の場合は更新しない.
@@ -171,7 +175,7 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 
 #### 要求データ
 
-[API Payload](api_payload.md)の「SaveGuildLeadershipRequest」を参照する.
+[API Payload](api_payload.md)の「UpdateGuildLeadershipPrivateRequest」を参照する.
 
 ### 騎士団所属変更ロック更新
 
@@ -189,22 +193,22 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 
 [API Payload](api_payload.md)の「SetGuildMembershipLockRequest」「SetGuildMembershipLockResponse」を参照する.
 
-### 騎士団加入申請保存
+### 騎士団加入申請
 
 #### メソッド名
 
-`SaveGuildJoinApplication`
+`ApplyGuildJoinPrivate`
 
 #### 処理内容
 
-- 申請Playerの現在所属Guildにおける役職と所属人数をDatabaseから取得する.
+- `AuthenticatedContext.PlayerID`を申請Playerとして使用し, 現在所属Guildにおける役職と所属人数をDatabaseから取得する.
 - 申請Playerが現在所属Guildの団長で, 団長以外のメンバーが1人以上存在する場合は`API_ERROR_GUILD_LEADER_MOVE_NOT_ALLOWED`として申請を保存しない. 副団長にはこの制約を適用しない.
 - `GUILD_JOIN_APPLICATION`へ未承認加入申請を保存する.
 - 本処理では`GUILD_MEMBER`を変更しない.
 
 #### 要求データ
 
-[API Payload](api_payload.md)の「SaveGuildJoinApplicationRequest」を参照する.
+[API Payload](api_payload.md)の「ApplyGuildJoinPrivateRequest」を参照する.
 
 ### 騎士団加入申請承認
 
@@ -214,7 +218,7 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 
 #### 処理内容
 
-- RequesterPlayerIDが対象Guildの現在の`leader_player_id`または`subleader_player_id`と一致することをDatabase上で確認する.
+- `AuthenticatedContext.PlayerID`が対象Guildの現在の`leader_player_id`または`subleader_player_id`と一致することをDatabase上で確認する.
 - `GUILD_JOIN_APPLICATION`に対象申請が存在することを確認する.
 - 同一Databaseトランザクション内でApplicantPlayerIDの現在所属Guildと加入先Guildを取得し, 両Guildの`membership_locked=false`を再確認する.
 - ApplicantPlayerIDが現在所属Guildの団長で, 団長以外のメンバーが1人以上存在する場合は加入を成立させない. 副団長にはこの制約を適用しない.
@@ -225,22 +229,22 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 
 [API Payload](api_payload.md)の「ApproveGuildJoinApplicationPrivateRequest」を参照する.
 
-### 騎士団招待保存
+### 騎士団招待送信
 
 #### メソッド名
 
-`SaveGuildInvitation`
+`SendGuildInvitationPrivate`
 
 #### 処理内容
 
-- RequesterPlayerIDが対象Guildの現在の団長または副団長であることをDatabase上で確認する.
+- `AuthenticatedContext.PlayerID`が対象Guildの現在の団長または副団長であることをDatabase上で確認する.
 - InviteePlayerIDが現在所属Guildの団長で, 団長以外のメンバーが1人以上存在する場合は`API_ERROR_GUILD_LEADER_MOVE_NOT_ALLOWED`として招待を保存しない. 副団長にはこの制約を適用しない.
 - 権限を満たす場合だけ`GUILD_INVITATION`へ招待を保存する.
 - 本処理では`GUILD_MEMBER`を変更しない.
 
 #### 要求データ
 
-[API Payload](api_payload.md)の「SaveGuildInvitationRequest」を参照する.
+[API Payload](api_payload.md)の「SendGuildInvitationPrivateRequest」を参照する.
 
 ### 騎士団招待承諾
 
@@ -250,11 +254,11 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 
 #### 処理内容
 
-- 指定PlayerID宛ての`GUILD_INVITATION`が存在することを確認する.
-- 同一Databaseトランザクション内でPlayerIDの現在所属Guildと招待元Guildを取得し, 両Guildの`membership_locked=false`を再確認する.
-- PlayerIDが現在所属Guildの団長で, 団長以外のメンバーが1人以上存在する場合は加入を成立させない. 副団長にはこの制約を適用しない.
+- `AuthenticatedContext.PlayerID`宛ての`GUILD_INVITATION`が存在することを確認する.
+- 同一Databaseトランザクション内で`AuthenticatedContext.PlayerID`の現在所属Guildと招待元Guildを取得し, 両Guildの`membership_locked=false`を再確認する.
+- `AuthenticatedContext.PlayerID`が現在所属Guildの団長で, 団長以外のメンバーが1人以上存在する場合は加入を成立させない. 副団長にはこの制約を適用しない.
 - 対象Guildの`GUILD_MEMBER`件数を同一トランザクション内で確認し, 20人以上の場合は加入を成立させない.
-- すべての条件を満たす場合だけPlayerIDの既存`GUILD_MEMBER`を招待元Guildへ更新する. PlayerIDが加入元Guildの副団長だった場合は加入元Guildの`subleader_player_id`を`0`へ戻す. PlayerIDが加入元Guildの団長で, 団長以外のメンバーが0人であるため移動可能な場合は加入元Guildの`leader_player_id`を`0`へ更新する. 役職更新・所属更新・対応する招待削除は同一トランザクションで行う.
+- すべての条件を満たす場合だけ`AuthenticatedContext.PlayerID`の既存`GUILD_MEMBER`を招待元Guildへ更新する. 当該Playerが加入元Guildの副団長だった場合は加入元Guildの`subleader_player_id`を`0`へ戻す. 当該Playerが加入元Guildの団長で, 団長以外のメンバーが0人であるため移動可能な場合は加入元Guildの`leader_player_id`を`0`へ更新する. 役職更新・所属更新・対応する招待削除は同一トランザクションで行う.
 
 #### 要求データ
 
@@ -268,13 +272,13 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 
 #### 処理内容
 
-- PlayerIDの現在所属GuildIDと`GuildID = PlayerID`の初期騎士団を取得する.
+- `AuthenticatedContext.PlayerID`の現在所属GuildIDと`GuildID = AuthenticatedContext.PlayerID`の初期騎士団を取得する.
 - 同一Databaseトランザクション内で脱退元Guildと復帰先初期Guildの`membership_locked=false`を再確認する. いずれかが`true`の場合は所属変更・所属スワップを行わない.
-- PlayerIDが脱退元Guildの団長で, 団長以外のメンバーが1人以上存在する場合は脱退を成立させない.
-- PlayerIDが脱退元Guildの副団長だった場合は, 所属変更と同時に脱退元Guildの`subleader_player_id`を`0`へ戻す.
-- PlayerIDが脱退元Guildの団長で, 団長以外のメンバーが0人であるため脱退可能な場合は, 所属変更と同時に脱退元Guildの`leader_player_id`を`0`へ更新する.
-- 初期騎士団の現在団長がPlayerID自身の場合は, PlayerIDだけを初期騎士団へ戻す.
-- 初期騎士団の現在団長が別Playerの場合は, PlayerIDを初期騎士団へ戻し, その現在団長PlayerをPlayerIDが直前まで所属していたGuildIDへ移動し, 初期騎士団の団長をPlayerIDへ変更する.
+- `AuthenticatedContext.PlayerID`が脱退元Guildの団長で, 団長以外のメンバーが1人以上存在する場合は脱退を成立させない.
+- 当該Playerが脱退元Guildの副団長だった場合は, 所属変更と同時に脱退元Guildの`subleader_player_id`を`0`へ戻す.
+- 当該Playerが脱退元Guildの団長で, 団長以外のメンバーが0人であるため脱退可能な場合は, 所属変更と同時に脱退元Guildの`leader_player_id`を`0`へ更新する.
+- 初期騎士団の現在団長が当該Player自身の場合は, 当該Playerだけを初期騎士団へ戻す.
+- 初期騎士団の現在団長が別Playerの場合は, 当該Playerを初期騎士団へ戻し, その現在団長Playerを当該Playerが直前まで所属していたGuildIDへ移動し, 初期騎士団の団長を当該Playerへ変更する.
 - 所属スワップと団長更新は同一トランザクションで行う.
 
 #### 要求・レスポンス

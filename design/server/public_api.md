@@ -167,16 +167,11 @@ Discord追加認可必須時のToken未指定は`ApiErrorResponse(API_ERROR_DISC
 
 #### 処理内容
 
-- AccessTokenを検証する.
-- GuildNameがUTF-8, 最大10文字, 空文字不可の制約を満たすことを確認する. GuildNameの重複は許可する.
-- プレイヤーの初期騎士団を新規作成する.
-- 作成する騎士団の`GuildID`には要求元`PlayerID`と同一値を使用する.
-- 城, 武器庫, 食糧庫, 鍛冶屋, 兵法所, 酒場の各施設レベルをすべて1で初期化する.
-- `DaytimeStartTime`と`NighttimeStartTime`を騎士団の開始時刻として保存する.
-- 作成したプレイヤーを生成した騎士団へ所属させる.
-- 作成したプレイヤーを団長として保存する.
-- 初期騎士団は, プレイヤーが他の騎士団へ所属した後も削除しない.
-- Private APIの`SaveGuild`が失敗した場合は同一要求を1回だけ再実行する. 再実行も失敗した場合は`RequiredOperationErrorResponse`で`API_ERROR_REQUIRED_OPERATION_FAILED`と固定文言`必要な処理が実行できませんでした`だけをClientへ返す.
+- AccessTokenを検証し, Requestの`PlayerID`が検証済みTokenのPlayerIDと一致することを確認して`AuthenticatedContext`を生成する.
+- GuildNameがUTF-8, 最大10文字, 空文字不可のBoundary Validationを満たすことを確認する. GuildNameの重複可否やGuild初期値はPublic API Serverで判定しない.
+- `GuildName`, `DaytimeStartTime`, `NighttimeStartTime`と`AuthenticatedContext`をPrivate API Serverの`CreateGuildPrivate`へ中継する.
+- GuildID, 施設Level, 団長・副団長, 所属, `membership_locked`および開始時刻のDomain Validation・初期化はPrivate API ServerがDatabase上の現在状態を用いて行う.
+- `CreateGuildPrivate`の同一Upstream Requestが処理失敗した場合は同一要求を1回だけ再実行する. 再実行も失敗した場合は`RequiredOperationErrorResponse`で`API_ERROR_REQUIRED_OPERATION_FAILED`と固定文言`必要な処理が実行できませんでした`だけをClientへ返す.
 
 #### 要求データ
 
@@ -188,7 +183,7 @@ Discord追加認可必須時のToken未指定は`ApiErrorResponse(API_ERROR_DISC
 
 #### 失敗時レスポンス
 
-GuildNameが制約を満たさない場合は`ApiErrorResponse(API_ERROR_INVALID_GUILD_NAME)`を返す. `SaveGuild`の1回再実行後も失敗した場合は`RequiredOperationErrorResponse`を返す.
+GuildNameがBoundary Validationを満たさない場合は`ApiErrorResponse(API_ERROR_INVALID_GUILD_NAME)`を返す. `CreateGuildPrivate`の1回再実行後も処理できない場合は`RequiredOperationErrorResponse`を返す. Private API Serverが返したDomain Errorは対応するPublic API Errorへ変換する.
 
 ### 騎士団役職変更
 
@@ -198,15 +193,10 @@ GuildNameが制約を満たさない場合は`ApiErrorResponse(API_ERROR_INVALID
 
 #### 処理内容
 
-- AccessTokenを検証する.
-- 変更後のLeaderPlayerIDが変更対象Guildへ現在所属していることを確認する.
-- SubleaderPlayerIDは`0`を指定して副団長未設定へ戻すことを許可する. `0`以外の場合は変更対象Guildへ現在所属していることを確認する.
-- SubleaderPlayerIDが`0`以外でLeaderPlayerIDと同一の場合は変更しない.
-- 初期騎士団に固有の追加制約は設けない.
-- GameServerからPrivate API Serverへ要求`PlayerID`を`RequesterPlayerID`として含めた`SaveGuildLeadership`を要求する.
-- Private API ServerはDatabase上の現在の`GUILD.leader_player_id`と`RequesterPlayerID`が一致する場合のみ役職を更新する.
-- 一致しない場合は`ApiErrorResponse(API_ERROR_GUILD_LEADERSHIP_CHANGE_NOT_ALLOWED)`としてClientへ返す.
-- 団長候補が対象Guild所属ではない, 0以外の副団長候補が対象Guild所属ではない, または団長と0以外の副団長が同一PlayerIDの場合は`ApiErrorResponse(API_ERROR_INVALID_GUILD_LEADERSHIP_TARGET)`を返す.
+- AccessTokenを検証し, Requestの`PlayerID`が検証済みTokenのPlayerIDと一致することを確認して`AuthenticatedContext`を生成する.
+- `GuildID`, `LeaderPlayerID`, `SubleaderPlayerID`と`AuthenticatedContext`をPrivate API Serverの`UpdateGuildLeadershipPrivate`へ中継する.
+- 団長権限, 対象Guild所属, 副団長未設定値`0`, 団長・副団長同一PlayerID禁止を含むDomain Validationと更新はPrivate API Serverが同一Databaseトランザクションで行う.
+- Private API Serverが団長権限なしを返した場合は`ApiErrorResponse(API_ERROR_GUILD_LEADERSHIP_CHANGE_NOT_ALLOWED)`, 変更対象不正を返した場合は`ApiErrorResponse(API_ERROR_INVALID_GUILD_LEADERSHIP_TARGET)`へ変換する.
 
 #### 要求データ
 
@@ -224,11 +214,10 @@ GuildNameが制約を満たさない場合は`ApiErrorResponse(API_ERROR_INVALID
 
 #### 処理内容
 
-- AccessTokenを検証する.
-- Private APIで申請Playerの現在所属Guildにおける役職と所属人数を確認する.
-- 申請Playerが現在所属Guildの団長で, 団長以外のメンバーが1人以上存在する場合は加入申請を受け付けない. 副団長にはこの制約を適用しない.
-- Private APIの`SaveGuildJoinApplication`で未承認加入申請を保存する.
-- 本APIでは所属GuildIDを変更しない.
+- AccessTokenを検証し, Requestの`PlayerID`が検証済みTokenのPlayerIDと一致することを確認して`AuthenticatedContext`を生成する.
+- `GuildID`と`AuthenticatedContext`をPrivate API Serverの`ApplyGuildJoinPrivate`へ中継する.
+- 現在所属Guildの役職・所属人数と団長移動制約のDomain Validation, 未承認加入申請保存はPrivate API ServerがDatabase上の現在状態を用いて行う.
+- 本Public API Serverでは所属GuildIDを変更せず, Domain条件を判定しない.
 
 #### 要求・レスポンス
 
@@ -246,10 +235,9 @@ GuildNameが制約を満たさない場合は`ApiErrorResponse(API_ERROR_INVALID
 
 #### 処理内容
 
-- AccessTokenを検証する.
-- 承認要求Playerが加入先Guildの現在の団長または副団長であることをPrivate APIで確認する.
-- 未承認の加入申請が存在することを確認する.
-- 加入成立判定はPrivate APIのDatabaseトランザクション内で行う. 申請Playerの加入元Guildと加入先Guildの`GUILD.membership_locked=false`, 加入先Guildの所属人数20未満, 団長移動制約をすべて再確認し, 条件を満たす場合だけ所属を変更して加入申請を削除する.
+- AccessTokenを検証し, Requestの`PlayerID`が検証済みTokenのPlayerIDと一致することを確認して`AuthenticatedContext`を生成する.
+- `GuildID`, `ApplicantPlayerID`と`AuthenticatedContext`をPrivate API Serverの`ApproveGuildJoinApplicationPrivate`へ中継する.
+- 承認権限, 加入申請存在, `membership_locked`, 所属人数上限, 団長移動制約および所属変更はPrivate API Serverが同一Databaseトランザクションで判定・実行する.
 
 #### 要求・レスポンス
 
@@ -267,11 +255,10 @@ GuildNameが制約を満たさない場合は`ApiErrorResponse(API_ERROR_INVALID
 
 #### 処理内容
 
-- AccessTokenを検証する.
-- 招待を送信できるのは対象Guildの団長または副団長だけとする.
-- 招待対象Playerが現在所属Guildの団長で, 団長以外のメンバーが1人以上存在する場合は招待を送信しない. 副団長にはこの制約を適用しない.
-- Private APIの`SaveGuildInvitation`で招待を保存する.
-- 本APIでは招待対象Playerの所属GuildIDを変更しない.
+- AccessTokenを検証し, Requestの`PlayerID`が検証済みTokenのPlayerIDと一致することを確認して`AuthenticatedContext`を生成する.
+- `GuildID`, `InviteePlayerID`と`AuthenticatedContext`をPrivate API Serverの`SendGuildInvitationPrivate`へ中継する.
+- 招待権限および招待対象Playerの団長移動制約のDomain Validation, 招待保存はPrivate API ServerがDatabase上の現在状態を用いて行う.
+- 本Public API Serverでは招待対象Playerの所属GuildIDを変更せず, Domain条件を判定しない.
 
 #### 要求・レスポンス
 
@@ -289,9 +276,9 @@ GuildNameが制約を満たさない場合は`ApiErrorResponse(API_ERROR_INVALID
 
 #### 処理内容
 
-- AccessTokenを検証する.
-- 要求Player宛ての未承諾招待が存在することを確認する.
-- 加入成立判定はPrivate APIのDatabaseトランザクション内で行う. 要求Playerの加入元Guildと招待元Guildの`GUILD.membership_locked=false`, 招待元Guildの所属人数20未満, 団長移動制約をすべて再確認し, 条件を満たす場合だけ所属を変更して招待を削除する.
+- AccessTokenを検証し, Requestの`PlayerID`が検証済みTokenのPlayerIDと一致することを確認して`AuthenticatedContext`を生成する.
+- `GuildID`と`AuthenticatedContext`をPrivate API Serverの`AcceptGuildInvitationPrivate`へ中継する.
+- 未承諾招待存在, `membership_locked`, 所属人数上限, 団長移動制約および所属変更はPrivate API Serverが同一Databaseトランザクションで判定・実行する.
 
 #### 要求・レスポンス
 
@@ -309,13 +296,9 @@ GuildNameが制約を満たさない場合は`ApiErrorResponse(API_ERROR_INVALID
 
 #### 処理内容
 
-- AccessTokenを検証する.
-- Private APIで脱退元Guildと`GuildID = PlayerID`の復帰先初期Guildの`GUILD.membership_locked`を確認する. いずれかが`true`の場合は脱退しない.
-- 新しい騎士団は生成しない.
-- Private APIでPlayerIDが脱退元Guildの団長かつ団長以外のメンバーが1人以上存在する場合は脱退を拒否する.
-- Private APIの`LeaveGuildPrivate`を呼び出し, `GuildID = PlayerID`で既存の初期騎士団を特定して所属を戻す.
-- 初期騎士団の団長が脱退Player以外へ交代済みの場合は, 脱退Playerと初期騎士団の現在団長の所属GuildIDを同一トランザクションでスワップする. 脱退Playerは自身の初期騎士団へ戻し, 初期騎士団の現在団長は脱退Playerが直前まで所属していたGuildIDへ移動する.
-- スワップ時は初期騎士団の団長を脱退Playerへ変更する.
+- AccessTokenを検証し, Requestの`PlayerID`が検証済みTokenのPlayerIDと一致することを確認して`AuthenticatedContext`を生成する.
+- `AuthenticatedContext`をPrivate API Serverの`LeaveGuildPrivate`へ中継する.
+- 脱退元Guildと復帰先初期Guildの`membership_locked`, 団長移動制約, 初期Guild復帰, 必要な所属スワップおよび役職更新はPrivate API Serverが同一Databaseトランザクションで判定・実行する. 新しいGuildは作成しない.
 
 #### 要求データ
 

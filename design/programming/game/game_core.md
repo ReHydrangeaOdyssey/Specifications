@@ -1,132 +1,115 @@
-# game-core大枠設計
+# game-core設計
 
 ## 結論
 
-`game-core`はClientとGameServerが共有する、外部I/Oを持たないゲーム計算層とする。
+`game-core`はClientとGameServerで共有する、外部I/Oを持たない決定的ゲーム計算層とします。
 
-戦闘結果の正本はGameServerであるが、ArenaではClientが同一初期状態・Seed・同一Versionのロジックを使用して同じ戦闘を再現するため、戦闘計算とPRNGを共有する。
+戦闘結果の正本はGameServerですが、ArenaではClientが同一初期状態・Seed・Versionから同一結果を再現するため、戦闘ロジックとPRNGを共有します。
 
-## 論理Module
+## Module構成
 
 ```text
-game-core
-├── battle
-├── skill
-├── ability
-├── tactics
-├── status_abnormality
-├── formation
-├── follower
-├── party_rank
-└── pseudorandom
+game-core/src/
+├── battle/
+├── skill/
+├── ability/
+├── tactics/
+├── status_abnormality/
+├── formation/
+├── follower/
+├── party_rank/
+└── pseudorandom/
 ```
-
-各Module名は`specification/game/`および`design/game/`に定義されている領域へ対応する。
 
 ## 論理クラス図
 
-以下の図は具体的なRust型名を確定せず、ゲームロジック同士の依存関係を示す。
-
 ```mermaid
 classDiagram
-    class BattleLogic {
+    class BattleEngine {
         <<logical module>>
-        戦闘進行
-        ダメージ計算
+        Battle flow
+        Damage flow
+        Action flow
     }
-
-    class SkillLogic {
-        <<logical module>>
+    class CharacterBattle {
+        <<specified runtime state>>
+        hp
+        attack
+        defense
+        speed
+        skill_state
+        ability_states
+        buff_debuff_state
+        status_abnormalities
     }
-
-    class AbilityLogic {
-        <<logical module>>
+    class SkillBattleState {
+        activation_count
     }
-
-    class TacticsLogic {
-        <<logical module>>
+    class AbilityBattleState {
+        activation_count
+        activated_this_turn
     }
-
-    class StatusAbnormalityLogic {
-        <<logical module>>
-    }
-
-    class FormationLogic {
-        <<logical module>>
-    }
-
-    class FollowerLogic {
-        <<logical module>>
-    }
-
-    class PartyRankLogic {
-        <<logical module>>
-    }
-
     class Random {
-        <<PRNG>>
-        +next()
-        +next_bounded()
-        +shuffle()
-        +weighted_shuffle()
+        state: u64
+        next_u32()
+        next_bounded()
     }
+    class FormationLogic
+    class PartyRankLogic
+    class TacticsLogic
 
-    BattleLogic --> SkillLogic
-    BattleLogic --> AbilityLogic
-    BattleLogic --> StatusAbnormalityLogic
-    BattleLogic --> FormationLogic
-    BattleLogic --> Random
+    BattleEngine --> CharacterBattle
+    CharacterBattle --> SkillBattleState
+    CharacterBattle --> AbilityBattleState
+    BattleEngine --> Random
+    BattleEngine --> FormationLogic
     TacticsLogic --> Random
-    FormationLogic --> Random
 ```
 
-図中の`BattleLogic`等は責務の表示名であり、実装時の型名を仕様として固定するものではない。
+`BattleEngine`等は責務名で、具体的なRust型名を固定しません。`CharacterBattle`、`SkillBattleState`、`AbilityBattleState`、`Random`は既存資料に名称が定義されています。
 
-## PRNG
+## 入力と出力
 
-PRNGは再現性要件の中心なので、ゲーム計算から暗黙に乱数を取得する構造にせず、同一Seedと同一消費順を維持できる境界を持たせる。
+`game-core`へ渡すものは、ゲーム計算に必要な初期状態、MasterData、Mode、Seed / Random状態です。
 
-```mermaid
-flowchart LR
-    Seed[Seed] --> Random[PRNG State]
-    Random --> Operation1[乱数使用処理 1]
-    Operation1 --> Random2[更新済みPRNG State]
-    Random2 --> Operation2[乱数使用処理 2]
-```
+HTTP Context、Database Connection、System Clock取得、Kubernetes情報は渡しません。
 
-GuildBattleでは本体PRNG、出撃専用PRNG、ランダム要素を持つTacticsの専用PRNGなど、仕様で指定されたSeed生成と消費順を維持する。
+## 戦闘状態
 
-## I/O境界
+戦闘開始時に以下を初期化します。
 
-`game-core`へ以下を持ち込まない。
+- `SkillBattleState.activation_count = 0`
+- 各`AbilityBattleState.activation_count = 0`
+- 各`AbilityBattleState.activated_this_turn = false`
 
-- HTTP / TLS通信
-- PostgreSQLアクセス
+ターン開始時には全Abilityの`activated_this_turn`を`false`へ戻します。
+
+## 効果状態の分離
+
+`BuffDebuffEffectState`はSkill / Ability由来の攻撃・防御補正だけを保持します。FormationやTactics補正をこの状態へ混在させません。
+
+`StatusAbnormalityState[]`は状態異常ごとの経過ターンと毒周期を保持します。
+
+## I/O禁止境界
+
+`game-core`へ以下を入れません。
+
+- HTTP / TLS
+- PostgreSQL
+- Replay file
+- Recovery file
+- stdout / stderr
+- Telemetry exporter
 - Kubernetes API
-- Replayファイル書き込み
-- System Log出力
-- RecoveryファイルI/O
-
-これらはGameServer / Client等の呼び出し側で処理する。
-
-## メリット・デメリット
-
-### メリット
-
-- ArenaのClient / GameServer再現性を保ちやすい。
-- 数式、状態遷移、PRNGの単体テストを外部I/Oなしで実行できる。
-- Server実装詳細からゲーム計算を切り離せる。
-
-### デメリット
-
-- ゲームロジック変更時はClient / GameServer双方のVersion整合が必要になる。
-- 外部状態を直接参照できないため、計算に必要な状態を入力として明示的に渡す必要がある。
 
 ## 情報源
 
-- `design/system/rust_dependencies.md`
 - `design/game/battle.md`
 - `design/game/pseudorandom.md`
-- `design/client/client.md`
-- `design/test/test_policy.md`
-- `specification/game/`配下
+- `design/shared/types.md`
+- `specification/game/skill.md`
+- `specification/game/ability.md`
+- `specification/game/status_abnormality.md`
+- `specification/game/formation.md`
+- `specification/game/follower.md`
+- `specification/game/party_rank.md`

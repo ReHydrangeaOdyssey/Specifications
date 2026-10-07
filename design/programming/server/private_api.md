@@ -1,117 +1,147 @@
-# Private API Server大枠設計
+# Private API Serverプログラミング設計
 
 ## 結論
 
-Private API ServerはAccount / Guild等のDomain処理、認証状態、Databaseアクセス、GuildBattle永続ライフサイクルを担当する。
-
-Application ComponentのうちPostgreSQLへ直接接続するのはPrivate API Serverだけとする。
+Private API ServerはAccount / Session / GuildのDomain処理、GuildBattle永続Lifecycle、Database Transaction、永続データ取得・保存の正本Applicationです。Application ComponentからPostgreSQLへ直接接続する入口をここへ集中させます。
 
 ## 論理構成
 
-```text
-Private API Server
-├── Authentication / Session
-├── Account
-├── Guild
-├── Arena Persistence
-├── GuildBattle Persistence
-├── GuildBattleLifecycleService
-└── Database Access
-```
-
-この分類は詳細クラスを確定するものではなく、既存設計の責務を分けるための論理境界である。
-
-## クラス図
-
 ```mermaid
 classDiagram
-    class PrivateApiServer {
-        <<component>>
-        AccessToken署名秘密鍵を保持
-    }
+    class PrivateApiApplication
+    class ServiceIdentityAuthorization
+    class AuthService
+    class AccountService
+    class GuildService
+    class ArenaPersistenceService
+    class GuildBattleDataService
+    class GuildBattleLifecycleService
+    class ReplayPersistenceService
+    class DatabaseOperationService
+    class RepositoryBoundary
+    class PostgreSQL
 
-    class AuthenticationSession {
-        <<logical module>>
-    }
-    class AccountDomain {
-        <<logical module>>
-    }
-    class GuildDomain {
-        <<logical module>>
-    }
-    class GuildBattleLifecycleService {
-        <<service>>
-        +MarkGuildBattlePreloadFailed()
-        +StartGuildBattle()
-        +BeginGuildBattleResolving()
-        +CompleteGuildBattle()
-        +RetryPreloadFailedGuildBattle()
-        +RematchPreloadFailedGuildBattles()
-    }
-    class DatabaseAccess {
-        <<logical module>>
-        Transaction
-        Row Lock
-        Idempotency
-    }
-    class PostgreSQL {
-        <<database>>
-    }
-
-    PrivateApiServer --> AuthenticationSession
-    PrivateApiServer --> AccountDomain
-    PrivateApiServer --> GuildDomain
-    PrivateApiServer --> GuildBattleLifecycleService
-    AuthenticationSession --> DatabaseAccess
-    AccountDomain --> DatabaseAccess
-    GuildDomain --> DatabaseAccess
-    GuildBattleLifecycleService --> DatabaseAccess
-    DatabaseAccess --> PostgreSQL
+    PrivateApiApplication --> ServiceIdentityAuthorization
+    PrivateApiApplication --> AuthService
+    PrivateApiApplication --> AccountService
+    PrivateApiApplication --> GuildService
+    PrivateApiApplication --> ArenaPersistenceService
+    PrivateApiApplication --> GuildBattleDataService
+    PrivateApiApplication --> GuildBattleLifecycleService
+    PrivateApiApplication --> ReplayPersistenceService
+    PrivateApiApplication --> DatabaseOperationService
+    AuthService --> RepositoryBoundary
+    AccountService --> RepositoryBoundary
+    GuildService --> RepositoryBoundary
+    ArenaPersistenceService --> RepositoryBoundary
+    GuildBattleDataService --> RepositoryBoundary
+    GuildBattleLifecycleService --> RepositoryBoundary
+    ReplayPersistenceService --> RepositoryBoundary
+    DatabaseOperationService --> RepositoryBoundary
+    RepositoryBoundary --> PostgreSQL
 ```
 
-`AuthenticationSession`等の名称は論理責務の表示名であり、Rust型名を確定するものではない。`GuildBattleLifecycleService`は既存資料で明示された名称である。
+これらは論理Serviceです。具体的なRust型名やRepository数は固定しません。
 
-## GuildBattle永続状態
+## Service Identity認可
+
+mTLSで確定した呼び出し元Service IdentityをAPI Allowlistへ照合してから業務処理を実行します。
+
+主な呼び出し元は以下です。
+
+- Public API Server
+- GameServer
+- GuildBattleCoordinator
+- 運営Component
+- Discord Botの`RevokeDiscordSessions`
+
+運営Componentへ一般Client系APIを開放せず、Discord Botには定義されたSession revoke用途だけを許可します。
+
+## Domain所有
+
+### Account / Session
+
+- LoginID / Password認証
+- Password Hash管理
+- AccessToken発行
+- Refresh Session管理
+- Session revoke
+- Discord Role喪失に伴うSession revoke
+
+### Guild
+
+- Guild作成
+- 団長・副団長更新
+- Join申請・承認
+- Invitation・承諾
+- Guild移動・脱退
+- `membership_locked`
+- 人数上限等のDatabase現在状態を用いた最終判定
+
+### GuildBattle永続Lifecycle
+
+`GuildBattleLifecycleService`が状態遷移を所有します。任意のStatusを書き換える汎用APIは設けません。
 
 ```mermaid
 stateDiagram-v2
     [*] --> scheduled
     scheduled --> preload_failed: MarkGuildBattlePreloadFailed
-    preload_failed --> scheduled: RetryPreloadFailedGuildBattle
-    preload_failed --> scheduled: RematchPreloadFailedGuildBattles
+    preload_failed --> scheduled: Retry / Rematch系処理
     scheduled --> in_progress: StartGuildBattle
     in_progress --> resolving: BeginGuildBattleResolving
     resolving --> completed: CompleteGuildBattle
-    completed --> [*]
 ```
 
-任意の`status`を指定する汎用更新APIは設けない。
+## Transaction Boundary
 
-## 冪等Database更新
+複数の整合条件を同時に成立させる処理は1 Transactionで確定します。
 
-```mermaid
-sequenceDiagram
-    participant G as GameServer / Coordinator
-    participant P as Private API Server
-    participant D as PostgreSQL
+| 処理 | 同一Transactionで扱う主な対象 |
+|---|---|
+| Account作成 | Account + Player |
+| Guild Membership変更 | Member / leader / subleader / 人数・Lock条件等 |
+| StartGuildBattle | InitialSeed + Create Replay + `scheduled -> in_progress` |
+| 冪等GuildBattle更新 | Domain更新 + `GUILD_BATTLE_DB_OPERATION` |
+| CompleteGuildBattle | 最終結果 + Player勝敗 + `completed` + membership unlock + 除外一覧削除 |
 
-    G->>P: Request + X-Operation-ID
-    P->>D: Transaction開始 / Operation ID確認
-    alt 未処理
-        P->>D: Domain更新 + Operation記録
-        D-->>P: Commit
-        P-->>G: 初回成功Response
-    else 処理済み
-        D-->>P: 保存済み成功結果
-        P-->>G: 初回成功時Response
-    end
-```
+途中だけCommitする処理へ分割しません。
 
-同一論理操作の初回送信、1回再試行、Recovery再送では同じ128bit UUIDの`X-Operation-ID`を使用する。
+## AuthenticatedContextの扱い
+
+Public API由来のAccount/Guild要求は`AuthenticatedContext`を受け取り、ContextのPlayerIDをCallerとして使用します。Payload中の任意PlayerIDでCallerを上書きしません。
+
+ただし、Public APIが認証済みであることだけをDomain判定の根拠にせず、Guild Role、Membership Lock、人数等はDatabase現在状態で再確認します。
+
+## Password認証負荷
+
+Argon2id検証はCPU / Memoryを消費するため、仕様で示されたBounded Concurrencyを適用します。待ち行列を無制限にしません。
+
+## Database Access
+
+- SQL/DB Driver依存はPrivate APIのInfrastructure境界へ閉じ込めます。
+- Domain/Application層へDB Row型をそのまま公開しません。
+- `common-types`の論理型とDB型の対応は`design/shared/types.md`を正とします。
+- Transaction開始・Commit・RollbackはApplication use case単位で管理します。
+
+## メリット・デメリット
+
+### メリット
+
+- DB更新規則とTransaction境界を一箇所で管理できます。
+- Public APIやGameServerが独自SQLで永続状態を破壊する経路をなくせます。
+- GuildBattle Lifecycleの許可遷移を集中管理できます。
+
+### デメリット
+
+- DBが必要な処理はPrivate APIを経由するため内部通信が増えます。
+- Private API Serverが永続処理の集中点になるため、接続数・認証負荷・Transaction監視が必要です。
 
 ## 情報源
 
 - `design/server/private_api.md`
+- `design/server/api.md`
+- `design/server/session.md`
 - `design/server/data_base.md`
 - `design/server/guild_battle_lifecycle.md`
-- `design/system/network.md`
+- `design/server/public_api_responsibility.md`
+- `design/shared/types.md`

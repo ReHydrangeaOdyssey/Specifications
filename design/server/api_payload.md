@@ -708,51 +708,59 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 
 - 対象DiscordUserIDにBindingされたAccountのRefresh Session失効完了とする.
 
-### SaveGuildRequest
+### CreateGuildPrivateRequest
+
+Public API ServerからPrivate API Serverへ送信する内部Payloadとし, Caller Identityは内部Request Contextの`AuthenticatedContext`から取得する.
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| GuildID | `GuildID` | 保存する騎士団ID |
-| GuildName | `Name` | 騎士団名. UTF-8, 最大10文字, 空文字不可, 重複可 |
-| LeaderPlayerID | `PlayerID` | 団長PlayerID. 初期騎士団作成時はDatabase側で副団長PlayerIDを0へ初期化する |
+| GuildName | `Name` | 作成する騎士団名. UTF-8, 最大10文字, 空文字不可, 重複可 |
 | DaytimeStartTime | `GuildBattleStartTime` | 昼開始時刻.11:30 / 12:15 / 13:00のいずれか |
 | NighttimeStartTime | `GuildBattleStartTime` | 夜開始時刻.21:00 / 22:00 / 23:00のいずれか |
 
-### SaveGuildJoinApplicationRequest
+### CreateGuildPrivateResponse
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| PlayerID | `PlayerID` | 申請PlayerID |
+| GuildID | `GuildID` | 作成された初期騎士団ID |
+
+### ApplyGuildJoinPrivateRequest
+
+Caller PlayerIDは`AuthenticatedContext.PlayerID`を使用する.
+
+| 項目 | 型 | 内容 |
+|---|---|---|
 | GuildID | `GuildID` | 申請先GuildID |
 
 ### ApproveGuildJoinApplicationPrivateRequest
 
+承認要求PlayerIDは`AuthenticatedContext.PlayerID`を使用する.
+
 | 項目 | 型 | 内容 |
 |---|---|---|
-| RequesterPlayerID | `PlayerID` | 承認を行うPlayerID |
 | GuildID | `GuildID` | 申請先GuildID |
 | ApplicantPlayerID | `PlayerID` | 加入させる申請PlayerID |
 
-### SaveGuildInvitationRequest
+### SendGuildInvitationPrivateRequest
+
+招待送信PlayerIDは`AuthenticatedContext.PlayerID`を使用する.
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| RequesterPlayerID | `PlayerID` | 招待を送るPlayerID |
 | GuildID | `GuildID` | 招待元GuildID |
 | InviteePlayerID | `PlayerID` | 招待対象PlayerID |
 
 ### AcceptGuildInvitationPrivateRequest
 
+招待承諾PlayerIDは`AuthenticatedContext.PlayerID`を使用する.
+
 | 項目 | 型 | 内容 |
 |---|---|---|
-| PlayerID | `PlayerID` | 招待を承諾するPlayerID |
 | GuildID | `GuildID` | 招待元GuildID |
 
 ### LeaveGuildPrivateRequest
 
-| 項目 | 型 | 内容 |
-|---|---|---|
-| PlayerID | `PlayerID` | 脱退するPlayerID |
+- Request Bodyは空とする. 脱退PlayerIDは`AuthenticatedContext.PlayerID`を使用する.
 
 ### LeaveGuildPrivateResponse
 
@@ -762,11 +770,12 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 | SwappedPlayerID | `PlayerID` | 所属スワップを行った場合の相手PlayerID. スワップなしは0 |
 | SwappedPlayerGuildID | `GuildID` | スワップ相手の新しい所属GuildID. スワップなしは0 |
 
-### SaveGuildLeadershipRequest
+### UpdateGuildLeadershipPrivateRequest
+
+役職変更要求PlayerIDは`AuthenticatedContext.PlayerID`を使用する.
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| RequesterPlayerID | `PlayerID` | 役職変更を要求したPlayerID. 現在の団長であることをPrivate APIで検証する |
 | GuildID | `GuildID` | 更新対象の騎士団ID |
 | LeaderPlayerID | `PlayerID` | 保存する団長PlayerID. 対象Guild所属Playerのみ指定可能 |
 | SubleaderPlayerID | `PlayerID` | 保存する副団長PlayerID. `0`は未設定. `0`以外は対象Guild所属Playerのみ指定可能かつLeaderPlayerIDと同一値不可 |

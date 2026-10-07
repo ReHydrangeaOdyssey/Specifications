@@ -244,7 +244,7 @@
 被弾重み = clamp(被弾重み, 最小被弾重み, 1,000,000)
 ```
 
-低下方向の効果値は負値として`タクティクス補正`へ加算する. 同じ方向・計算項目へ複数系列が作用する場合は「[タクティクス効果値の統合規則](tactics.md#効果値の統合規則)」に従う.
+低下方向の効果値は負値として`タクティクス補正`へ加算する. 被弾重みの計算は「[タクティクス効果値の統合規則](tactics.md#効果値の統合規則)」に対する例外とし, 上式に列挙した`TACTICS_EFFECT_OPPONENT_SORTIE_SELECTION_RATE_CORRECTION`, `TACTICS_BATTLE_SPECIAL_PROVOKE.parameters.attack_target_rate`, `TACTICS_BATTLE_SPECIAL_CLAUSTRUM.parameters.hate`, `TACTICS_BATTLE_SPECIAL_HIDE.parameters.attack_target_rate`を系列間で乗算せず加算する. 同一系列の効果が複数有効な場合だけ, その系列内で先に加算した値を上式へ使用する.
 
 
 ### 戦闘
@@ -451,6 +451,7 @@ HPやBP全快時でも「回復状態」にできる条件や終了条件がプ�
 * 以下条件をすべて満たす必要がある.
   - 使用対象の「[タクティクス](tactics.md)」が持つ「使用可能回数」が1以上である.
   - 使用対象の「[タクティクス](tactics.md)」が持つ「消費TP」が現在「[TP](guild_battle.md#事前用語説明)」以下である.
+  - `TacticsMasterData.use_condition`を満たしている. `TACTICS_USE_CONDITION_NONE`は追加条件なし, `TACTICS_USE_CONDITION_ALL_ANNIHILATED`は使用プレイヤーのパーティが全滅状態の場合だけ成立する.
 
 #### 効果
 

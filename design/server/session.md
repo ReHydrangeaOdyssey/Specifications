@@ -214,9 +214,9 @@ sequenceDiagram
             opt 新規プレイヤーフラグあり
                 Client->>Client: 初期騎士団作成画面でGuildName・昼夜開始時刻を確定
                 Client->>PublicAPIServer: CreateGuild(AccessToken, PlayerID, GuildName, DaytimeStartTime, NighttimeStartTime)
-                PublicAPIServer->>PrivateAPIServer: SaveGuild
-                alt 初回SaveGuild失敗
-                    PublicAPIServer->>PrivateAPIServer: 同一SaveGuild要求を1回再実行
+                PublicAPIServer->>PrivateAPIServer: CreateGuildPrivate(GuildName, DaytimeStartTime, NighttimeStartTime, AuthenticatedContext)
+                alt 初回CreateGuildPrivate失敗
+                    PublicAPIServer->>PrivateAPIServer: 同一CreateGuildPrivate要求を1回再実行
                 end
                 alt 再実行後も失敗
                     PublicAPIServer-->>Client: RequiredOperationErrorResponse(API_ERROR_REQUIRED_OPERATION_FAILED, 必要な処理が実行できませんでした)

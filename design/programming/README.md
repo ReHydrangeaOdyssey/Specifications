@@ -1,22 +1,23 @@
-# プログラミング大枠設計
+# プログラミング設計
 
-## 目的
+## 結論
 
-本書群は、`specification/`および`design/`配下で明示されている仕様・設計だけを根拠として、実装開始前に必要なプログラム構造の大枠を整理する。
+現行仕様から実装上の責務・状態・処理順まで確定できる範囲を、`design/programming/`以下へ整理します。
 
-詳細なクラス設計、関数シグネチャ、未確定仕様の補完は行わない。
+本書群では、ゲーム仕様を追加しません。仕様で明示されていない値・挙動・通信Path・Framework構成は補完せず、実装上必要な境界だけを定義します。
 
-## 設計方針
+## 設計原則
 
-1. ゲーム計算の正本はGameServerとする。
-2. Account / GuildおよびDatabase上の永続状態はPrivate API Serverを経由して扱う。
-3. Databaseへ直接接続できるApplication ComponentはPrivate API Serverだけとする。
-4. Public API ServerはstatelessなEdge APIとし、Domain ruleを保持しない。
-5. GuildBattleCoordinatorは騎士団戦のControl Pathだけを担当し、通常ゲーム要求の経路には入らない。
-6. ClientとGameServerで共有する戦闘計算・PRNGは`game-core`へ集約する。
-7. 通信型は`protocol`、共通論理型は`common-types`へ分離する。
-8. GuildBattle ReplayとSystem Logは別経路で処理する。
-9. 未確定事項は本設計で固定しない。
+1. ゲーム計算結果の正本はGameServerです。
+2. Account / Guild / Database永続状態の正本はPrivate API Server経由のPostgreSQLです。
+3. Databaseへ直接接続するApplication ComponentはPrivate API Serverだけです。
+4. Public API ServerはstatelessなEdge APIとし、Domain Logicを保持しません。
+5. GuildBattleCoordinatorは騎士団戦のControl Path専用です。
+6. ClientとGameServerで共有する戦闘計算とPRNGは`game-core`へ置きます。
+7. Protocol Buffers生成型は`protocol`、論理型は`common-types`へ分離します。
+8. GameServerの騎士団戦処理スレッドから、Database、ファイル、Telemetryの同期I/Oを分離します。
+9. ReplayはSystem Logと別経路とし、成立した操作の順序を保持します。
+10. 現仕様が未定義の事項は`undecided.md`で明示し、実装側で挙動を決めません。
 
 ## 文書構成
 
@@ -25,211 +26,88 @@ design/programming/
 ├── README.md
 ├── architecture.md
 ├── directory_structure.md
+├── implementation_rules.md
 ├── undecided.md
 ├── client/
 │   └── client.md
 ├── game/
 │   ├── game_core.md
+│   ├── battle_runtime.md
+│   ├── pseudorandom.md
+│   ├── tactics_runtime.md
 │   └── master_data_pipeline.md
 ├── server/
+│   ├── api_boundary.md
 │   ├── public_api.md
 │   ├── private_api.md
+│   ├── auth_session.md
+│   ├── arena.md
 │   ├── game_server.md
+│   ├── guild_battle_runtime.md
 │   ├── guild_battle_coordinator.md
-│   └── persistence.md
+│   ├── persistence.md
+│   └── logging_recovery.md
 ├── shared/
-│   └── shared_crates.md
+│   ├── shared_crates.md
+│   ├── types.md
+│   └── error_model.md
 └── test/
-    └── test_design.md
+    ├── test_design.md
+    └── traceability.md
 ```
 
-## 全体像
+## 全体コンポーネント図
 
 ```mermaid
 flowchart LR
-    Client[Client] -->|HTTP/2 + TLS 1.3 + Protocol Buffers| PublicAPI[Public API Server]
+    Client[Client] -->|HTTP/2 + TLS 1.3 + Protocol Buffers| Public[Public API Server]
+    Public -->|Account / Guild| Private[Private API Server]
+    Public -->|Arena| Game[GameServer]
+    Public -->|GuildBattleIDで所有先解決| Game
 
-    PublicAPI -->|Account / Guild| PrivateAPI[Private API Server]
-    PublicAPI -->|Arena| GameServer[GameServer]
-    PublicAPI -->|GuildBattleIDで所有先解決| GameServer
+    Coord[GuildBattleCoordinator] -->|生成・割当・Reconcile| Private
+    Coord -->|Capacity / Preload| Game
+    Game -->|永続化・Replay保存| Private
+    Private --> DB[(PostgreSQL)]
 
-    Coordinator[GuildBattleCoordinator] -->|保存・取得| PrivateAPI
-    Coordinator -->|容量確認 / Preload開始| GameServer
+    Pipeline[MasterData Pipeline] --> Processed[ProcessedMasterData]
+    Pipeline --> DB
 
-    GameServer -->|永続化| PrivateAPI
-    PrivateAPI --> DB[(PostgreSQL)]
-
-    MasterPipeline[MasterData Pipeline] --> Processed[ProcessedMasterData]
-    MasterPipeline --> DB
-
-    GameCore[game-core] --> Client
-    GameCore --> GameServer
-    Protocol[protocol] --> Client
-    Protocol --> PublicAPI
-    Protocol --> PrivateAPI
-    Protocol --> GameServer
-    Protocol --> Coordinator
-    CommonTypes[common-types] --> Client
-    CommonTypes --> PublicAPI
-    CommonTypes --> PrivateAPI
-    CommonTypes --> GameServer
-    CommonTypes --> Coordinator
+    Core[game-core] --> Client
+    Core --> Game
 ```
 
-## 論理クラス図
+## 設計の確定度
 
-以下は実装型名を確定する図ではなく、既存資料で定義済みのComponent / Service / APIの責務境界を表す。
-
-```mermaid
-classDiagram
-    class Client {
-        <<component>>
-        +Arena戦闘再現
-        +ローカル編成保持
-        +Public API通信
-    }
-
-    class PublicApiServer {
-        <<component>>
-        +Token検証
-        +Boundary Validation
-        +Rate Limit
-        +内部Routing
-    }
-
-    class PrivateApiServer {
-        <<component>>
-        +Account/Guild Domain処理
-        +Database仲介
-        +認証状態管理
-    }
-
-    class GuildBattleLifecycleService {
-        <<service>>
-        +MarkGuildBattlePreloadFailed()
-        +StartGuildBattle()
-        +BeginGuildBattleResolving()
-        +CompleteGuildBattle()
-        +RetryPreloadFailedGuildBattle()
-        +RematchPreloadFailedGuildBattles()
-    }
-
-    class GameServer {
-        <<component>>
-        +Arena計算
-        +GuildBattle状態保持
-        +GuildBattle計算
-        +Replay処理連携
-    }
-
-    class GuildBattleCoordinator {
-        <<component>>
-        +騎士団戦生成
-        +マッチング
-        +GameServer割当
-        +Preload開始指示
-        +Reconcile
-    }
-
-    class PostgreSQL {
-        <<database>>
-    }
-
-    class GameCore {
-        <<shared crate>>
-        +戦闘計算
-        +PRNG
-    }
-
-    PublicApiServer --> PrivateApiServer : Account / Guild
-    PublicApiServer --> GameServer : Arena / GuildBattle
-    PrivateApiServer --> GuildBattleLifecycleService
-    PrivateApiServer --> PostgreSQL
-    GameServer --> PrivateApiServer : persistence
-    GuildBattleCoordinator --> PrivateApiServer
-    GuildBattleCoordinator --> GameServer
-    Client --> PublicApiServer
-    Client --> GameCore
-    GameServer --> GameCore
-```
-
-## 依存方向
-
-```mermaid
-flowchart TD
-    CT[common-types]
-    P[protocol]
-    GC[game-core]
-    SC[server-common]
-    AC[auth-common]
-
-    Client[Client]
-    Public[Public API]
-    Private[Private API]
-    Game[GameServer]
-    Coord[GuildBattleCoordinator]
-    Bot[Discord Bot]
-
-    CT --> GC
-    CT --> P
-
-    GC --> Client
-    GC --> Game
-    P --> Client
-    P --> Public
-    P --> Private
-    P --> Game
-    P --> Coord
-
-    SC --> Public
-    SC --> Private
-    SC --> Game
-    SC --> Coord
-
-    AC --> Public
-    AC --> Private
-    AC --> Bot
-```
-
-`game-core`は外部I/Oへ依存させず、Client / GameServer側から利用する方向とする。
-
-## 詳細文書
-
-- [全体アーキテクチャ](architecture.md)
-- [実装ディレクトリ構造](directory_structure.md)
-- [Client](client/client.md)
-- [game-core](game/game_core.md)
-- [MasterData Pipeline](game/master_data_pipeline.md)
-- [Public API Server](server/public_api.md)
-- [Private API Server](server/private_api.md)
-- [GameServer](server/game_server.md)
-- [GuildBattleCoordinator](server/guild_battle_coordinator.md)
-- [永続化境界](server/persistence.md)
-- [共有crate](shared/shared_crates.md)
-- [テスト構造](test/test_design.md)
-- [未確定事項](undecided.md)
+| 区分 | 扱い |
+|---|---|
+| 仕様に型名・API名・状態名が明示されている | その名称を使用します |
+| 仕様の責務から実装境界を分ける必要がある | 「論理Module」「論理Service」として記載します |
+| 具体的なRust型名・関数名が仕様にない | 原則として固定しません |
+| 仕様に未定義・固定しないとある | 設計対象外として残します |
 
 ## 情報源
 
-### 添付資料
+現行添付資料の`specification/`および`design/`配下を使用しています。特に以下を設計境界の正本として参照しています。
 
-- `design/system/network.md`
-- `design/system/rust_dependencies.md`
 - `design/server/public_api_responsibility.md`
 - `design/server/private_api.md`
 - `design/server/game_server.md`
+- `design/server/guild_battle.md`
 - `design/server/guild_battle_coordinator.md`
 - `design/server/guild_battle_lifecycle.md`
 - `design/server/data_base.md`
-- `design/client/client.md`
+- `design/server/session.md`
+- `design/shared/types.md`
+- `design/game/battle.md`
+- `design/game/guild_battle.md`
+- `design/game/master_data.md`
 - `design/game/master_data_pipeline.md`
 - `design/game/pseudorandom.md`
-- `design/system/log.md`
-- `design/test/test_policy.md`
-- `design/shared/types.md`
-- `design/shared/common_data_struct.md`
 - `design/system/public_api.proto`
 - `design/system/guild_battle_replay.proto`
-- `specification/game/`配下の各ゲーム仕様
-
-外部情報は本プログラミング設計の根拠として使用していない。
+- `design/system/log.md`
+- `design/system/network.md`
+- `design/system/rust_dependencies.md`
+- `design/test/test_policy.md`
+- `specification/game/`配下

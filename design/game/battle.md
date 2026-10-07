@@ -155,7 +155,7 @@ flowchart TD;
 ### キャラクター行動
 
 `ActivateSkill`は前述の「スキル発動」フローを呼び出す. 攻撃スキルの場合はその内部で「スキルダメージ計算フロー」を使用する.
-スキル発動時は`ABILITY_EFFECT_AVOIDANCE`, `ABILITY_EFFECT_COUNTER`, `ABILITY_EFFECT_COVER`, `ABILITY_EFFECT_DRAW_AGGRO`, `ABILITY_EFFECT_PURSUIT`を無視し, 通常攻撃側の回避・反撃・かばう・ひきつけ・追撃フローへ入らない.
+スキル発動時は`ABILITY_EFFECT_AVOIDANCE`, `ABILITY_EFFECT_AVOIDANCE_COUNTER`, `ABILITY_EFFECT_COUNTER`, `ABILITY_EFFECT_COVER`, `ABILITY_EFFECT_DRAW_AGGRO`, `ABILITY_EFFECT_PURSUIT`を無視し, 通常攻撃側の回避・反撃・かばう・ひきつけ・追撃フローへ入らない. `ABILITY_EFFECT_AVOIDANCE`は`status_abnormality.status`の設定有無を問わず無視するため, スキルによる状態異常付与に対しても状態異常回避Abilityを判定しない.
 
 ```mermaid
 flowchart TD;

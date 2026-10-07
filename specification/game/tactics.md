@@ -55,6 +55,7 @@
 * 異なる系列の効果値は, 系列ごとの加算結果を乗算する.
 * 例えば系列Aに`A1`, `A2`, 系列Bに`B1`, `B2`, 系列Cに`C1`がある場合, 統合効果値は`(A1 + A2) * (B1 + B2) * C1`とする.
 * 速度へ作用する効果だけは例外とし, 系列が異なる場合もすべての効果値を加算する. 上記例では速度の統合効果値を`A1 + A2 + B1 + B2 + C1`とする.
+* 騎士団戦の「被弾重み」は個別仕様で定義した加算式を優先する例外とし, `TACTICS_EFFECT_OPPONENT_SORTIE_SELECTION_RATE_CORRECTION`, `PROVOKE.attack_target_rate`, `CLAUSTRUM.hate`, `HIDE.attack_target_rate`の系列間乗算を行わない. 同一系列内の複数効果だけを先に加算し, その結果を被弾重み式へ加算する.
 * 通常のタクティクス効果は`TacticsEffectID`を系列として扱う. `TACTICS_EFFECT_BATTLE_SPECIAL`はコンテナ効果として扱い, その数値パラメータについては`TacticsBattleSpecialType`を系列として扱う.
 * 同じ計算項目へ通常`TacticsEffectID`系列と`TacticsBattleSpecialType`系列の双方が作用する場合, それぞれを異なる系列として上記規則で統合する.
 * 本項で求めた値は各計算式の「タクティクス補正」または対応するBattle Special数値効果として使用する. 各計算式に存在する`1.0 + 補正`, 基礎値への加算, clamp等の処理はその計算式どおりに行う.

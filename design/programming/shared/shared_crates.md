@@ -2,60 +2,47 @@
 
 ## 結論
 
-共有内部crateは資料に明示されている`game-core`、`protocol`、`common-types`、`server-common`、`auth-common`を基本単位とする。
+共有内部crateは仕様に明示された`game-core`、`protocol`、`common-types`、`server-common`、`auth-common`を基本単位とします。
 
-## 責務
+## crate責務
 
-| crate | 責務 | 主な利用Component |
+| crate | 責務 | 利用Component |
 |---|---|---|
-| `game-core` | 戦闘計算、PRNG、ゲーム計算 | Client / GameServer |
-| `protocol` | Protocol Buffers生成型・通信Payload | Client / 各Server / Coordinator |
-| `common-types` | ID、数値型、Version、共通型 | 全体 |
-| `server-common` | Server共通処理 | 各Server |
-| `auth-common` | 認証関連共通処理 | Public API / Private API / Discord Bot |
+| `game-core` | 戦闘計算、PRNG、外部I/Oを伴わないゲーム計算 | Client / GameServer |
+| `protocol` | Protocol Buffers生成型 | Client / Public API / Private API / GameServer / Coordinator |
+| `common-types` | ID、数値、Version、Enum等の論理型 | 全体 |
+| `server-common` | TLS、Server共通処理等 | Server Component |
+| `auth-common` | JWT Claim等の認証共通処理 | Public API / Private API / Discord Bot |
 
-## 型の境界
+## 依存ルール
 
 ```mermaid
-classDiagram
-    class CommonTypes {
-        <<crate>>
-        ID型
-        数値型
-        Version
-        共通Enum
-    }
+flowchart TD
+    CT[common-types]
+    PR[protocol]
+    GC[game-core]
+    SC[server-common]
+    AC[auth-common]
 
-    class Protocol {
-        <<crate>>
-        Public API Payload
-        Private API Payload
-        GuildBattle Replay
-    }
-
-    class GameCore {
-        <<crate>>
-        戦闘計算
-        PRNG
-    }
-
-    Protocol --> CommonTypes : 論理型対応
-    GameCore --> CommonTypes
+    PR --> CT
+    GC --> CT
+    SC --> CT
+    AC --> CT
 ```
 
-Protocol Buffersに`u8` / `u16`が存在しないため、wireでは`uint32`を使用し、受信時に論理型の範囲を検証するという既存設計に従う。
+`game-core`は原則`std`だけへ依存するという既存方針を維持します。
 
-## Version
+## 外部crate
 
-`Version`はGuildBattle Replayで使用したゲームロジックとMasterDataの組み合わせを一意に識別する。
+現行資料ではComponentごとのRust crateがすでに指定されています。プログラミング設計側で別ライブラリへ置き換えません。
 
-ClientとGameServerでArenaを再現するため、同一Versionのゲームロジックを使用する。
+- Public API: `tokio`, `axum`, `axum-server`, `rustls`, `reqwest`, `prost`, `serde`, `serde_json`, `jsonwebtoken`, `base64`, `time`
+- Private API: 上記相当のServer系に加え`sqlx`, `argon2`, `sha2`, `getrandom`, `uuid`
+- GameServer: `tokio`, `axum`, `axum-server`, `rustls`, `reqwest`, `prost`, `serde`, `serde_json`, `uuid`, `time`, `game-core`
+- Coordinator: `tokio`, `rustls`, `reqwest`, `prost`, `serde`, `serde_json`, `uuid`, `time`等
+- Kubernetes本番追加: `kube`, `k8s-openapi`
 
 ## 情報源
 
 - `design/system/rust_dependencies.md`
 - `design/shared/types.md`
-- `design/shared/common_data_struct.md`
-- `design/system/public_api.proto`
-- `design/system/guild_battle_replay.proto`
-- `design/game/master_data_pipeline.md`

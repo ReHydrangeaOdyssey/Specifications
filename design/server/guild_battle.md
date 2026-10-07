@@ -259,16 +259,18 @@ sequenceDiagram
         GameServer ->> GameServer: GuildBattleID・PlayerID・RequestSequence一致確認
         GameServer ->> GameServer: 出撃可否チェック
         GameServer ->> GameServer: 騎士団戦全体Sequence加算
-        GameServer ->> GameServer: 相手PlayerID候補をPlayerID昇順, 相手Character候補を編成ID昇順で構築して出撃内容抽選
         GameServer ->> GameServer: GuildBattlePlayerRuntimeState.attack_count += 1
         GameServer ->> GameServer: 加算後attack_countでEXTERLIZE補正を算出
+        GameServer ->> GameServer: CBC → CBC発生条件 → キリ番CB → 強襲無効 → 強襲CBの順で出撃種別を判定
 
         alt キャッスルブレイク
-            GameServer ->> GameServer: キャッスルブレイク処理
+            GameServer ->> GameServer: 相手Player/Character抽選を行わずキャッスルブレイク処理
             GameServer->>GameServer: 成功した要求のRequestSequenceを1加算
             GameServer -->> PublicAPIServer: GuildBattleCastleBreakResponse(NextRequestSequence)
             PublicAPIServer -->> Client: GuildBattleCastleBreakResponse(NextRequestSequence)
         else 殲滅
+            GameServer ->> GameServer: 生存相手PlayerID候補をPlayerID昇順で構築して被弾重み付き抽選
+            GameServer ->> GameServer: 選択PlayerのHP1以上Character候補を編成ID昇順で構築して抽選
             GameServer ->> GameServer: 戦闘処理
             GameServer->>GameServer: 成功した要求のRequestSequenceを1加算
             GameServer ->> PublicAPIServer: GuildBattleAnnihilationResponse(NextRequestSequence)

@@ -140,7 +140,7 @@ Characterが参照するSkill / Ability / Tacticsの存在確認は4系統をす
 * `target_side`が有効な`SkillTargetSide`である.
 * `SKILL_EFFECT_ATTACK`では`damage_value_type`が有効な`SkillDamageValueType`である. `SKILL_DAMAGE_VALUE_TYPE_FIXED`では`correction_value`を250以上99,999以下とし, 範囲外は生成エラーとする.
 * `SKILL_EFFECT_HEAL`では`effect_data.heal`を使用し, `correction_value`を回復量として使用しない. `can_heal_incapacitated=true`はHP0専用回復, `false`はHP1以上専用回復として扱う.
-* 状態異常付与Skillでは`effect_data.status_abnormality`を使用する.
+* 状態異常付与Skillでは`effect_data.status_abnormality`を使用する. `SkillStatusAbnormalityData.application_rate`は確率値として`0.0 <= application_rate <= 1.0`だけを許可する.
 * BUFF / DEBUFFでは`effect_data.stat_correction`を使用する.
 * Random AttackでHit数が必要な場合は`effect_data.random_attack.hit_count`を使用する.
 * `SKILL_TARGET_CONDITION_STATUS_ABNORMALITY`では対象StatusAbnormalityIDを設定する.
@@ -200,6 +200,7 @@ Characterが参照するSkill / Ability / Tacticsの存在確認は4系統をす
 * `ABILITY_EFFECT_DAMAGE_INCREASE × ABILITY_CONDITION_SINGLE_TARGET_NORMAL_ATTACK`は`correction.correction_value=2.0`を必須とする.
 * `ABILITY_EFFECT_CASTLE_BREAK_DAMAGE_INCREASE`は`correction.correction_value=2.0`を必須とする.
 * `ABILITY_EFFECT_INCAPACITATED_ALLY_COUNT_STAT_CORRECTION`は`incapacitated_ally_count=0,1,2,3,4`を各1件必須とし, 重複・欠落を生成エラーとする. 攻撃補正を使用するAbilityでは`attack`, 防御補正を使用するAbilityでは`defense`が人数増加に対して単調非減少であることを確認する. 未使用側の値は0とする.
+* `AbilityMasterData.activation_rate`は直接確率判定へ使用するため`0.0 <= activation_rate <= 1.0`だけを許可する.
 * 発動条件で具体値を使用しない場合に, その値をゲーム効果へ流用しない.
 * 同一Characterに同一AbilityEffectIDが複数装備可能になるような前提をMasterData生成側で作らない.
 
@@ -238,6 +239,7 @@ Characterが参照するSkill / Ability / Tacticsの存在確認は4系統をす
 * `TacticsBattleSpecialType × TacticsTarget × TacticsBattleSpecialTrigger × TacticsEndType × TacticsUseCondition × 非0Parameters`は「[タクティクス仕様のBattle Special MasterData組み合わせ規則](../../specification/game/tactics.md#battle-special-masterdata組み合わせ規則)」の表と完全一致することを必須とする. 表にない組み合わせ, 許可されていないParameterの非0値, EndType/UseCondition不一致は生成エラーとする.
 * `ERASE`等の真偽挙動だけで成立するTypeは表で許可Parameterが「なし」とされているため, 全Parameterを0とする.
 * `TacticsMasterData.use_condition`が有効な`TacticsUseCondition`である. `RESURRECTION`を1件でも含むTacticsは`ALL_ANNIHILATED`, 含まないTacticsは`NONE`とする.
+* `REVIVE` / `RESURRECTION`で使用する`TacticsBattleSpecialParameters.revive_rate`は直接確率判定へ使用するため`0.0 <= revive_rate <= 1.0`だけを許可する.
 
 具体的な数値式が仕様上未確定の効果について, Pipeline側で独自の値変換を行わない.
 
