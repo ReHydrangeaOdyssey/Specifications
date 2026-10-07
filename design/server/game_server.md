@@ -64,9 +64,9 @@
 
 `GetGameServerCapacity`
 
-* 現在の`GameServerInstanceID`, 新規騎士団戦割当可否, 所有中騎士団戦数, 新規割当可能な騎士団戦数, 騎士団戦に使用していない空き専用スレッド数を返す.
+* 現在の`GameServerInstanceID`, 新規騎士団戦割当可否, 所有中騎士団戦数, 新規割当可能な騎士団戦数, 騎士団戦に使用していない空き専用スレッド数, 騎士団戦専用スレッド総数を返す.
 * 騎士団戦処理容量は`専用スレッド数 * 16`件とし, `AvailableGuildBattleCount = 処理容量 - 所有中のscheduled・in_progress・resolving騎士団戦数`で求める. 計算結果が0未満になる場合は0とする. `preload_failed`および`completed`は処理容量へ含めない.
-* `AvailableGuildBattleThreadCount`は, 騎士団戦専用スレッドのうち`scheduled`・`in_progress`・`resolving`の騎士団戦を1件も担当していないスレッド数とする. 1件以上を担当しているスレッドは, そのスレッドに残Capacityがあっても空きスレッド数には含めない.
+* `AvailableGuildBattleThreadCount`は, 騎士団戦専用スレッドのうち`scheduled`・`in_progress`・`resolving`の騎士団戦を1件も担当していないスレッド数とする. 1件以上を担当しているスレッドは, そのスレッドに残Capacityがあっても空きスレッド数には含めない. `TotalGuildBattleThreadCount`は当該GameServerの騎士団戦専用スレッド総数を返す.
 * `draining`状態では新規割当可能数を0として返す.
 * 本APIは状態参照だけを行い, 騎士団戦を割り当てない.
 * 要求・レスポンスは「[API Payload](api_payload.md)」の`GetGameServerCapacityRequest` / `GetGameServerCapacityResponse`を参照する.

@@ -66,7 +66,7 @@ Database, Public API Server, Private API Server, GameServer, GuildBattleCoordina
 * GuildBattle編成登録, Preload, 参加, 出撃, Tactics, Item, 治療, 復活, 終了.
 * `membership_locked`中のGuild所属変更拒否.
 * GameServer割当とPreload開始.
-* 複数の割当候補では`AvailableGuildBattleThreadCount`が多いGameServerを負荷判定で優先し, 同数の場合にCapacity使用率比較へ進む.
+* 複数の割当候補では`AvailableGuildBattleThreadCount`が多いGameServerを負荷判定で優先し, 同数の場合は`(TotalGuildBattleThreadCount - AvailableGuildBattleThreadCount) / TotalGuildBattleThreadCount`が低い順, `LastAssignedAt`が古い順, `GameServerInstanceID`昇順で決定する.
 * `PRELOAD_FAILED`への遷移.
 * `RetryPreloadFailedGuildBattle`による同一ペア再Preload.
 * `RematchPreloadFailedGuildBattles`による再抽籤後の再割当.
@@ -162,7 +162,8 @@ GuildBattle Replayは「[リプレイProtocol Buffers定義](../system/guild_bat
 
 * Skill発動成功時は通常攻撃ダメージフローへ入らずSkill用処理へ分岐する.
 * 攻撃SkillはSkillダメージ計算フローを使用する.
-* Skillダメージには最大99,999の上限を適用しない.
+* `SKILL_DAMAGE_VALUE_TYPE_RATE`には最大99,999の上限を適用せず, `SKILL_DAMAGE_VALUE_TYPE_FIXED`はABILITY加算後も250以上99,999以下へクランプする.
+* 回復Skillは`can_heal_incapacitated=true`ではHP0だけ, `false`ではHP1以上だけを対象候補とし, この絞り込みをTargetRange・単体優先条件より先に行うことを確認する.
 * 対象ごと, HITごとにダメージ乱数を個別取得する.
 * ランダム攻撃では候補リストをFormation内部番号順で固定し, 各HITで対象を削除しない.
 * BUFF / DEBUFFの最大発動回数1を保持する.
@@ -181,8 +182,9 @@ GuildBattle Replayは「[リプレイProtocol Buffers定義](../system/guild_bat
 * `ABILITY_EFFECT_DAMAGE_INCREASE`は通常攻撃だけへ適用し, `correction_value`乗算後に通常攻撃最大ダメージ上限99,999を適用する.
 * `ABILITY_EFFECT_COVER`は攻撃対象リスト取得後に候補をフォーメーション内部番号順で抽選し, 発動時は元対象の計算値を使用したダメージを対象数分だけかばうキャラクターへ反映する.
 * `ABILITY_EFFECT_DRAW_AGGRO`は攻撃対象リスト取得前に候補をフォーメーション内部番号順へ並べ, 1キャラクターだけを抽選してその候補だけ発動率判定する. 不成立時に再抽選しない.
-* `ABILITY_EFFECT_FIXED_DAMAGE_INCREASE`は`SKILL_DAMAGE_VALUE_TYPE_FIXED`の攻撃スキルだけへ加算し, RATE型へ適用しない.
-* `ABILITY_EFFECT_HEAL`の回復量式が`最大HP * (1 + アビリティの回復割合)`になることを確認する. 適用対象と戦闘フロー上の適用位置は未定義のため, その部分の統合テスト期待値は固定しない.
+* `ABILITY_EFFECT_FIXED_DAMAGE_INCREASE`は`SKILL_DAMAGE_VALUE_TYPE_FIXED`の攻撃スキルだけへ加算し, RATE型へ適用しない. 固定ダメージは加算後も250以上99,999以下へクランプする.
+* Ability MasterDataは`AbilityEffectID × AbilityConditionID × AbilityTarget`許可表に一致し, 表外の組み合わせをPipelineが拒否することを確認する. 戦闘不能味方人数連動補正は0～4人のMasterData entryを現在人数に応じて動的参照する.
+* `ABILITY_EFFECT_HEAL`の算出回復量が`最大HP * (1 + アビリティの回復割合)`になり, 回復量自体を最大HPで上限クランプした後に`AbilityTarget`へ適用されることを確認する. `EVERY_N_TURNS`では`turn_timing`, `INCAPACITATED`では戦闘不能確定時に発動し, 回復後HPも最大HPを超えないことを確認する.
 * 攻撃スキルは回避, 反撃, COVER, DRAW_AGGRO, 追撃のAbility処理を通らない.
 * ELYSIONの回避効果はAbility回避判定後に通常攻撃だけへ適用し, スキルには適用しない.
 
@@ -193,17 +195,19 @@ GuildBattle Replayは「[リプレイProtocol Buffers定義](../system/guild_bat
 * 同一系列の効果値を加算し, 異なる系列の系列内合計を乗算する.
 * 速度補正だけは系列に関係なく全効果値を加算する.
 * `TACTICS_EFFECT_BATTLE_SPECIAL`の数値パラメータは`TacticsBattleSpecialType`を系列として統合する.
+* Battle Special MasterDataはTypeごとの`Target / Trigger / EndType / UseCondition / 非0Parameter`許可表に完全一致し, 許可されていない組み合わせをPipelineが拒否することを確認する.
+* 継続Tactics効果は発動時の`source_player_id` / `source_guild_id`を保持し, `GetGuildBattleStatus.ActiveTacticsEffects`でも同じ値が返ることを確認する.
 * `TACTICS_BATTLE_SPECIAL_HEAL`は`hp_recovery_value`をそのまま加算し, 回復後HPを0以上最大HP以下へクランプする.
 * `TACTICS_BATTLE_SPECIAL_REVIVE`および`TACTICS_BATTLE_SPECIAL_RESURRECTION`は対象キャラクターごとに1回復帰判定し, 成功時に現在HPを最大HPと同じ値へ設定する.
 * `TACTICS_USE_CONDITION_ALL_ANNIHILATED`を満たさないRESURRECTION要求は使用不可とし, TP・使用回数・RequestSequenceを変更しない.
 * ランダム要素を持つタクティクスは騎士団戦RandomからSeedを1回生成し, Seedから生成したタクティクス固有Randomだけで固有ランダム結果を決定する. 同じSeedと同じ対象順序を与えたClient/Serverで結果が一致することを確認する. ランダム要素なしではSeed=0を確認する.
 * HIDE / PROVOKE / CLAUSTRUMが被弾重み式へ反映され, NaN・Infinity・-Infinityと最小/最大clampが仕様式どおりになることを確認する.
 * 強襲無効効果中は通常の`CB発生?`判定を行わず殲滅へ進む.
-* 出撃成功ごとにPlayerの`attack_count`を1加算し, 今回取得スコアを`acquired_score`へ加算する. 開戦時は双方0であることを確認する.
+* 開戦時にPlayerの`attack_count=0`, `acquired_score=0`であること, 出撃実行確定時に`attack_count`を先に1加算して当該出撃のEXTERLIZE補正へ使用し, スコア確定後に今回取得スコアを`acquired_score`へ加算することを確認する.
 * Battle SpecialのBP/TP回復は出撃完了時にTrigger条件成立を確認して反映し, 最大値へクランプする.
 * Public APIへ現在HPを整数で返す場合は小数点以下を切り捨てる.
 
-`TACTICS_BATTLE_SPECIAL_EXTERLIZE.parameters.attack_count_score`を`attack_count` / `acquired_score`へ適用する具体式と, `REVIVE` / `RESURRECTION`の対象キャラクター判定順序は未定義のため, その部分の期待値は固定しない.
+`TACTICS_BATTLE_SPECIAL_EXTERLIZE`は加算後の`attack_count * attack_count_score`を当該出撃のバトル獲得スコア補正として使用し, 初回成功出撃では`attack_count=1`になることを確認する. `REVIVE` / `RESURRECTION`は対象を`FormationSlotID`昇順へ並べた順で同一Seedの乱数を消費し, Client/Serverで同一結果になることを確認する.
 
 ## Arenaテスト
 

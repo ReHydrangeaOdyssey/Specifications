@@ -438,7 +438,7 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 
 ### GetGuildBattleStatusResponse
 
-本Responseは動的状態だけを返す. CharacterID, Follower, MainSkill, Ability, FormationID等の静的編成構成はClientがローカル保持した値を使用する.
+本Responseは動的状態だけを返す. CharacterID, Follower, MainSkill, Ability, FormationID等の静的編成構成はClientがローカル保持した値を使用する. `ActiveTacticsEffects`は当該騎士団戦で現在有効な継続効果を返し, `source_player_id` / `source_guild_id`と`target`の組み合わせでClientが発動元基準の対象を判定する.
 
 
 | 項目 | 型 | 内容 |
@@ -454,7 +454,7 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 | ReviveRemainingTime | `DurationSeconds` | 復活中の残り待機時間. 復活中以外は0 |
 | SortieWaitRemainingTime | `DurationSeconds` | 出撃待機タイマーの残り時間 |
 | Tactics | `GuildBattleTacticsStatus[]` | 使用可能タクティクスと残り使用回数 |
-| ActiveTacticsEffects | `TacticsActiveEffectState[]` | 現在有効な継続タクティクス効果 |
+| ActiveTacticsEffects | `TacticsActiveEffectState[]` | 現在有効な継続タクティクス効果. 各要素は発動元PlayerID/GuildIDを保持する |
 | Items | `GuildBattleItemStatus[]` | 所持アイテムと現在個数 |
 | AllyScore | `Score` | 所属騎士団の現在スコア |
 | EnemyScore | `Score` | 相手騎士団の現在スコア |
@@ -844,6 +844,7 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 | OwnedGuildBattleCount | `Count` | 現在所有している未完了騎士団戦数 |
 | AvailableGuildBattleCount | `Count` | 現在追加で割当可能な騎士団戦数. `AcceptNewGuildBattle=false`の場合0 |
 | AvailableGuildBattleThreadCount | `Count` | 現在1件も騎士団戦を担当していない騎士団戦専用スレッド数 |
+| TotalGuildBattleThreadCount | `Count` | 騎士団戦専用スレッド総数. Capacity使用率の分母 |
 
 ### StartGuildBattlePreloadRequest
 

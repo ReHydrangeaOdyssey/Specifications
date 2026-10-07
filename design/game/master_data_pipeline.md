@@ -138,8 +138,8 @@ Characterが参照するSkill / Ability / Tacticsの存在確認は4系統をす
 最低限以下を確認する.
 
 * `target_side`が有効な`SkillTargetSide`である.
-* `SKILL_EFFECT_ATTACK`では`damage_value_type`が有効な`SkillDamageValueType`である.
-* `SKILL_EFFECT_HEAL`では`effect_data.heal`を使用し, `correction_value`を回復量として使用しない.
+* `SKILL_EFFECT_ATTACK`では`damage_value_type`が有効な`SkillDamageValueType`である. `SKILL_DAMAGE_VALUE_TYPE_FIXED`では`correction_value`を250以上99,999以下とし, 範囲外は生成エラーとする.
+* `SKILL_EFFECT_HEAL`では`effect_data.heal`を使用し, `correction_value`を回復量として使用しない. `can_heal_incapacitated=true`はHP0専用回復, `false`はHP1以上専用回復として扱う.
 * 状態異常付与Skillでは`effect_data.status_abnormality`を使用する.
 * BUFF / DEBUFFでは`effect_data.stat_correction`を使用する.
 * Random AttackでHit数が必要な場合は`effect_data.random_attack.hit_count`を使用する.
@@ -179,6 +179,16 @@ Characterが参照するSkill / Ability / Tacticsの存在確認は4系統をす
 | `ABILITY_EFFECT_COVER` | `no_parameter` |
 | `ABILITY_EFFECT_DRAW_AGGRO` | `no_parameter` |
 | `ABILITY_EFFECT_PURSUIT` | `no_parameter` |
+| `ABILITY_EFFECT_DEFENSE_IGNORE` | `no_parameter` |
+| `ABILITY_EFFECT_TARGET_HP_LOW_PRIORITY` | `no_parameter` |
+| `ABILITY_EFFECT_TARGET_DEFENSE_DOWN_PRIORITY` | `no_parameter` |
+| `ABILITY_EFFECT_DRAW_AGGRO_IGNORE` | `no_parameter` |
+| `ABILITY_EFFECT_AVOIDANCE_COUNTER` | `no_parameter` |
+| `ABILITY_EFFECT_SURVIVE_AT_ONE_HP` | `no_parameter` |
+| `ABILITY_EFFECT_INCAPACITATED_ALLY_COUNT_STAT_CORRECTION` | `incapacitated_ally_count_stat_correction` |
+| `ABILITY_EFFECT_CASTLE_BREAK_DAMAGE_INCREASE` | `correction` |
+
+`AbilityEffectID × AbilityConditionID × AbilityTarget`は「[アビリティ仕様](../../specification/game/ability.md#abilityeffectid-abilityconditionid-abilitytarget)」の許可表だけを許可し, 表にない組み合わせは生成エラーとする.
 
 追加Validationは以下とする.
 
@@ -186,7 +196,10 @@ Characterが参照するSkill / Ability / Tacticsの存在確認は4系統をす
 * `ABILITY_EFFECT_AVOIDANCE`で状態異常回避を表す場合は`status`を設定する.
 * `ABILITY_EFFECT_STATUS_ABNORMALITY_ATTACK`では`status`必須とする.
 * `ABILITY_CONDITION_EVERY_N_TURNS`では`condition_value`と`turn_timing`を使用する.
-* `ABILITY_CONDITION_HP_AT_OR_BELOW_THRESHOLD`では`condition_value`を最大HP割合の整数Percentとして扱う.
+* `ABILITY_CONDITION_HP_AT_OR_BELOW_THRESHOLD`, `ABILITY_CONDITION_ALLY_HP_AT_OR_BELOW_THRESHOLD_ATTACKED`, `ABILITY_CONDITION_TARGET_HP_AT_OR_BELOW_THRESHOLD_NORMAL_ATTACK`では`condition_value`を最大HP割合の整数Percentとして扱い, 1～100だけを許可する.
+* `ABILITY_EFFECT_DAMAGE_INCREASE × ABILITY_CONDITION_SINGLE_TARGET_NORMAL_ATTACK`は`correction.correction_value=2.0`を必須とする.
+* `ABILITY_EFFECT_CASTLE_BREAK_DAMAGE_INCREASE`は`correction.correction_value=2.0`を必須とする.
+* `ABILITY_EFFECT_INCAPACITATED_ALLY_COUNT_STAT_CORRECTION`は`incapacitated_ally_count=0,1,2,3,4`を各1件必須とし, 重複・欠落を生成エラーとする. 攻撃補正を使用するAbilityでは`attack`, 防御補正を使用するAbilityでは`defense`が人数増加に対して単調非減少であることを確認する. 未使用側の値は0とする.
 * 発動条件で具体値を使用しない場合に, その値をゲーム効果へ流用しない.
 * 同一Characterに同一AbilityEffectIDが複数装備可能になるような前提をMasterData生成側で作らない.
 
@@ -221,13 +234,10 @@ Characterが参照するSkill / Ability / Tacticsの存在確認は4系統をす
 ### Battle Special
 
 * `special_type`が有効な`TacticsBattleSpecialType`である.
-* Battle Specialの効果対象は外側の`TacticsEffectData.target`だけを使用し, 有効な`TacticsTarget`である. Battle Special専用の別Target値は保持しない.
-* `trigger`が有効な`TacticsBattleSpecialTrigger`である.
-* 使用しないParameterは0とする.
-* `ERASE`等の真偽挙動だけで成立するTypeに不要な数値を必須化しない.
-
-* `TacticsMasterData.use_condition`が有効な`TacticsUseCondition`である.
-* `TACTICS_BATTLE_SPECIAL_RESURRECTION`を含むタクティクスは`TACTICS_USE_CONDITION_ALL_ANNIHILATED`を設定する.
+* Battle Specialの効果対象は外側の`TacticsEffectData.target`だけを使用し, Battle Special専用の別Target値は保持しない.
+* `TacticsBattleSpecialType × TacticsTarget × TacticsBattleSpecialTrigger × TacticsEndType × TacticsUseCondition × 非0Parameters`は「[タクティクス仕様のBattle Special MasterData組み合わせ規則](../../specification/game/tactics.md#battle-special-masterdata組み合わせ規則)」の表と完全一致することを必須とする. 表にない組み合わせ, 許可されていないParameterの非0値, EndType/UseCondition不一致は生成エラーとする.
+* `ERASE`等の真偽挙動だけで成立するTypeは表で許可Parameterが「なし」とされているため, 全Parameterを0とする.
+* `TacticsMasterData.use_condition`が有効な`TacticsUseCondition`である. `RESURRECTION`を1件でも含むTacticsは`ALL_ANNIHILATED`, 含まないTacticsは`NONE`とする.
 
 具体的な数値式が仕様上未確定の効果について, Pipeline側で独自の値変換を行わない.
 

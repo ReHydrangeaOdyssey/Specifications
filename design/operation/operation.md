@@ -37,7 +37,7 @@
 | Source IP Rate Limit閾値 | 認証系合計20 requests/min/IP, burst 5 | `CreateAccount`と`Login`の合計 |
 | Recovery領域 | 2 GiB / 1,000 files / GameServer Instance | `/var/lib/game-server/recovery` |
 
-GameServer割当候補の「負荷判定」は, `GetGameServerCapacityResponse.AvailableGuildBattleThreadCount`で返す「騎士団戦に使用していない空き専用スレッド数」を使用する. 空き専用スレッド数が多い候補を優先し, 同数の場合は次の`Capacity使用率`比較へ進む. `Capacity使用率`はGameServerが返すCapacity情報に基づく比較項目とする.
+GameServer割当候補の「負荷判定」は, `GetGameServerCapacityResponse.AvailableGuildBattleThreadCount`で返す「騎士団戦に使用していない空き専用スレッド数」を使用する. 空き専用スレッド数が多い候補を優先し, 同数の場合は次の`Capacity使用率`比較へ進む. `Capacity使用率 = (TotalGuildBattleThreadCount - AvailableGuildBattleThreadCount) / TotalGuildBattleThreadCount`とし, 低い候補を優先する. さらに同値の場合はGuildBattleCoordinatorがInstanceごとに保持する`LastAssignedAt`が古い候補, さらに同値の場合は`GameServerInstanceID`昇順を優先する. `LastAssignedAt`はCoordinatorが新規割当成功を確認したUNIX epochからの経過マイクロ秒で保持し, Coordinator起動後に未割当の0は最も古い値として扱う.
 
 ## 運営確認に使用する識別子
 

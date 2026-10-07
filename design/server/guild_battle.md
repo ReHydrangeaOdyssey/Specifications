@@ -140,7 +140,7 @@ sequenceDiagram
 
     loop 検出したready GameServer
         GuildBattleCoordinator->>GameServer: GetGameServerCapacity
-        GameServer-->>GuildBattleCoordinator: GameServerInstanceID, AcceptNewGuildBattle, AvailableGuildBattleCount
+        GameServer-->>GuildBattleCoordinator: GameServerInstanceID, AcceptNewGuildBattle, AvailableGuildBattleCount, AvailableGuildBattleThreadCount, TotalGuildBattleThreadCount
     end
 
     alt 空きGameServerあり
@@ -263,6 +263,8 @@ sequenceDiagram
         GameServer ->> GameServer: 出撃可否チェック
         GameServer ->> GameServer: 騎士団戦全体Sequence加算
         GameServer ->> GameServer: 相手PlayerID候補をPlayerID昇順, 相手Character候補を編成ID昇順で構築して出撃内容抽選
+        GameServer ->> GameServer: GuildBattlePlayerRuntimeState.attack_count += 1
+        GameServer ->> GameServer: 加算後attack_countでEXTERLIZE補正を算出
 
         alt キャッスルブレイク
             GameServer ->> GameServer: キャッスルブレイク処理
@@ -277,7 +279,6 @@ sequenceDiagram
         end
 
         GameServer ->> GameServer: 出撃完了条件を満たすBattle SpecialのBP/TP回復を評価・反映
-        GameServer ->> GameServer: GuildBattlePlayerRuntimeState.attack_count += 1
         GameServer ->> GameServer: GuildBattlePlayerRuntimeState.acquired_score += 今回取得スコア
         GameServer ->> GameServer: チェイン処理
 
@@ -341,7 +342,7 @@ sequenceDiagram
             GameServer->>GameServer: Seed = 0
         end
         GameServer->>GameServer: タクティクス固有効果を適用
-        GameServer->>GameServer: 継続効果はend_type・count_consume_triggerを含むTacticsActiveEffectStateとして保持
+        GameServer->>GameServer: 継続効果はend_type・count_consume_trigger・発動元PlayerID/GuildIDを含むTacticsActiveEffectStateとして保持
         GameServer->>GameServer: 成功した要求のRequestSequenceを1加算
         GameServer-->>PublicAPIServer: UseTactics(Seed)
         PublicAPIServer-->>Client: UseTactics(Seed)
@@ -356,7 +357,9 @@ sequenceDiagram
     Client->>Client: ランダム要素ありの場合はSeedからRandomを生成して同じランダム結果を再現
 ```
 
-`TACTICS_USE_CONDITION_ALL_ANNIHILATED`を満たさない要求は`API_ERROR_TACTICS_NOT_AVAILABLE`として拒否し, TP・使用可能回数・RequestSequenceを変更しない. `REVIVE` / `RESURRECTION`は対象キャラクターごとにタクティクス固有Randomを用いて1回ずつ確率判定する. 対象キャラクターの判定順序は現時点の仕様では未定義とし, 実装側で任意の順序を固定しない.
+継続効果を生成する場合は`TacticsActiveEffectState.source_player_id`へ使用者PlayerID, `source_guild_id`へ使用成立時点の所属GuildIDを保存し, `TacticsTarget`の相対対象解決に使用する.
+
+`TACTICS_USE_CONDITION_ALL_ANNIHILATED`を満たさない要求は`API_ERROR_TACTICS_NOT_AVAILABLE`として拒否し, TP・使用可能回数・RequestSequenceを変更しない. `REVIVE` / `RESURRECTION`は対象キャラクターを`FormationSlotID`（編成ID）の小さい順に並べ, その順序でタクティクス固有Randomを用いて1回ずつ確率判定する.
 
 ##### 回復アイテム使用時
 

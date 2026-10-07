@@ -57,7 +57,7 @@ flowchart TD;
 
 強襲無効効果は通常の確率による強襲キャッスルブレイク判定の直前だけで評価する. `CheckAssaultDisable=Yes`ではキャッスルブレイクへ進まず殲滅へ進む. CBC発生中, CBC発生条件成立, キリ番の確定キャッスルブレイクは従来どおり先に判定する.
 
-GameServerは各Playerについて騎士団戦単位の`GuildBattlePlayerRuntimeState`を保持し, 開戦時に`attack_count=0`, `acquired_score=0`で初期化する. 出撃が成功して結果スコアが確定した後, `attack_count`を1増加し, 当該出撃でPlayerが取得したスコアを`acquired_score`へ加算する.
+GameServerは各Playerについて騎士団戦単位の`GuildBattlePlayerRuntimeState`を保持し, 開戦時に`attack_count=0`, `acquired_score=0`で初期化する. 出撃可否・RequestSequence検証を通過して当該出撃の実行が確定した時点で`attack_count`を1増加し, 加算後の値を当該出撃のEXTERLIZE補正へ使用する. 結果スコア確定後, 当該出撃でPlayerが取得したスコアを`acquired_score`へ加算する.
 
 ## 遷移
 

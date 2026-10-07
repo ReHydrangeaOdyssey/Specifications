@@ -254,7 +254,7 @@
 
 ### 殲滅スコア
 
-各Playerは騎士団戦ごとに`attack_count`と`acquired_score`を保持し, どちらも開戦時に0で初期化する. 殲滅またはキャッスルブレイクとして出撃処理が成功した場合, 出撃完了時に`attack_count`を1加算し, 当該出撃で当該Playerが取得したスコアを`acquired_score`へ加算する. `TACTICS_BATTLE_SPECIAL_EXTERLIZE.parameters.attack_count_score`を`attack_count`および`acquired_score`へ適用する具体的なスコア式は現時点では未定義とする.
+各Playerは騎士団戦ごとに`attack_count`と`acquired_score`を保持し, どちらも開戦時に0で初期化する. 出撃要求がGameServerの出撃可否・RequestSequence検証を通過し, 殲滅またはキャッスルブレイクとして当該出撃を実行することが確定した時点で`attack_count`を1加算する. 当該出撃のEXTERLIZE補正は加算後の`attack_count * parameters.attack_count_score`で求める. 当該出撃の取得スコア確定後にその値を`acquired_score`へ加算する. これにより初回の成功出撃は`attack_count=1`としてEXTERLIZE補正を計算する.
 
 最終結果が「[pt](guild_battle.md#事前用語説明)」となる.
 オーバーキルによるダメージは含まれない.
@@ -266,7 +266,8 @@
 撃破ボーナス = HPが0になった敵キャラクター数 * 500
 
 出撃補正 = 「出撃」時の選択「突」属性数 * 0.01
-タクティクス補正 = `TACTICS_EFFECT_SCORE_CORRECTION`, 適用対象となる`TACTICS_EFFECT_BATTLE_SPECIAL.parameters.battle_score`, `parameters.guild_battle_score`を「[タクティクス](tactics.md#効果値の統合規則)」に従って系列統合した値
+EXTERLIZE補正 = attack_count * 適用対象となる`TACTICS_BATTLE_SPECIAL_EXTERLIZE.parameters.attack_count_score`
+タクティクス補正 = `TACTICS_EFFECT_SCORE_CORRECTION`, 適用対象となる`TACTICS_EFFECT_BATTLE_SPECIAL.parameters.battle_score`, `parameters.guild_battle_score`, `EXTERLIZE補正`を「[タクティクス](tactics.md#効果値の統合規則)」に従って系列統合した値
 
 タクティクススコアリミット補正 = `TACTICS_EFFECT_SCORE_LIMIT_CORRECTION`系列の有効な効果値を加算した値
 スコアリミット = 99,999 + タクティクススコアリミット補正
@@ -443,7 +444,7 @@ HPやBP全快時でも「回復状態」にできる条件や終了条件がプ�
 
 #### 制約
 
-状態による使用制限を受けない.
+タクティクスの使用条件を満たしていれば状態による使用制限を受けない.
 
 #### 使用条件
 

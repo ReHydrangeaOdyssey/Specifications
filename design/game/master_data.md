@@ -52,7 +52,7 @@ message SkillStatCorrectionData {
 }
 
 message SkillHealData {
-  bool can_heal_incapacitated = 1; // HP0のキャラクターを回復対象にできる場合true.
+  bool can_heal_incapacitated = 1; // trueの場合はHP0だけ, falseの場合はHP1以上だけを回復対象候補とする.
   float heal_rate = 2; // 対象の最大HPに対する回復割合. 論理型Rate.
 }
 
@@ -99,6 +99,16 @@ message AbilityStatCorrectionData {
   float defense = 2; // 防御に対する補正値. 論理型CorrectionValue.
 }
 
+message AbilityIncapacitatedAllyCountStatCorrectionEntry {
+  uint32 incapacitated_ally_count = 1; // 戦闘不能の味方人数. 0～4.
+  float attack = 2; // 当該人数で自身へ適用する攻撃補正値.
+  float defense = 3; // 当該人数で自身へ適用する防御補正値.
+}
+
+message AbilityIncapacitatedAllyCountStatCorrectionData {
+  repeated AbilityIncapacitatedAllyCountStatCorrectionEntry entries = 1; // 0～4の各人数について1件ずつ保持する.
+}
+
 message AbilityMasterData {
   uint32 id = 1; // アビリティID. 論理型AbilityID.
   string name = 2; // アビリティ名. 論理型Name.
@@ -108,12 +118,14 @@ message AbilityMasterData {
   uint32 max_activation_count = 6; // 1戦闘中に発動可能な最大回数. 論理型Count.
   AbilityActivationConditionData activation_condition = 7; // 発動条件と, 必要な場合の具体値.
   AbilityEffectID effect_id = 8; // アビリティ効果種別. effect_dataの解釈を決定する.
+  AbilityTarget target = 13; // 効果適用対象. 戦闘フロー側で対象を決める効果ではABILITY_TARGET_NONE.
 
   oneof effect_data {
     AbilityCorrectionData correction = 9; // 単一の補正値を実際に使用する効果で使用する.
     AbilityStatusAbnormalityData status_abnormality = 10; // 回避または状態異常攻撃で使用する.
     AbilityStatCorrectionData stat_correction = 11; // 攻撃・防御を同時または個別に補正するバフ・デバフで使用する.
     AbilityNoParameterData no_parameter = 12; // 効果固有値を使用しない効果で使用する.
+    AbilityIncapacitatedAllyCountStatCorrectionData incapacitated_ally_count_stat_correction = 14; // 戦闘不能の味方人数ごとの自身の攻撃/防御補正.
   }
 }
 
@@ -135,6 +147,14 @@ message AbilityMasterData {
 * `ABILITY_EFFECT_COVER`: `no_parameter`を使用し, 効果固有値を持たない.
 * `ABILITY_EFFECT_DRAW_AGGRO`: `no_parameter`を使用し, 効果固有値を持たない.
 * `ABILITY_EFFECT_PURSUIT`: `no_parameter`を使用し, 効果固有値を持たない.
+* `ABILITY_EFFECT_DEFENSE_IGNORE`: `no_parameter`を使用する.
+* `ABILITY_EFFECT_TARGET_HP_LOW_PRIORITY`: `no_parameter`を使用する.
+* `ABILITY_EFFECT_TARGET_DEFENSE_DOWN_PRIORITY`: `no_parameter`を使用する.
+* `ABILITY_EFFECT_DRAW_AGGRO_IGNORE`: `no_parameter`を使用する.
+* `ABILITY_EFFECT_AVOIDANCE_COUNTER`: `no_parameter`を使用する.
+* `ABILITY_EFFECT_SURVIVE_AT_ONE_HP`: `no_parameter`を使用する.
+* `ABILITY_EFFECT_INCAPACITATED_ALLY_COUNT_STAT_CORRECTION`: `incapacitated_ally_count_stat_correction`を使用する.
+* `ABILITY_EFFECT_CASTLE_BREAK_DAMAGE_INCREASE`: `correction`を使用する.
 * 発動条件の具体値は`activation_condition.condition_value`に保持する.
 * `condition_value`と`correction_value`は`AbilityMasterData`直下には保持しない.
 
@@ -196,7 +216,7 @@ Player, Guild, 所属, 役職等の実行時可変データは加工済みマス
 
 単体対象条件が`SKILL_TARGET_CONDITION_STATUS_ABNORMALITY`の場合は, `SkillTargetConditionData.status_abnormality_id`から対象とする具体的な状態異常を特定する.
 回復量はすべて割合で保持し, `SkillHealData.heal_rate`は対象の最大HPに対する割合とする. `SkillEffectID=SKILL_EFFECT_HEAL`では`heal_rate`を使用し, `SkillMasterData.correction_value`は使用しない.
-`SkillMasterData.target_side`で味方パーティ・敵パーティ・自身のどれを対象候補とするかを明示する. `SkillEffectID`と`SkillTargetRange`の許可組み合わせは「[スキル仕様](../../specification/game/skill.md#skilleffectid--skilltargetrange)」を正とする.
+`SkillMasterData.target_side`で味方パーティ・敵パーティ・自身のどれを対象候補とするかを明示する. `SkillEffectID`と`SkillTargetRange`の許可組み合わせは「[スキル仕様](../../specification/game/skill.md#skilleffectid-skilltargetrange)」を正とする.
 攻撃スキルでは`SkillMasterData.damage_value_type`を必須解釈し, `SKILL_DAMAGE_VALUE_TYPE_RATE`では`correction_value`を攻撃力へ乗算する補正値, `SKILL_DAMAGE_VALUE_TYPE_FIXED`では固定ダメージ値として使用する.
 
 ## アビリティ固有データの共有体

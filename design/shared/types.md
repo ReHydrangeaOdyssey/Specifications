@@ -87,7 +87,7 @@
 | `Float32` | `f32` | `float` | `real` | IEEE-754 32bit浮動小数点数 |
 | `Rate` | `f32` | `float` | `real` | 確率/倍率 |
 | `CorrectionValue` | `f32` | `float` | `real` | 補正値 |
-| `ConditionValue` | `u32` | `uint32` | `bigint` | アビリティ発動条件に付随する値. `ABILITY_CONDITION_EVERY_N_TURNS`ではターン数, `ABILITY_CONDITION_HP_AT_OR_BELOW_THRESHOLD`では最大HPに対する整数パーセント値として使用 |
+| `ConditionValue` | `u32` | `uint32` | `bigint` | アビリティ発動条件に付随する値. `ABILITY_CONDITION_EVERY_N_TURNS`ではターン数, `ABILITY_CONDITION_HP_AT_OR_BELOW_THRESHOLD`, `ABILITY_CONDITION_ALLY_HP_AT_OR_BELOW_THRESHOLD_ATTACKED`, `ABILITY_CONDITION_TARGET_HP_AT_OR_BELOW_THRESHOLD_NORMAL_ATTACK`では最大HPに対する整数パーセント値として使用 |
 | `BinaryData` | `Vec<u8>` | `bytes` | `bytea` | バイナリデータ |
 | `JsonData` | `serde_json::Value` | `string` | `jsonb` | UTF-8 JSONデータ. Protocol Buffers上ではJSON文字列として扱う |
 
@@ -242,6 +242,14 @@ enum AbilityEffectID {
   ABILITY_EFFECT_COVER = 10; // かばう効果.
   ABILITY_EFFECT_DRAW_AGGRO = 11; // ひきつけ効果.
   ABILITY_EFFECT_PURSUIT = 12; // 追撃効果.
+  ABILITY_EFFECT_DEFENSE_IGNORE = 13; // 通常攻撃時に対象防御力を無視する.
+  ABILITY_EFFECT_TARGET_HP_LOW_PRIORITY = 14; // 通常攻撃でピンチ状態の敵を優先対象とする.
+  ABILITY_EFFECT_TARGET_DEFENSE_DOWN_PRIORITY = 15; // 通常攻撃で防御力DOWN状態の敵を優先対象とする.
+  ABILITY_EFFECT_DRAW_AGGRO_IGNORE = 16; // 通常攻撃時に敵のひきつけ効果を無視する.
+  ABILITY_EFFECT_AVOIDANCE_COUNTER = 17; // 同一被攻撃イベントで回避と反撃の両方を扱う.
+  ABILITY_EFFECT_SURVIVE_AT_ONE_HP = 18; // 戦闘不能になるダメージを受ける場合にHP1で耐える.
+  ABILITY_EFFECT_INCAPACITATED_ALLY_COUNT_STAT_CORRECTION = 19; // 戦闘不能の味方人数に応じて自身の攻撃力/防御力を補正する.
+  ABILITY_EFFECT_CASTLE_BREAK_DAMAGE_INCREASE = 20; // 騎士団戦のキャッスルブレイクダメージを倍率増加させる.
 }
 ```
 
@@ -365,6 +373,21 @@ enum FormationConditionID {
 }
 ```
 
+### AbilityTarget
+
+`AbilityTarget`はアビリティの効果適用対象を表す. 通常攻撃等の既存戦闘フローが対象を決定する効果では`ABILITY_TARGET_NONE`を使用する.
+
+```proto
+enum AbilityTarget {
+  ABILITY_TARGET_NONE = 0; // 効果対象をAbilityMasterDataでは固定せず, 戦闘フローで決定する.
+  ABILITY_TARGET_SELF = 1; // 発動キャラクター自身.
+  ABILITY_TARGET_ALLY_SINGLE = 2; // 味方単体.
+  ABILITY_TARGET_ALLY_ALL = 3; // 味方全体.
+  ABILITY_TARGET_ENEMY_SINGLE = 4; // 敵単体.
+  ABILITY_TARGET_ENEMY_ALL = 5; // 敵全体.
+}
+```
+
 ### AbilityConditionID
 
 `AbilityConditionID`はアビリティの発動条件を表す.
@@ -376,12 +399,21 @@ enum AbilityConditionID {
   ABILITY_CONDITION_NORMAL_ATTACK = 2; // 通常攻撃時に条件成立.
   ABILITY_CONDITION_EVERY_N_TURNS = 3; // 指定ターン間隔ごとに条件成立.
   ABILITY_CONDITION_ATTACKED = 4; // 被攻撃時に条件成立.
-  ABILITY_CONDITION_HP_AT_OR_BELOW_THRESHOLD = 5; // 指定HP閾値以下で条件成立.
+  ABILITY_CONDITION_HP_AT_OR_BELOW_THRESHOLD = 5; // 自身が指定HP閾値以下で条件成立.
   ABILITY_CONDITION_CASTLE_BREAK = 6; // キャッスルブレイク時に条件成立.
+  ABILITY_CONDITION_HP_FULL_NORMAL_ATTACK = 7; // 自身が最大HPかつ通常攻撃時に条件成立.
+  ABILITY_CONDITION_SINGLE_TARGET_NORMAL_ATTACK = 8; // 通常攻撃の最終攻撃対象が1体の場合に条件成立.
+  ABILITY_CONDITION_SKILL_ATTACK = 9; // 攻撃スキル発動時に条件成立.
+  ABILITY_CONDITION_ALLY_ATTACK = 10; // 自分以外の味方キャラクターの通常攻撃成立時に条件成立.
+  ABILITY_CONDITION_ALLY_HP_AT_OR_BELOW_THRESHOLD_ATTACKED = 11; // 攻撃対象リストに指定HP閾値以下の味方が含まれる場合に条件成立.
+  ABILITY_CONDITION_ENEMY_NORMAL_ATTACK_TARGETING = 12; // 敵の通常攻撃で攻撃対象リストを取得する直前に条件成立.
+  ABILITY_CONDITION_LETHAL_DAMAGE = 13; // ダメージ反映後HPが0以下になる直前に条件成立.
+  ABILITY_CONDITION_STATUS_ABNORMALITY_APPLICATION = 14; // 状態異常付与判定を受ける直前に条件成立.
+  ABILITY_CONDITION_TARGET_HP_AT_OR_BELOW_THRESHOLD_NORMAL_ATTACK = 15; // 指定HP閾値以下の敵が存在する通常攻撃時に条件成立.
 }
 ```
 
-`ABILITY_CONDITION_EVERY_N_TURNS`および`ABILITY_CONDITION_HP_AT_OR_BELOW_THRESHOLD`の具体値は, 加工済みアビリティマスターデータの`AbilityMasterData.activation_condition.condition_value`で保持する.
+`ABILITY_CONDITION_EVERY_N_TURNS`, `ABILITY_CONDITION_HP_AT_OR_BELOW_THRESHOLD`, `ABILITY_CONDITION_ALLY_HP_AT_OR_BELOW_THRESHOLD_ATTACKED`, `ABILITY_CONDITION_TARGET_HP_AT_OR_BELOW_THRESHOLD_NORMAL_ATTACK`の具体値は, 加工済みアビリティマスターデータの`AbilityMasterData.activation_condition.condition_value`で保持する.
 
 ### AbilityTurnTiming
 
@@ -759,6 +791,8 @@ message TacticsActiveEffectState {
   TacticsCountConsumeTrigger count_consume_trigger = 8; // COUNT型効果の残り回数を消費するイベント. COUNT以外では参照しない.
   TacticsEndType end_type = 9; // 継続中効果の終了方式.
   bool erase_consumed = 10; // ERASEが最初の通常攻撃ダメージを0にする効果をすでに消費した場合true. ERASE以外ではfalse.
+  uint64 source_player_id = 11; // この効果を発動したPlayerID.
+  uint64 source_guild_id = 12; // この効果を発動したPlayerが使用時点で所属するGuildID.
 }
 
 ```
@@ -766,7 +800,7 @@ message TacticsActiveEffectState {
 `PartyCharacterStatus`は編成時専用の状態とし, 現在HPを保持しない. `max_hp` / `attack` / `defense`には従者補正だけを適用した値を保持する. パーティランク算出ではこの構造を使用する.
 `SkillBattleState`および`AbilityBattleState`は戦闘中だけ使用する実行時状態とし, Databaseへ永続化しない. `AbilityBattleState`の発動済み管理はAbilityID単位で行い, Effect単位では共有しない.
 `CharacterBattle` の `hp` / `attack` / `defense` は従者等の補正適用後に戦闘計算で使用する値であるため, 戦闘仕様に従い `Float32` とする. プレイヤーへ表示する際の丸めは各仕様書の表示規則に従う. `buff_debuff_state`は`buff_debuff_effect`に含まれるスキル・アビリティ由来のバフ・デバフ有無から更新する. `status_abnormalities`は状態異常ごとの経過ターンおよび毒周期カウントを保持する.
-`TacticsActiveEffectState`は騎士団戦中にGameServerが保持する継続中タクティクス効果の状態とする. `tactics_id`を保持し, 同一タクティクスの再使用と別タクティクス由来の同系列効果を区別する. DURATION型は`expires_at`へ絶対終了時刻を保持し, 現在時刻が`expires_at`以上の場合に無効化して削除する. 残り秒数を定期減算しない. COUNT型では`count_consume_trigger`を使用し, `end_type`に従って終了判定する. `TacticsBattleSpecialData`は`TACTICS_EFFECT_BATTLE_SPECIAL`の具体的な特殊効果を表す.
+`TacticsActiveEffectState`は騎士団戦中にGameServerが保持する継続中タクティクス効果の状態とする. `source_player_id`と`source_guild_id`を保持して相対的な`TacticsTarget`を発動元基準で解決する. `tactics_id`を保持し, 同一タクティクスの再使用と別タクティクス由来の同系列効果を区別する. DURATION型は`expires_at`へ絶対終了時刻を保持し, 現在時刻が`expires_at`以上の場合に無効化して削除する. 残り秒数を定期減算しない. COUNT型では`count_consume_trigger`を使用し, `end_type`に従って終了判定する. `TacticsBattleSpecialData`は`TACTICS_EFFECT_BATTLE_SPECIAL`の具体的な特殊効果を表す.
 
 ## 疑似乱数内部型
 

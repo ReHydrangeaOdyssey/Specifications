@@ -58,7 +58,8 @@ flowchart TD;
 `ABILITY_EFFECT_COVER`は攻撃対象リスト取得後に候補選択と発動判定を1回行い, 発動した場合はその取得済みリストの各対象について対象側の計算値を使用したダメージをかばうキャラクターへ反映する.
 `ABILITY_EFFECT_DRAW_AGGRO`は攻撃対象リスト取得前に候補をフォーメーション内部番号の小さい順に並べ, その候補リストから1キャラクターだけを抽選する. 発動確率判定は選ばれた1キャラクターについてだけ行い, 成立した場合は攻撃範囲の起点を当該キャラクターへ変更してから対象リストを作成する. 不成立時に別候補を再抽選しない.
 `ABILITY_EFFECT_FIXED_DAMAGE_INCREASE`は`SkillMasterData.damage_value_type == SKILL_DAMAGE_VALUE_TYPE_FIXED`の攻撃スキルへ適用し, 固定ダメージへAbilityの`correction_value`を加算する.
-`ABILITY_EFFECT_HEAL`の回復量は`最大HP * (1 + アビリティの回復割合)`で確定している. 適用対象と戦闘フロー上の適用位置は現時点の仕様では未定義のため, その部分だけはフローへ挿入しない.
+`ABILITY_EFFECT_HEAL`は`AbilityMasterData.target`へ適用する. `ABILITY_CONDITION_EVERY_N_TURNS`では`AbilityActivationConditionData.turn_timing`が示す位置で評価し, `ABILITY_CONDITION_INCAPACITATED`では戦闘不能確定時に評価する. `算出回復量 = 最大HP * (1 + アビリティの回復割合)`, `回復量 = min(算出回復量, 最大HP)`とし, `回復後HP = min(現在HP + 回復量, 最大HP)`で反映する.
+`ABILITY_EFFECT_DEFENSE_IGNORE`発動中の通常攻撃では対象防御力を0として通常ダメージ式へ渡す. `ABILITY_EFFECT_DRAW_AGGRO_IGNORE`発動中の通常攻撃では敵側DRAW_AGGROの起点変更を行わない. `ABILITY_EFFECT_SURVIVE_AT_ONE_HP`はHP減算で0以下になる直前に判定し, 成立時はHP1を反映する. `ABILITY_EFFECT_INCAPACITATED_ALLY_COUNT_STAT_CORRECTION`は攻撃力/防御力算出ごとに現在の戦闘不能味方人数entryを参照する.
 
 ```mermaid
 flowchart TD;
@@ -118,7 +119,7 @@ flowchart TD;
 
 ### スキルダメージ計算フロー
 
-攻撃スキルの対象・HITごとに以下を実行する. スキルダメージには99,999の上限を適用しない. 最小ダメージ250の適用はダメージ乱数乗算後に行う.
+攻撃スキルの対象・HITごとに以下を実行する. `SKILL_DAMAGE_VALUE_TYPE_RATE`には99,999の上限を適用しない. `SKILL_DAMAGE_VALUE_TYPE_FIXED`は250以上99,999以下へクランプする. RATE型の最小ダメージ250の適用はダメージ乱数乗算後に行う.
 
 ```mermaid
 flowchart TD;
@@ -135,7 +136,7 @@ flowchart TD;
     RandomDamage[ダメージ = ダメージ * 乱数];
     Min[ダメージ = max ダメージ, 250];
     Fixed[ダメージ = SkillMasterData.correction_value];
-    FixedIncrease[発動したFIXED_DAMAGE_INCREASEのcorrection_valueを加算];
+    FixedIncrease[発動したFIXED_DAMAGE_INCREASEのcorrection_valueを加算し250以上99999以下へクランプ];
     Apply[HP反映時に小数点以下を切り捨てて減算し, HPを0未満にしない];
     End[スキルダメージ計算終了];
 

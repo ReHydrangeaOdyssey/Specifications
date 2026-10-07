@@ -94,7 +94,7 @@
 * `SKILL_DAMAGE_VALUE_TYPE_RATE`: `SkillMasterData.correction_value`を攻撃力へ乗算するスキル補正として使用する.
 * `SKILL_DAMAGE_VALUE_TYPE_FIXED`: `SkillMasterData.correction_value`を固定ダメージ値として使用する. 攻撃力・防御力による補正および`1.0～1.03`のダメージ乱数は適用しない. `ABILITY_EFFECT_FIXED_DAMAGE_INCREASE`が発動した場合はこの固定ダメージ値へ当該アビリティの`correction_value`を加算する.
 
-ダメージの上限はない.
+`SKILL_DAMAGE_VALUE_TYPE_RATE`のダメージ上限はない. `SKILL_DAMAGE_VALUE_TYPE_FIXED`は後述の固定ダメージ規則に従い99,999を上限とする.
 
 ### 割合ダメージ
 
@@ -130,16 +130,19 @@
 固定ダメージ = SkillMasterData.correction_value
 固定ダメージ増加 = 発動したABILITY_EFFECT_FIXED_DAMAGE_INCREASEのAbilityMasterData.effect_data.correction.correction_value
 ダメージ = 固定ダメージ + 固定ダメージ増加
+ダメージ = clamp(ダメージ, 250, 99999)
 ```
 
-固定ダメージでは攻撃力・防御力, 最小ダメージ250, `1.0～1.03`のダメージ乱数を使用しない.
+`SKILL_DAMAGE_VALUE_TYPE_FIXED`の`SkillMasterData.correction_value`は250以上99,999以下とする. `ABILITY_EFFECT_FIXED_DAMAGE_INCREASE`適用後も固定ダメージは250以上99,999以下へクランプする.
+固定ダメージでは攻撃力・防御力および`1.0～1.03`のダメージ乱数を使用しない.
 
 ## 効果
 
 * バフ, デバフスキルの効果値は加算する.
 * 回復時は最大HPを超えて回復しない.
-* HP0のキャラクターは回復しない.
-  - ただし, HP0から回復させるスキルを除外する.
+* `SkillHealData.can_heal_incapacitated=false`の回復スキルはHP1以上のキャラクターだけを対象候補とし, HP0のキャラクターを対象候補へ含めない.
+* `SkillHealData.can_heal_incapacitated=true`の回復スキルはHP0のキャラクターだけを対象候補とし, HP1以上のキャラクターを対象候補へ含めない. HP0から回復させるスキルはこの方式だけを使用する.
+* HP0/HP1以上による候補絞り込みは`SkillTargetSide`で陣営候補を作成した直後, `SkillTargetRange`および単体優先条件を評価する前に行う.
 * 回復量はすべて割合計算とし, マスターデータの回復割合を対象の最大HPへ乗算して求める.
 
 

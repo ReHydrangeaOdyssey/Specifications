@@ -192,6 +192,65 @@ Battle Specialの効果対象は通常タクティクスと同じ`TacticsTarget`
 * 強襲キャッスルブレイク時.
 * 迎撃（被弾）時.
 
+### Battle Special MasterData組み合わせ規則
+
+以下を`TacticsBattleSpecialType × TacticsTarget × TacticsBattleSpecialTrigger × TacticsEndType × TacticsUseCondition × Parameters`の許可組み合わせの正本とする. `TacticsUseCondition`はTactics単位の値であるため, `RESURRECTION`を1件でも含むTactics全体を`ALL_ANNIHILATED`, 含まないTactics全体を`NONE`とする. 表にない組み合わせはMasterData不正とする. `DURATION/COUNT`は`TACTICS_END_TYPE_DURATION`または`TACTICS_END_TYPE_COUNT`のいずれかを表す. 「なし」は該当数値Parameterを使用せず, `special_type`固有の真偽挙動だけを使用することを表す. 表に記載していないParameterは0必須とする.
+
+| SpecialType | Target | Trigger | EndType | UseCondition要件 | 非0を許可するParameters |
+|---|---|---|---|---|---|
+| `ACCELERATOR` | `SELF_PARTY` | `BATTLE` | DURATION/COUNT | - | `speed` |
+| `ASSAULT` | `SELF_PARTY` | `BATTLE` | DURATION/COUNT | - | `attack` |
+| `ERASE` | `SELF_PARTY` | `INTERCEPTION` | DURATION/COUNT | - | なし |
+| `ACE` | `SELF_PARTY` | `BATTLE` | DURATION/COUNT | - | `attack`, `defense` |
+| `EXTERLIZE` | `SELF_PARTY` | `BATTLE` | DURATION/COUNT | - | `attack_count_score` |
+| `EX_DRIVE` | `SELF_PARTY` | `CASTLE_BREAK` | DURATION/COUNT | - | `castle_break_score` |
+| `EDGE_NOTE` | `SELF_PARTY` | `CASTLE_BREAK` | DURATION/COUNT | - | `castle_break_score`, `bp_recovery` |
+| `ELYSION` | `SELF_PARTY` | `BATTLE` | DURATION/COUNT | - | `attack` |
+| `ENDER_BREAK` | `SELF_PARTY` | `NONE` | DURATION/COUNT | - | `guild_battle_score`, `castle_break_score_limit` |
+| `ORACLE` | `SELF_PARTY` | `BATTLE` | DURATION/COUNT | - | `skill_activation_rate` |
+| `ORATORIO` | `SELF_PARTY` | `BATTLE` | DURATION/COUNT | - | `attack`, `skill_activation_rate` |
+| `CURSE` | `ENEMY_GUILD` | `BATTLE` | DURATION/COUNT | - | `skill_activation_rate` |
+| `COUNTER` | `SELF_PARTY` | `INTERCEPTION` | DURATION/COUNT | - | `attack`, `defense` |
+| `CASTLE_WEAKNESS` | `ENEMY_GUILD` | `NONE` | DURATION/COUNT | - | `castle_level` |
+| `CASTLE_VEIL` | `ALLY_GUILD` | `NONE` | DURATION/COUNT | - | `castle_level` |
+| `CLAUSTRUM` | `SELF_PARTY` | `INTERCEPTION` | DURATION/COUNT | - | `hate`, `attack`, `defense` |
+| `GRAVITY_ASSAULT` | `SELF_PARTY` | `BATTLE` | DURATION/COUNT | - | `attack`, `speed` |
+| `CLEVER_NOTE` | `SELF_PARTY` | `ENEMY_ANNIHILATED` | DURATION/COUNT | - | `battle_score`, `tp_recovery` |
+| `JUGGERNAUT` | `SELF_PARTY` | `ENEMY_ANNIHILATED` | DURATION/COUNT | - | `bp_recovery` |
+| `SHADOW` | `SELF_PARTY` | `NONE` | DURATION/COUNT | - | `assault_castle_break_rate` |
+| `STEALTH` | `SELF_PARTY` | `NONE` | DURATION/COUNT | - | `assault_castle_break_rate`, `assault_castle_break_score` |
+| `STREAM` | `SELF_PARTY` | `BATTLE` | DURATION/COUNT | - | `attack`, `speed` |
+| `SLASHER` | `SELF_PARTY` | `CASTLE_BREAK` | DURATION/COUNT | - | `castle_break_score` |
+| `SLOW_RATE` | `OPPONENT_PARTY` | `BATTLE` | DURATION/COUNT | - | `speed` |
+| `TARANTELLA` | `SELF_PARTY` | `BATTLE` | DURATION/COUNT | - | `skill_activation_rate`, `speed` |
+| `DIVINE_ACTIVE` | `SELF_PARTY` | `BATTLE` | DURATION/COUNT | - | `skill_activation_rate`, `max_tp` |
+| `DIVINE_ETOILE` | `SELF_PARTY` | `BATTLE` | DURATION/COUNT | - | `attack`, `defense`, `max_tp` |
+| `DIVINE_THRUST` | `SELF_PARTY` | `BATTLE` | DURATION/COUNT | - | `attack`, `max_tp` |
+| `DIVINE_RAPID` | `SELF_PARTY` | `BATTLE` | DURATION/COUNT | - | `speed`, `max_tp` |
+| `BERSERK` | `SELF_PARTY` | `BATTLE` | DURATION/COUNT | - | `attack`, `defense` |
+| `HIDE` | `SELF_PARTY` | `NONE` | DURATION/COUNT | - | `attack_target_rate` |
+| `PANZER` | `SELF_PARTY` | `BATTLE` | DURATION/COUNT | - | `defense`, `speed` |
+| `HEAL` | `SELF_PARTY` | `NONE` | `ON_ACTIVATION` | - | `hp_recovery_value` |
+| `PHALANX` | `ALLY_GUILD` | `NONE` | DURATION/COUNT | - | `assault_castle_break_rate`, `defense` |
+| `FORCE_OF_WISH` | `ALLY_GUILD` | `NONE` | `ON_ACTIVATION` | - | `bp_recovery` |
+| `FORCE_OF_PLAY` | `ALLY_GUILD` | `NONE` | `ON_ACTIVATION` | - | `tp_recovery` |
+| `FORTRESS` | `ALLY_GUILD` | `BATTLE` | DURATION/COUNT | - | `defense` |
+| `BLITZ` | `SELF_PARTY` | `NONE` | DURATION/COUNT | - | `assault_castle_break_rate`, `assault_castle_break_score` |
+| `PROVOKE` | `SELF_PARTY` | `NONE` | DURATION/COUNT | - | `attack_target_rate` |
+| `POINT_RISE` | `SELF_PARTY` | `NONE` | DURATION/COUNT | - | `guild_battle_score` |
+| `MENACE` | `ENEMY_GUILD` | `BATTLE` | DURATION/COUNT | - | `defense` |
+| `RAMPAGE` | `SELF_PARTY` | `BATTLE` | DURATION/COUNT | - | `battle_score` |
+| `REVIVE` | `SELF_PARTY` | `NONE` | `ON_ACTIVATION` | - | `revive_rate` |
+| `RECONTRACT` | `SELF_PARTY` | `ENEMY_ANNIHILATED` | DURATION/COUNT | - | `bp_recovery`, `tp_recovery` |
+| `RESURRECTION` | `SELF_PARTY` | `NONE` | `ON_ACTIVATION` | `ALL_ANNIHILATED`必須 | `revive_rate` |
+| `RECT_NOTE` | `SELF_PARTY` | `ENEMY_ANNIHILATED` | DURATION/COUNT | - | `bp_recovery` |
+| `WISE_NOTE` | `SELF_PARTY` | `ENEMY_ANNIHILATED` | DURATION/COUNT | - | `battle_score`, `bp_recovery` |
+| `ASSAULT_ORDER` | `ALLY_GUILD` | `BATTLE` | DURATION/COUNT | - | `attack` |
+| `ACE_ORDER` | `ALLY_GUILD` | `BATTLE` | DURATION/COUNT | - | `attack`, `defense` |
+| `SHADOW_ORDER` | `ALLY_GUILD` | `NONE` | DURATION/COUNT | - | `assault_castle_break_rate` |
+
+表中の短縮名はそれぞれ`TACTICS_BATTLE_SPECIAL_*`, `TACTICS_TARGET_*`, `TACTICS_BATTLE_SPECIAL_TRIGGER_*`, `TACTICS_END_TYPE_*`, `TACTICS_USE_CONDITION_*`を省略した表記とする.
+
 ## 効果対象
 
 タクティクスはキャラクター単体を対象とせず, 以下のパーティ単位または騎士団単位を対象とする. 効果対象は`TacticsTarget`で表現する.
@@ -215,14 +274,14 @@ Battle Specialの効果対象は通常タクティクスと同じ`TacticsTarget`
 
 `TACTICS_BATTLE_SPECIAL_HIDE`, `TACTICS_BATTLE_SPECIAL_PROVOKE`, `TACTICS_BATTLE_SPECIAL_CLAUSTRUM`の対象選択補正は「[騎士団戦仕様の被弾確率](guild_battle.md#被弾確率)」で被弾重みへ反映する. HIDEは低下方向, PROVOKEとCLAUSTRUMは上昇方向として扱う.
 
-`TACTICS_BATTLE_SPECIAL_EXTERLIZE`のため, GameServerは各Playerについて騎士団戦単位の`attack_count`と`acquired_score`を保持する. `attack_count`は成功した出撃1回につき1加算し, `acquired_score`はその成功出撃で当該Playerが取得したスコアを加算する. どちらも騎士団戦開始時の初期値は0とする. `attack_count_score`をこれらの値へどの式で適用するかは現時点の仕様では定義しない.
+`TACTICS_BATTLE_SPECIAL_EXTERLIZE`のため, GameServerは各Playerについて騎士団戦単位の`attack_count`と`acquired_score`を保持する. どちらも騎士団戦開始時の初期値は0とする. 出撃要求がGameServerの出撃可否・RequestSequence検証を通過して当該出撃の実行が確定した時点で`attack_count`を1加算し, その出撃のEXTERLIZE補正値を`attack_count * parameters.attack_count_score`で算出してバトル獲得スコアのタクティクス補正系列へ適用する. 当該出撃の取得スコアが確定した後にその値を`acquired_score`へ加算する. 初回の成功出撃は`attack_count=1`として補正を計算する.
 
 ## タクティクス固有乱数
 
 ランダム要素を持つタクティクスの使用が成立した場合, GameServerは当該騎士団戦の現在の疑似乱数生成器から`next_u32()`を1回取得し, `u64`へ拡張した値を当該使用の`Seed`とする. その後`Random::new(Seed)`でタクティクス固有の疑似乱数生成器を生成し, 当該タクティクスのランダム結果にはこの生成器だけを使用する. Clientも`UseTacticsResponse.Seed`から同じ疑似乱数生成器を生成して結果を再現する. ランダム要素を使用しないタクティクスでは`Seed=0`を返す. ランダム要素を使用する場合でも生成値として0は取り得るため, ランダム要素の有無はTactics MasterDataから判定し, `Seed`値だけでは判定しない.
 
 現時点で`UseTactics`成立時にタクティクス固有乱数を使用するBattle Specialは`TACTICS_BATTLE_SPECIAL_REVIVE`と`TACTICS_BATTLE_SPECIAL_RESURRECTION`とする.
-`REVIVE` / `RESURRECTION`は上記タクティクス固有疑似乱数生成器を使用し, 対象キャラクターごとに1回ずつ復帰判定する. 対象キャラクターを判定へ渡す順序は現時点の仕様では未定義とし, 実装側で任意の順序を固定しない.
+`REVIVE` / `RESURRECTION`は上記タクティクス固有疑似乱数生成器を使用し, 対象キャラクターを`FormationSlotID`（編成ID）の小さい順に並べ, その順序で対象キャラクターごとに1回ずつ復帰判定する.
 
 ## 効果時間
 

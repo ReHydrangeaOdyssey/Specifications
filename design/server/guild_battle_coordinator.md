@@ -42,6 +42,9 @@
 * `draining`状態のGameServerへ新しい騎士団戦を割り当てない.
 * 複数の割当候補が存在する場合も各GameServerの`AvailableGuildBattleCount`を超えて割り当てない. 候補間の選択順は運用設定とし, 推奨初期順序を`Ready判定 → 負荷判定 → Capacity使用率 → 最終割当時刻 → InstanceID`とする. 左側の判定・比較を優先し, 同値の場合に次の項目を使用する. GameServer内部の戦闘ロジックには影響させない.
 * 負荷判定は`GetGameServerCapacityResponse.AvailableGuildBattleThreadCount`を使用し, 騎士団戦に使用していない空き専用スレッド数が多いGameServerを優先する. 同数の場合は次の`Capacity使用率`比較へ進む.
+* `Capacity使用率 = 使用中の騎士団戦専用スレッド数 / TotalGuildBattleThreadCount`とし, `使用中の騎士団戦専用スレッド数 = TotalGuildBattleThreadCount - AvailableGuildBattleThreadCount`で求める. 新規割当候補は`AvailableGuildBattleCount > 0`を満たすため, 比較対象の`TotalGuildBattleThreadCount`は0より大きい. Capacity使用率が低いGameServerを優先する.
+* Capacity使用率も同値の場合はCoordinatorが`GameServerInstanceID`ごとに保持する`LastAssignedAt`が古いGameServerを優先する. `LastAssignedAt`は当該Coordinatorが新規割当成功を確認したUNIX epochからの経過マイクロ秒とし, 当該Coordinator起動後に未割当のInstanceは0を保持して最も古い値として扱う.
+* 最終割当時刻も同値の場合は`GameServerInstanceID`を昇順で比較する.
 * 物理Worker NodeのCPU・Memory配置先は`GuildBattleCoordinator`が決定しない. GameServer PodをどのWorker Nodeへ配置するかはKubernetes Schedulerへ任せる.
 
 ## 騎士団戦割当
@@ -50,7 +53,7 @@
 * 空き容量を持つGameServerごとに割当対象`GuildBattleID[]`を選択し, Private APIの`AssignScheduledGuildBattles(GameServerInstanceID, GuildBattleID[])`を実行する.
 * 1回の要求に含める`GuildBattleID[]`件数は対象GameServerから取得した`AvailableGuildBattleCount`以下とする.
 * 1回の割当処理中はPrivate APIで割当成功した件数を当該GameServerの空き容量から直ちに差し引いて管理し, `StartGuildBattlePreload`反映前の容量応答を再利用して処理容量を超過させない.
-* Private APIによる割当成功後の`GUILD_BATTLE.game_server_instance_id`を割当の正本とする.
+* Private APIによる割当成功後の`GUILD_BATTLE.game_server_instance_id`を割当の正本とする. 1件以上の新規割当が成功したGameServerについて, Coordinatorは当該`GameServerInstanceID`の`LastAssignedAt`を現在UNIX時刻へ直ちに更新し, `StartGuildBattlePreload`反映前でも同一サイクル内の後続比較へ使用する.
 * `AssignScheduledGuildBattlesResponse.Battles`に含まれる騎士団戦だけを割当先GameServerへ`StartGuildBattlePreload`で通知する.
 * `StartGuildBattlePreload`は同一`GuildBattleID`について再送可能な冪等処理とする. すでにPreload中またはPreload済みの場合は二重に状態を生成しない.
 * GameServerは`StartGuildBattlePreload`受信時にPrivate APIの`GetGuildBattleAssignment`で自身が所有GameServerであることを確認し, 一致しない騎士団戦を処理しない.
