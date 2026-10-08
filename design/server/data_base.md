@@ -385,10 +385,22 @@ erDiagram
         Count quantity
     }
 
+    PLAYER_ITEM_DAILY_GRANT {
+        PlayerID player_id PK, FK
+        DateTime target_date PK
+        ItemID item_id FK
+        Count quantity
+    }
+
     PLAYER ||--o{ PLAYER_ITEM : owns
     ITEM ||--o{ PLAYER_ITEM : assigned
+    PLAYER ||--o{ PLAYER_ITEM_DAILY_GRANT : receives
+    ITEM ||--o{ PLAYER_ITEM_DAILY_GRANT : grants
 ```
 
+`PLAYER_ITEM_DAILY_GRANT`はBP50回復薬の日次配布実績を保持する. `target_date`は対象JST日付の午前0時に対応する日時を保存する. `(player_id, target_date)`を複合主キーとして同一Playerへの同一日配布を1回に制限する. `item_id`はBP50回復薬に対応する`ITEM.id`, `quantity`は1日当たりの配布数`10`とする. システムダミーPlayerID `0`は配布対象に含めない.
+
+配布を行う場合は, 同一Databaseトランザクション内で当該日付の配布実績が未登録であることを確認し, `PLAYER_ITEM.quantity`へ10を加算（対象の所持数レコードがない場合は数量10で作成）して配布実績を登録する. 同時実行で既に配布実績が存在する場合は二重加算しない. 日次配布の回数制限はJST日付で区別し, 日付変更時に旧実績を削除する必要はない. 配布実行契機・未配布日の扱い, 騎士団戦中のRuntime所持数と絶対数量更新との同期方法は別途定義する.
 
 ### 騎士団戦専用
 

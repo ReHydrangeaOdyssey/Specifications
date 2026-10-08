@@ -319,6 +319,7 @@ GuildNameがBoundary Validationを満たさない場合は`ApiErrorResponse(API_
 - `FormationID`はDatabase固定参照データ`FORMATION`に存在するIDを指定する.
 - 有効な本体`CharacterID`はCharacter MasterDataに存在するIDだけを許可し, 本体キャラクター同士で同一CharacterIDを重複指定できない.
 - `FollowerCharacterID[2]`の予約済み無効値以外の各IDはCharacter MasterDataに存在することを必須とする.
+- 各本体キャラクターについて, 予約済み無効値以外の`FollowerCharacterID`が当該本体`CharacterID`と一致する編成を拒否する. この規則はArena編成とGuildBattle編成の双方に適用する.
 - `AbilityID[2]`の予約済み無効値以外の各IDは, 当該本体キャラクターの`CharacterMasterData.ability_ids`に含まれることを必須とする.
 - 同一本体キャラクターのAbilityスロットでは同一AbilityIDを重複指定できず, さらに同一`AbilityEffectID`を持つAbilityを複数指定できない.
 - `MainSkillID`は, 当該本体キャラクターの`CharacterMasterData.skill_ids`または現在その本体キャラクターへ編成している従者の`CharacterMasterData.skill_ids`のいずれかに含まれることを必須とする.

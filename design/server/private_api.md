@@ -593,6 +593,12 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 
 [API Payload](api_payload.md)の「GetPlayerItemsRequest」「GetPlayerItemsResponse」を参照する.
 
+### BP50回復薬の日次配布
+
+通常PlayerへBP50回復薬をJST日付ごとに10個配布する. Private API Serverは「[アイテム仕様](../../specification/game/item.md#bp50回復薬の定期配布)」および「[Database仕様](data_base.md)」を正として, 対象Player・JST日付の重複配布を防ぐ配布実績の登録と`PLAYER_ITEM`所持数の加算を同一Databaseトランザクションで行う. システムダミーPlayerID `0`には配布しない.
+
+配布処理を呼び出す契機・API名/ルート・未配布日の扱いは未確定とする. `UpdatePlayerItem`は既存どおり更新後の絶対所持数を保存する処理であり, 日次配布と騎士団戦中のアイテム使用が重なる場合の整合方式は別途確定する.
+
 ### プレイヤー所持アイテム更新
 
 #### メソッド名
