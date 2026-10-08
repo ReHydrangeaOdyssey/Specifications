@@ -188,7 +188,7 @@ Characterが参照するSkill / Ability / Tacticsの存在確認は4系統をす
 | `ABILITY_EFFECT_INCAPACITATED_ALLY_COUNT_STAT_CORRECTION` | `incapacitated_ally_count_stat_correction` |
 | `ABILITY_EFFECT_CASTLE_BREAK_DAMAGE_INCREASE` | `correction` |
 
-`AbilityEffectID × AbilityConditionID × AbilityTarget`は「[アビリティ仕様](../../specification/game/ability.md#abilityeffectid-abilityconditionid-abilitytarget)」の許可表だけを許可し, 表にない組み合わせは生成エラーとする.
+`AbilityEffectID × AbilityConditionID × AbilityTarget`は「[アビリティ仕様](../../specification/game/ability.md)」の許可表だけを許可し, 表にない組み合わせは生成エラーとする.
 
 追加Validationは以下とする.
 

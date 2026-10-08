@@ -141,9 +141,9 @@ sequenceDiagram
 
     opt DiscordAuthorizationRequired=true
         User->>Discord: Discord追加認可Token要求
-        Discord->>DiscordDiscordBot: DiscordUserID
-        DiscordBot->>DiscordDiscordBot: Guild・Role・前回要求時刻を検証
-        DiscordBot->>DiscordDiscordBot: DiscordAuthorizationToken生成・Ed25519署名
+        Discord->>DiscordBot: DiscordUserID
+        DiscordBot->>DiscordBot: Guild・Role・前回要求時刻を検証
+        DiscordBot->>DiscordBot: DiscordAuthorizationToken生成・Ed25519署名
         DiscordBot-->>Discord: DiscordAuthorizationToken返答
         Discord-->>User: DiscordAuthorizationToken返答(DM)
     end
@@ -183,9 +183,9 @@ sequenceDiagram
 
     opt DiscordAuthorizationRequired=true
         User->>Discord: Discord追加認可Token要求
-        Discord->>DiscordDiscordBot: DiscordUserID
-        DiscordBot->>DiscordDiscordBot: Guild・Role・前回要求時刻を検証
-        DiscordBot->>DiscordDiscordBot: DiscordAuthorizationToken生成・Ed25519署名
+        Discord->>DiscordBot: DiscordUserID
+        DiscordBot->>DiscordBot: Guild・Role・前回要求時刻を検証
+        DiscordBot->>DiscordBot: DiscordAuthorizationToken生成・Ed25519署名
         DiscordBot-->>Discord: DiscordAuthorizationToken返答
         Discord-->>User: DiscordAuthorizationToken返答(DM)
     end

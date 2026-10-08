@@ -71,6 +71,6 @@ InitialSeedだけ保存済み, Create Replayだけ保存済み, `in_progress`だ
 ## Preload失敗
 
 `MarkGuildBattlePreloadFailed`は`scheduled -> preload_failed`だけを許可する. 所有GameServerが変わっている場合は更新しない.
-`preload_failed`では対戦Guildのmembership lockを維持し, 運営による同一ペア再開, 再抽選, 中止判断を待つ.
+`preload_failed`では対戦Guildのmembership lockを維持し, 運営による同一ペア再開, 再抽選, 中止判断を待つ. 中止を選択した場合は`status`を`preload_failed`のまま維持し, `SetGuildMembershipLock`で対象Guildのmembership lockだけを解除する.
 
 同一ペア再開および再抽選は既存仕様どおり`RetryPreloadFailedGuildBattle`と`RematchPreloadFailedGuildBattles`を使用する. いずれも`preload_failed`以外から`scheduled`へ戻さない.

@@ -303,7 +303,7 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 
 #### レスポンス
 
-[API Payload](api_payload.md)の「UpdateArenaPartyResponse」を参照する.
+[API Payload](api_payload.md)の「SaveArenaPartyResponse」を参照する.
 
 ### アリーナ戦闘用データ取得
 

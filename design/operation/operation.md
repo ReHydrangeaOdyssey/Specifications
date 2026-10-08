@@ -109,7 +109,7 @@ Bot通知に失敗してもゲーム状態を巻き戻さない.
 
 中止時は対象Guildの所属変更禁止を解除する.
 Databaseを直接編集せず`SetGuildMembershipLock`を使用する.
-中止後に残す`GUILD_BATTLE`レコードの最終状態について仕様に追加定義がない場合は, 状態値を運営判断だけで変更しない.
+中止後も`GUILD_BATTLE.status`は`GUILD_BATTLE_STATUS_PRELOAD_FAILED`のままとし, 状態遷移は行わない. 対象Guildの`membership_locked=false`への更新だけを行う.
 
 ## 未割当GuildBattleと水平スケーリング失敗
 

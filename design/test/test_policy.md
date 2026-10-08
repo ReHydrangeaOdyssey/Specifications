@@ -148,6 +148,17 @@ GuildBattle Replayは「[リプレイProtocol Buffers定義](../system/guild_bat
 小数点以下切り捨てを行う箇所は境界の直前・直後を確認する.
 `as u32`, `as i32`等の変換を含む式は, 変換前Clampと変換後Clampを仕様順に確認する.
 
+## 編成Validationテスト
+
+以下を確認する.
+
+* FormationIDがDatabase固定参照データ`FORMATION`に存在し, 本体CharacterID・従者CharacterIDがCharacter MasterDataに存在することを確認する.
+* 本体CharacterIDの重複を拒否し, 別本体キャラクター間で同一従者CharacterIDを使用することは許可する.
+* 編成で指定するAbilityIDは当該本体キャラクターの`CharacterMasterData.ability_ids`に含まれるものだけを許可する.
+* `AbilityID[2]`の配列順をAbilityスロット番号0, 1として保持し, 同時成立時の処理順へ使用する.
+* 編成のMainSkillIDは当該本体キャラクターまたは現在編成している従者の`CharacterMasterData.skill_ids`に含まれるものだけを許可する.
+* ArenaのPositionは1～9かつ重複不可, GuildBattleのPriorityPositionは1～9かつ重複可であることを確認する.
+
 ## 戦闘テスト
 
 ### 通常攻撃

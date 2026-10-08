@@ -19,7 +19,7 @@ sequenceDiagram
     GameServer->>PrivateAPIServer: SaveArenaParty
     PrivateAPIServer->>Database: 編成情報登録
     Database-->>PrivateAPIServer: 登録完了
-    PrivateAPIServer-->>GameServer: SaveArenaParty
+    PrivateAPIServer-->>GameServer: SaveArenaPartyResponse
     GameServer-->>PublicAPIServer: UpdateArenaPartyResponse
     PublicAPIServer-->>Client: UpdateArenaPartyResponse
     Client-->>User: 変更完了通知

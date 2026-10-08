@@ -216,7 +216,7 @@ Player, Guild, 所属, 役職等の実行時可変データは加工済みマス
 
 単体対象条件が`SKILL_TARGET_CONDITION_STATUS_ABNORMALITY`の場合は, `SkillTargetConditionData.status_abnormality_id`から対象とする具体的な状態異常を特定する.
 回復量はすべて割合で保持し, `SkillHealData.heal_rate`は対象の最大HPに対する割合とする. `SkillEffectID=SKILL_EFFECT_HEAL`では`heal_rate`を使用し, `SkillMasterData.correction_value`は使用しない.
-`SkillMasterData.target_side`で味方パーティ・敵パーティ・自身のどれを対象候補とするかを明示する. `SkillEffectID`と`SkillTargetRange`の許可組み合わせは「[スキル仕様](../../specification/game/skill.md#skilleffectid-skilltargetrange)」を正とする.
+`SkillMasterData.target_side`で味方パーティ・敵パーティ・自身のどれを対象候補とするかを明示する. `SkillEffectID`と`SkillTargetRange`の許可組み合わせは「[スキル仕様](../../specification/game/skill.md)」を正とする.
 攻撃スキルでは`SkillMasterData.damage_value_type`を必須解釈し, `SKILL_DAMAGE_VALUE_TYPE_RATE`では`correction_value`を攻撃力へ乗算する補正値, `SKILL_DAMAGE_VALUE_TYPE_FIXED`では固定ダメージ値として使用する.
 
 ## アビリティ固有データの共有体

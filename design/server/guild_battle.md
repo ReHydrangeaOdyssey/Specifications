@@ -56,7 +56,7 @@ sequenceDiagram
     alt 両条件を満たし参加可能
         GameServer ->> PrivateAPIServer: ValidateAccountSession(AuthenticatedContext.SessionID)
         PrivateAPIServer ->> Database: ACCOUNT_SESSION存在・24時間期限確認
-        DB -->> PrivateAPIServer: 確認結果
+        Database -->> PrivateAPIServer: 確認結果
         PrivateAPIServer -->> GameServer: ValidateAccountSession(IsValid)
         GameServer->>GameServer: IsValid=trueを確認
         GameServer->>GameServer: LocalFormationID・LocalCharactersとPreload済みServer編成を比較
@@ -122,7 +122,7 @@ sequenceDiagram
             PrivateAPIServer->>Database: 0人Guildの所属ロック解除
             GuildBattleCoordinator->>PrivateAPIServer: SaveErrorLog
             opt DiscordNotificationEnabled=true
-                GuildBattleCoordinator->>DiscordDiscordBot: 0人候補エラー通知
+                GuildBattleCoordinator->>DiscordBot: 0人候補エラー通知
             end
             GuildBattleCoordinator->>PrivateAPIServer: ClearGuildBattleExcludedGuilds(TargetDate, StartTime)
         else 通常候補あり
@@ -209,7 +209,7 @@ sequenceDiagram
                     GameServer->>PrivateAPIServer: MarkGuildBattlePreloadFailed(GuildBattleID, GameServerInstanceID)
                     PrivateAPIServer->>Database: scheduled -> preload_failed (所有権確認と同一Transaction)
                     opt DiscordNotificationEnabled=true
-                        GameServer->>DiscordDiscordBot: Preload失敗通知
+                        GameServer->>DiscordBot: Preload失敗通知
                     end
                     Note over GameServer: 当該1対戦だけ開戦しない. 他の騎士団戦は継続. 以後は運営判断
                 else 割当解除または別GameServerへ変更済み
@@ -232,7 +232,7 @@ sequenceDiagram
     end
 
     opt DiscordNotificationEnabled=true
-        GameServer->>DiscordDiscordBot: 処理終了通知
+        GameServer->>DiscordBot: 処理終了通知
     end
 ```
 

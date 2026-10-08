@@ -312,6 +312,19 @@ GuildNameがBoundary Validationを満たさない場合は`ApiErrorResponse(API_
 
 所属変更禁止期間の場合は`ApiErrorResponse(API_ERROR_GUILD_MEMBERSHIP_CHANGE_NOT_ALLOWED)`, 団長以外のメンバーが存在するGuildの団長が脱退しようとした場合は`ApiErrorResponse(API_ERROR_GUILD_LEADER_MOVE_NOT_ALLOWED)`を返す.
 
+## 編成共通Validation
+
+アリーナ編成および騎士団戦編成では以下を共通Validationする.
+
+- `FormationID`はDatabase固定参照データ`FORMATION`に存在するIDを指定する.
+- 有効な本体`CharacterID`はCharacter MasterDataに存在するIDだけを許可し, 本体キャラクター同士で同一CharacterIDを重複指定できない.
+- `FollowerCharacterID[2]`の予約済み無効値以外の各IDはCharacter MasterDataに存在することを必須とする.
+- `AbilityID[2]`の予約済み無効値以外の各IDは, 当該本体キャラクターの`CharacterMasterData.ability_ids`に含まれることを必須とする.
+- 同一本体キャラクターのAbilityスロットでは同一AbilityIDを重複指定できず, さらに同一`AbilityEffectID`を持つAbilityを複数指定できない.
+- `MainSkillID`は, 当該本体キャラクターの`CharacterMasterData.skill_ids`または現在その本体キャラクターへ編成している従者の`CharacterMasterData.skill_ids`のいずれかに含まれることを必須とする.
+- 従者の空きスロットを表す予約済み無効値はMainSkill候補へ含めない.
+- 従者スロットのレアリティ制約および同一本体キャラクター内での従者重複禁止は「[従者仕様](../../specification/game/follower.md)」に従う. 別の本体キャラクター間で同一従者CharacterIDを使用することは許可する.
+
 ## アリーナ関連
 
 ### パーティ変更
@@ -323,7 +336,8 @@ GuildNameがBoundary Validationを満たさない場合は`ApiErrorResponse(API_
 #### 処理内容
 
 - ClientはPublic APIを呼び出す前にアリーナ編成制約を検証する.
-- GameServerは受信した編成データを用いて同じ編成制約を再検証する. 同一キャラクター内で同じAbilityEffectIDを持つアビリティが複数設定されている場合は編成不正とする.
+- GameServerは受信した編成データを用いて同じ編成制約を再検証する.
+- `Characters`は1～5件とし, 各`Position`はフォーメーション内部番号1～9だけを許可する. 同一`Position`への複数本体キャラクター配置は編成不正とする.
 - 検証成功後, GameServerからPrivate API Serverへ編成情報登録を要求する.
 - Private API ServerがDatabaseへ編成情報を登録する.
 
@@ -397,7 +411,8 @@ GuildNameがBoundary Validationを満たさない場合は`ApiErrorResponse(API_
 #### 処理内容
 
 - ClientはPublic APIを呼び出す前に騎士団戦編成制約を検証する.
-- GameServerは受信した編成データを用いて同じ編成制約を再検証する. 同一キャラクター内で同じAbilityEffectIDを持つアビリティが複数設定されている場合は編成不正とする.
+- GameServerは受信した編成データを用いて同じ編成制約を再検証する.
+- `GuildBattlePartyCharacter[10]`のうち有効な本体キャラクターを1～10件とし, 各`PriorityPosition`はフォーメーション内部番号1～9だけを許可する. 複数本体キャラクターの同一`PriorityPosition`指定は「[フォーメーション仕様](../../specification/game/formation.md)」に従い許可する.
 - 検証成功後, GameServerからPrivate API Serverへパーティ情報登録を要求する.
 - Private API ServerがDatabaseへパーティ情報を登録する.
 

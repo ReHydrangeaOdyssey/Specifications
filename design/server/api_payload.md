@@ -26,7 +26,7 @@ Public APIで内部`Float32`の現在HPを論理型`HP`（`uint32`）として�
 | Attack | `Float32` | 戦闘計算で使用する攻撃力 |
 | Defense | `Float32` | 戦闘計算で使用する防御力 |
 | SpeedRank | `SpeedRank` | 速度ランク |
-| AbilityID | `AbilityID[2]` | アビリティID |
+| AbilityID | `AbilityID[2]` | Abilityスロット番号0, 1の順で保持するアビリティID |
 | MainSkillID | `SkillID` | 戦闘で使用するメインスキルID |
 
 ### TacticsStatEffectResult
@@ -118,8 +118,8 @@ Battle Specialの効果対象は外側の`TacticsEffectResult.Target`（`Tactics
 | CharacterID | `CharacterID` | キャラクターID |
 | Position | `FormationSlotID` | 配置位置. フォーメーション内部番号を使用 |
 | FollowerCharacterID | `CharacterID[2]` | 従者のキャラクターID |
-| AbilityID | `AbilityID[2]` | アビリティID |
-| MainSkillID | `SkillID` | メインスキルID |
+| AbilityID | `AbilityID[2]` | Abilityスロット番号0, 1の順で保持する, 本体キャラクターが保有するアビリティID |
+| MainSkillID | `SkillID` | 本体キャラクターまたは現在編成している従者キャラクターが保有するメインスキルID |
 
 ### GuildBattlePartyCharacter
 
@@ -128,8 +128,8 @@ Battle Specialの効果対象は外側の`TacticsEffectResult.Target`（`Tactics
 | CharacterID | `CharacterID` | キャラクターID |
 | PriorityPosition | `FormationSlotID` | 優先配置位置. フォーメーション内部番号を使用 |
 | FollowerCharacterID | `CharacterID[2]` | 従者のキャラクターID |
-| AbilityID | `AbilityID[2]` | アビリティID |
-| MainSkillID | `SkillID` | メインスキルID |
+| AbilityID | `AbilityID[2]` | Abilityスロット番号0, 1の順で保持する, 本体キャラクターが保有するアビリティID |
+| MainSkillID | `SkillID` | 本体キャラクターまたは現在編成している従者キャラクターが保有するメインスキルID |
 
 `GuildBattlePartyCharacter[10]`の配列位置を編成スロットIDとして扱い, IDは`0`始まりとする.
 未使用の`GuildBattlePartyCharacter`は, 全フィールドを各型の予約済み無効値にする. `CharacterID == u32::MAX`の場合, その`GuildBattlePartyCharacter`全体を無効要素として扱う.
@@ -798,6 +798,10 @@ Caller PlayerIDは`AuthenticatedContext.PlayerID`を使用する.
 | PlayerID | `PlayerID` | 保存対象PlayerID |
 | FormationID | `FormationID` | 使用するフォーメーションID |
 | Characters | `ArenaPartyCharacter[]` | 編成キャラクター情報.1～5件 |
+
+### SaveArenaPartyResponse
+
+- 登録完了とする.
 
 ### GetArenaBattleDataRequest
 
