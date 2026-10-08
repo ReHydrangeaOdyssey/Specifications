@@ -2,7 +2,7 @@
 
 ## 結論
 
-Clientは、画面・入力・演出、Public API通信、認証状態、ローカル編成、Arena戦闘再現、GuildBattle表示状態を担当します。
+Clientは、画面・入力・演出、Public API通信、認証状態、ログイン・サーバー未接続時のゲームプレイ制御、ローカル編成、キャラクター画像の割り当て、Arena戦闘再現、GuildBattle表示状態を担当します。
 
 戦闘計算そのものはClient専用実装にせず、GameServerと同じ`game-core`とPRNG仕様を使用します。Serverが正本である状態をClient側で独自に確定しません。
 
@@ -49,6 +49,20 @@ classDiagram
 ```
 
 `logical module`は責務名であり、Rustの具体的な`struct`名を固定するものではありません。
+
+## ログイン・サーバー未接続時
+
+- ログインの可否やServerへの接続可否と、接続不要なゲームプレイの可否を分離します。
+- Arena、GuildBattleおよび他のServer通信を必要とする処理は、ログインできない場合またはServerに接続できない場合に利用を制限します。
+- Serverを正本とする処理の状態や戦闘結果は、未接続時のClientだけで確定しません。
+- オフライン時に利用できる個別のゲーム機能および必要なローカルデータの範囲は未確定であり、具体的な機能一覧は本設計で追加しません。
+
+## タイトル画面のキャラクター画像割り当て
+
+- タイトル画面にキャッシュクリアとアセット追加の操作を提供します。
+- アセット追加ではプレイヤーが選択した画像をゲーム内キャラクターへ割り当てます。
+- 画像・UVデータはClient側資産とし、Server用`ProcessedMasterData`の対象へ追加しません。
+- 保存先、保持期間、画像形式、上書き規則、キャッシュクリアの対象範囲は仕様未確定として扱います。
 
 ## 認証状態
 
@@ -145,17 +159,21 @@ Seedが`0`かどうかだけでランダム要素の有無を判定しません�
 
 - ClientとGameServerのArena再現性を共有ロジックで検証できます。
 - UI/演出と計算を分離できるため、演出変更が戦闘結果へ影響しません。
+- Server通信を必要としないゲームプレイをログイン状態・接続状態から独立して扱えます。
 - GuildBattle再接続時にServer状態へ戻せます。
 
 ### デメリット
 
 - ClientとGameServerで同一Versionのロジック・MasterDataを揃える必要があります。
 - Client側表示状態はServer正本と重複するため、再同期処理が必要です。
+- オフラインで利用できるゲーム機能および追加画像の保存・復元要件が未確定のため、その部分の実装と検証を具体化できません。
 
 ## 情報源
 
 - `design/client/client.md`
 - `design/client/scene_transition.md`
+- `design/game/master_data.md`
+- `design/game/master_data_pipeline.md`
 - `design/server/api_payload.md`
 - `design/server/arina.md`
 - `design/server/guild_battle.md`

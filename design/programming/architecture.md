@@ -25,7 +25,7 @@
 
 | Component | 主責務 | 明示的に持たない責務 |
 |---|---|---|
-| Client | UI、ローカル編成、認証状態、Arena再現、GuildBattle表示状態 | 戦闘結果の正本、RefreshToken平文参照 |
+| Client | UI、ローカル編成、認証状態、ログイン・Server未接続時のゲームプレイ、キャラクター画像の追加・割り当て、Arena再現、GuildBattle表示状態 | 戦闘結果の正本、RefreshToken平文参照 |
 | Public API | TLS境界、deserialize、Boundary Validation、Token検証、Rate Limit、Cookie、Routing | Domain判定、DB transaction |
 | Private API | Account/Guild Domain、Session、DB操作、GuildBattle Lifecycle | Arena抽選、戦闘計算、GuildBattleマッチング |
 | GameServer | Arena、GuildBattle実行状態、戦闘計算、Replay生成 | GuildBattle生成・マッチング・自己割当 |
@@ -157,3 +157,6 @@ flowchart TD
 - `design/server/data_base.md`
 - `design/system/network.md`
 - `design/system/rust_dependencies.md`
+- `design/client/client.md`
+- `design/client/scene_transition.md`
+- `design/game/master_data.md`

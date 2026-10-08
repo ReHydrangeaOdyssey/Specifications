@@ -329,14 +329,14 @@ Replayを再生する場合はReplayに記録されたVersionに対応するゲ�
 9. ServerへDatabase固定参照データを反映する.
 10. Client / GameServerが使用するProcessedMasterDataを同一Versionとして反映する.
 
-一方だけの反映に成功した状態でゲームを開始しない.
+一方だけの反映に成功した状態では, ClientとGameServerの同一Versionを必要とするArena・騎士団戦等の処理を開始しない. ClientがServerへ接続せずに遊べる範囲は「[クライアント仕様](../client/client.md)」に従い, 本制限の対象としない.
 
 ## 失敗時
 
 Pipeline失敗時は生成途中の成果物を採用しない.
 前回正常生成物を保持している場合はそのまま維持する.
 
-Database反映途中に失敗した場合は, 部分反映のままゲームを開始せず, 対象Versionの固定参照データ一式が整合した状態へ戻してから再実行する.
+Database反映途中に失敗した場合は, 部分反映のままDatabase固定参照データに依存するServer側処理を開始せず, 対象Versionの固定参照データ一式が整合した状態へ戻してから再実行する. Clientの接続不要なゲームプレイは制限しない.
 
 原本を修正せず生成済みProtocol BuffersやDatabaseだけを手修正して解決しない.
 

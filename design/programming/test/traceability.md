@@ -19,7 +19,7 @@
 | `game/pseudorandom.md` | PRNG実装・Seed・消費順 | `design/game/pseudorandom.md`, `design/test/test_policy.md` |
 | `game/tactics_runtime.md` | Tactics専用Random、Active Effect | `design/game/guild_battle.md`, `specification/game/tactics.md` |
 | `game/master_data_pipeline.md` | Parse / Normalize / Validate / Generate / Cross Check | `design/game/master_data_pipeline.md` |
-| `client/client.md` | Client state、Arena再現、GuildBattle再同期 | `design/client/client.md`, `design/server/guild_battle.md` |
+| `client/client.md` | Client state、オフラインゲームプレイ制御、タイトル画面からの画像割り当て、Arena再現、GuildBattle再同期 | `design/client/client.md`, `design/client/scene_transition.md`, `design/game/master_data.md`, `design/server/guild_battle.md` |
 | `server/api_boundary.md` | Public / Private / GameServer Routing | `design/server/api.md`, `design/server/public_api_responsibility.md` |
 | `server/public_api.md` | Stateless Edge、認証検証、Cookie、Owner routing | `design/server/public_api.md`, `design/server/public_api_responsibility.md`, `design/server/session.md` |
 | `server/private_api.md` | Account/Guild Domain、DB transaction、Lifecycle | `design/server/private_api.md`, `design/server/data_base.md` |
