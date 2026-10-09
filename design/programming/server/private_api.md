@@ -102,7 +102,7 @@ stateDiagram-v2
 | Guild Membership変更 | Member / leader / subleader / 人数・Lock条件等 |
 | StartGuildBattle | InitialSeed + Create Replay + `scheduled -> in_progress` |
 | 冪等GuildBattle更新 | Domain更新 + `GUILD_BATTLE_DB_OPERATION` |
-| CompleteGuildBattle | 最終結果 + Player勝敗 + `completed` + membership unlock + 除外一覧削除 |
+| CompleteGuildBattle | 最終結果 + Player勝敗 + `completed` + 当該対戦のmembership unlock; 同時間帯の全Battle完了時のみ除外Guild unlock + 除外一覧削除 |
 
 途中だけCommitする処理へ分割しません。
 

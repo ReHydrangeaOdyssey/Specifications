@@ -70,7 +70,7 @@ Public API側のOwner解決Cacheを実装する場合でも、Databaseの`GUILD_
 
 ## GuildBattle通知ストリーム境界
 
-`SubscribeGuildBattleUpdates`は状態参照の認証付き長寿命HTTP/2 Responseストリームです。Public API Serverは認証と所有GameServerへのmTLS中継, 各接続への`GuildBattleScoreUpdate`フレーム転送だけを担当し, スコア・チェインを正本として保持しません。購読中のPlayerが当該GuildBattleIDにJoin済みであることはGameServerが判定します。通知フレームはProtocol Buffers varintサイズprefixで区切ります。HTTP Method/Pathは既存方針どおり未確定です。
+`SubscribeGuildBattleUpdates`は状態参照の認証付き長寿命HTTP/2 Responseストリームです。Public API Serverは認証と所有GameServerへのmTLS中継, 各接続への`GuildBattleScoreUpdate`（チェイン残り時間msを含む）フレーム転送・GameServerからの終了伝達だけを担当し, スコア・チェインを正本として保持しません。購読中のPlayerが当該GuildBattleIDにJoin済みであることはGameServerが判定します。通知フレームはProtocol Buffers varintサイズprefixで区切ります。HTTP Method/Pathは既存方針どおり未確定です。
 
 ## Payload
 

@@ -26,11 +26,11 @@
 | `server/auth_session.md` | JWT、Refresh rotation、Discord auth | `design/server/session.md` |
 | `server/arena.md` | Arena初期状態・Seed・Client再現 | `design/server/arina.md`, `design/game/arina.md` |
 | `server/game_server.md` | Instance、Thread、Capacity、draining、Recovery | `design/server/game_server.md`, `design/system/log.md` |
-| `server/guild_battle_runtime.md` | RequestSequence、Join、Sortie、Tactics、Heal/Revive、30分終了 | `design/server/guild_battle.md`, `design/game/guild_battle.md` |
+| `server/guild_battle_runtime.md` | 現行受付Queueと出撃Response先行例外, CB/殲滅, Ability効果別判定, ScoreUpdate購読の残り時間・終了, Replay, 30:00 Queue処理 | `specification/game/guild_battle.md`, `specification/game/ability.md`, `design/server/guild_battle.md`, `design/server/public_api.md`, `design/server/api_payload.md`, `design/game/guild_battle.md` |
 | `server/guild_battle_coordinator.md` | Matching、Assignment、Reconcile、Scale | `design/server/guild_battle_coordinator.md` |
 | `server/persistence.md` | Schema責務、Transaction、Operation ID | `design/server/data_base.md`, `design/server/guild_battle_lifecycle.md` |
 | `server/logging_recovery.md` | Log / Replay / Recovery Queueと保存 | `design/system/log.md`, `design/server/guild_battle.md` |
-| `test/test_design.md` | Unit / Integration / Reproducibility / Replay / Failure | `design/test/test_policy.md` |
+| `test/test_design.md` | Unit / Integration / Reproducibility / Replay / Failure / CB効果別判定・通知とキュー境界・除外Guild解除順序 | `design/test/test_policy.md`, `design/server/guild_battle_lifecycle.md` |
 | `undecided.md` | 現仕様で固定できない事項 | 各資料の未定義・推奨記載 |
 
 ## 変更時の扱い

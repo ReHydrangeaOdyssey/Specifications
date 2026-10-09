@@ -489,8 +489,9 @@ GuildNameがBoundary Validationを満たさない場合は`ApiErrorResponse(API_
 
 - Clientは`JoinGuildBattle`成立後, `SubscribeGuildBattleUpdatesRequest`を送信し, HTTP/2＋TLS 1.3上で通知用の長寿命Response streamを開く. PayloadはProtocol Buffersで, 各`GuildBattleScoreUpdate`メッセージを長さprefix付き（Protocol Buffers varint長＋シリアライズ済みPayload）で順次送る. gRPC Service/HTTP Method/Pathは本書では追加確定しない.
 - Public API ServerはAccessTokenを検証し, GameServerへ`AuthenticatedContext`と要求GuildBattleIDを中継する. GameServerは現在所属GuildIDとJoin済み状態および騎士団戦参加対象の一致を再検証する. 他の騎士団戦や未参加Playerの状態は配信しない.
-- 初回配信は購読成立時点のスコア・チェインのスナップショットとする. 出撃処理の`GuildBattleCastleBreakResponse`または`GuildBattleAnnihilationResponse`を要求元へ送信した後, GameServerがBP/TP回復・`acquired_score`加算・チェイン処理を反映し, 反映後に同一GuildBattleIDの接続中全参加者へ更新を配信する. 配信時点の所属GuildIDに基づき`AllyScore`/`EnemyScore`/`Chain`の方向を切り替える.
+- 初回配信は購読成立時点のスコア・チェイン・チェイン残り時間（ミリ秒, 0～300000）のスナップショットとする. 出撃処理の`GuildBattleCastleBreakResponse`または`GuildBattleAnnihilationResponse`を要求元へ送信した後, GameServerがBP/TP回復・`acquired_score`加算・チェイン処理を反映し, 反映後に同一GuildBattleIDの接続中全参加者へ更新を配信する. 配信時点の所属GuildIDに基づき`AllyScore`/`EnemyScore`/`Chain`/`ChainRemainingMilliseconds`の方向を切り替える. 残り時間はGameServerが送信値確定時点の前回チェイン加算時刻から算出し, 0～300000msで表す. チェイン0または前回加算から5分経過時（同時刻に加算成立した場合を除く）は残り時間0とする. 時間経過だけによるチェインリセットの通知は発行しない.
 - Public API Serverは通知内容の正本を保持せず, 所有GameServerから購読ストリームへ届く通知を接続元Clientへ中継するだけとする. 接続単位のストリーム管理はGame状態の正本ではない.
+- 通知ストリームは開戦から30:00に達した時点で終了する. ただし30:00までに受理されて処理キューで待機している当該Playerの状態変更要求がある場合, そのPlayerの通知ストリームだけは要求処理完了まで維持し, 完了次第終了する. 当該Playerの待機中要求がなければ30:00で終了する.
 - 通知はClientの`RequestSequence`を変更しない. 通信切断中の通知蓄積・再送を行わず, 再接続時は`GetGuildBattleStatus`で正本を取得してから再購読する. 通知の取りこぼしは最新状態の取得により解消する.
 
 #### 要求データ

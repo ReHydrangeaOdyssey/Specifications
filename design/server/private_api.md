@@ -834,7 +834,7 @@ ReplayQueueおよびDatabase送信失敗時の扱いは「[ログ仕様](../syst
 
 - `GuildBattleLifecycleService`で`resolving -> completed`だけを実行する.
 - 対象`GuildBattleID`の所有GameServerが要求`GameServerInstanceID`と一致することを確認する.
-- 最終結果2Guild分の保存, 対象Playerの勝敗数更新, `status=completed`, 対戦2Guildと同時間帯除外Guildの`membership_locked=false`, 対応する`GUILD_BATTLE_EXCLUDED_GUILD`削除を同一Databaseトランザクションで実行する.
+- 最終結果2Guild分の保存, 対象Playerの勝敗数更新, `status=completed`, 当該対戦2Guildの`membership_locked=false`を同一Databaseトランザクションで実行する. 同一対象日・開始時刻の全騎士団戦が`completed`となった場合に限り, 同一トランザクションで除外Guildも`membership_locked=false`へ更新し, `GUILD_BATTLE_EXCLUDED_GUILD`を削除する. 同時間帯の並行Complete処理は同対象日・開始時刻の`GUILD_BATTLE`行を`GuildBattleID`昇順に行ロックして, 終了判定と除外一覧更新を直列化する.
 - `GuildResults`のGuildID集合がDatabase上の対戦2Guildと一致し, 2件の勝敗組み合わせが最終Scoreと整合することを確認する. Scoreが異なる場合は高い側`WIN`・低い側`LOSE`, 同値の場合は両側`DRAW`だけを許可する.
 - `PlayerRecords`で同一PlayerIDを重複指定できない. PlayerID `0`以外はDatabase上で対戦2Guildのいずれかに所属していることを確認し, 指定`Result`が所属Guildの`GuildResults.Result`と一致することを確認する.
 - 勝利の場合は対象Playerの`guild_battle_win_count`を1加算し, 敗北の場合は`guild_battle_lose_count`を1加算する. 引き分けの場合は更新しない.

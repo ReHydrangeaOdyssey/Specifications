@@ -514,14 +514,15 @@ GameServerが決定した戦闘開始時点の入力を送信し, ClientはGameS
 
 ### GuildBattleScoreUpdate
 
-`SubscribeGuildBattleUpdates`のServer -> Clientストリームに流すメッセージ. 接続開始時の現在値と, 出撃処理後に両騎士団の参加者へ送る更新値に同じPayloadを使用する.
+`SubscribeGuildBattleUpdates`のServer -> Clientストリームに流すメッセージ. 接続開始時の現在値と, 出撃処理後に両騎士団の参加者へ送る更新値に同じPayloadを使用する. 時間経過のみでチェインが0になってもその時点の追加通知は行わない.
 
 | 項目 | 型 | 内容 |
 |---|---|---|
 | GuildBattleID | `GuildBattleID` | 配信対象の騎士団戦ID |
 | AllyScore | `Score` | 受信Playerが所属する騎士団の現在スコア |
 | EnemyScore | `Score` | 対戦相手騎士団の現在スコア |
-| Chain | `Count` | 受信Playerが所属する騎士団の現在チェイン値 |
+| Chain | `Count` | 受信Playerが所属する騎士団の送信値確定時点の現在チェイン値. 5分経過によるリセットも反映する |
+| ChainRemainingMilliseconds | `Count` | 送信値確定時点における当該チェインの残り時間（ミリ秒, 0～300000）. チェイン0または期限経過時は0 |
 
 騎士団の所属によって`AllyScore`・`EnemyScore`・`Chain`をそれぞれ変えて生成する. 個々のPlayerのHP・BP・TP・戦闘履歴・Tactics全一覧は通知に含めない.
 

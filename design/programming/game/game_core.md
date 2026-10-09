@@ -84,6 +84,8 @@ HTTP Context、Database Connection、System Clock取得、Kubernetes情報は渡
 
 ターン開始時には全Abilityの`activated_this_turn`を`false`へ戻します。
 
+キャッスルブレイク専用Abilityは戦闘ターンを生成せず, 選択キャラクターごと・効果種別（攻撃力補正`ABILITY_EFFECT_BUFF` / ダメージ補正`ABILITY_EFFECT_CASTLE_BREAK_DAMAGE_INCREASE`）ごとに当該CBで最大1度だけ判定します。両効果は独立して成立し, CB終了時に判定状態を破棄します。通常戦闘の`AbilityBattleState`は流用しません。
+
 ## 効果状態の分離
 
 `BuffDebuffEffectState`はSkill / Ability由来の攻撃・防御補正だけを保持します。FormationやTactics補正をこの状態へ混在させません。

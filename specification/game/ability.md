@@ -148,6 +148,8 @@
 基本的に1戦闘につき1度のみだが, アビリティによって変わる.
 最大発動回数はアビリティのマスターデータに保持する. 戦闘中の累計発動回数およびターン内発動済み状態は`AbilityBattleState`としてAbilityID単位で保持する.
 
+`ABILITY_CONDITION_CASTLE_BREAK`は通常戦闘のターン内発動状態とは独立して扱う. キャッスルブレイク1回につき, 選択された各キャラクターの効果種別ごとに最大1度だけ発動判定する. `ABILITY_EFFECT_BUFF`（攻撃力補正）と`ABILITY_EFFECT_CASTLE_BREAK_DAMAGE_INCREASE`（ダメージ補正）は別の効果種別であり, 両方の発動条件が成立した場合はそれぞれ個別に発動する. 一方の発動成立は他方の判定を抑止しない. 判定回数は次のキャッスルブレイクへ引き継がない. 通常戦闘の`AbilityBattleState.activation_count`と`activated_this_turn`をキャッスルブレイク専用判定の共有カウンタとして使用しない.
+
 
 ## 効果
 

@@ -231,6 +231,14 @@ GuildBattle Replayは「[リプレイProtocol Buffers定義](../system/guild_bat
 * 攻撃スキルは回避, 反撃, COVER, DRAW_AGGRO, 追撃のAbility処理を通らない.
 * ELYSIONの回避効果はAbility回避判定後に通常攻撃だけへ適用し, スキルには適用しない.
 
+### キャッスルブレイク専用Ability
+
+* `ABILITY_CONDITION_CASTLE_BREAK`を選択キャラクターごとに処理し, 攻撃力UPの`ABILITY_EFFECT_BUFF`とダメージUPの`ABILITY_EFFECT_CASTLE_BREAK_DAMAGE_INCREASE`の条件・発動確率をそれぞれ独立に判定する.
+* 両方の効果が成立したキャラクターには攻撃力補正と最終ダメージ倍率の両方が計算式どおりに作用する.
+* 同一キャラクター・同一効果種別の発動は1回のキャッスルブレイクにつき最大1度であり, 他の効果種別の発動を妨げない.
+* 次のキャッスルブレイクでは改めて判定し, 通常戦闘の`AbilityBattleState`の発動回数・ターン内フラグを消費しない.
+* 発動しない場合は攻撃力補正値/ダメージ補正値0を適用し, ダメージ倍率は`correction_value - 1.0`を式に渡す.
+
 ### Tactics
 
 以下を確認する.
@@ -278,7 +286,21 @@ GuildBattle Replayは「[リプレイProtocol Buffers定義](../system/guild_bat
 * Join初回だけGuildBattle本体PRNGを1回消費し, 再Joinでは現在RequestSequenceを返す.
 * 30:00時点で新規受付を停止し, 受付済みQueueをすべて解決してから勝敗判定する.
 * 勝敗数は1回以上出撃成立した通常PlayerとDummy PlayerID `0`だけを対象にする.
-* `CompleteGuildBattle`成功時だけ最終結果, Player勝敗数, `completed`, membership lock解除, 除外一覧削除を同時に確定する.
+* `CompleteGuildBattle`成功時だけ最終結果, Player勝敗数, 当該対戦の`completed`, 当該対戦2Guildのmembership lock解除を同時に確定する.
+* 同対象日・開始時刻の対戦が複数ある場合, 1対戦目完了では除外Guildのロックと除外一覧を保持し, 最後の対戦が`completed`となったトランザクションで除外Guildのロック解除と除外一覧削除を確定する. 並行する2件のCompleteでも同じ結果となる.
+
+### GuildBattle 出撃・通知の追加検証
+
+* キリ番条件を満たす場合でもCBCが先に成立すればイベント種別はCBCとなる. キリ番CB・強襲CB・CBC・殲滅のEnumの区別を確認する.
+* `EX_DRIVE`・`SLASHER`のキリ番CB専用スコア効果と`ENDER_BREAK`のキリ番上限補正は`GUILD_BATTLE_SORTIE_EVENT_NUMBERED_CASTLE_BREAK`だけに適用する. 強襲CBとCBCでは適用しない.
+* CBスコアは出撃基本値, 防御, 各キャラクターの攻撃力/ダメージAbility, フォーメーション, Tactics, チェイン補正, スコア上限を仕様で定義された順番で算出する. 未確定の`TACTICS_EFFECT_CASTLE_DEFENSE_CORRECTION`の数値期待値は固定しない.
+* 殲滅Responseの`OwnCharacters`・`EnemyCharacters`・`EnemyPlayerID`・`EnemyFormationID`・`BattleTacticsEffects`・`Seed`をClient/Server双方へ同一入力として与え, 戦闘過程と結果を一致させる. 最大HP使用時にも一致し, 前回表示状態への依存がない.
+* 1出撃のResponse送信はBattle Special回復, acquired_score/Score/Chain加算, Replay Event, ScoreUpdate通知より前に行う. その後処理は次のキュー要求の前に直列完了し, 他の一般状態変更操作のReplay→Response順序とは区別する.
+* `SubscribeGuildBattleUpdates`の購読直後に初回スナップショットを1件送り, 以降は両騎士団の全購読Playerへ所属基準で`AllyScore`・`EnemyScore`・`Chain`・`ChainRemainingMilliseconds`を配信する. 未参加・他対戦への配信はしない.
+* `ChainRemainingMilliseconds`は0～300000で, Chain=0, 前回加算から5分経過（加算不成立）, 5分ちょうどの加算成立, 加算直後, 継続中の各条件で定義どおりとなる. 連続同一Player出撃などチェイン非加算では残り時間を再始動しない.
+* チェイン5分超過で値が0に変わっただけでは通知を発行しない. Clientの表示用カウントダウンとServer正本を区別する. ストリーム切断・再購読時は`GetGuildBattleStatus`同期後に再度初回スナップショットを受信する.
+* 開戦30:00で新規受付を停止し, 当該Playerに30:00以前の受付済みキュー待機要求がなければ通知ストリームを終了する. 当該Playerに処理待ちがある場合だけそのPlayerの受付済み処理が完了次第ストリームを終了する. 他Playerのキュー待ちはそのPlayerの終了時点へ影響しない.
+* 30:00前にキューへ受付けた要求は30:00後に処理開始しても完了まで処理し, 最終勝敗判定は受付済み要求全件処理後に行う.
 
 ## Guildテスト
 

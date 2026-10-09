@@ -285,7 +285,7 @@ sequenceDiagram
         GameServer ->> GameServer: GuildBattlePlayerRuntimeState.acquired_score += 今回取得スコア
         GameServer ->> GameServer: 両騎士団のScore・Chain処理
         GameServer ->> GameServer: 出撃成立Replay EventをReplayQueueへ追加
-        GameServer -->> PublicAPIServer: GuildBattleScoreUpdate(GuildBattleID, 所属別AllyScore, EnemyScore, Chain)
+        GameServer -->> PublicAPIServer: GuildBattleScoreUpdate(GuildBattleID, 所属別AllyScore, EnemyScore, Chain, ChainRemainingMilliseconds)
         PublicAPIServer -->> Subscribers: 接続中の両騎士団参加者へ所属別更新を配信
         Note over Client,Subscribers: 要求元Clientも購読中なら同じ更新を受信する
     end
@@ -305,12 +305,22 @@ sequenceDiagram
     GameServer ->> GameServer: 所有Battle・Join済みPlayer・所属GuildIDを確認
     alt 購読可能
         GameServer -->> PublicAPIServer: 通知ストリーム開始・現在値GuildBattleScoreUpdate
-        PublicAPIServer -->> Client: GuildBattleScoreUpdate(AllyScore, EnemyScore, Chain)
+        PublicAPIServer -->> Client: GuildBattleScoreUpdate(AllyScore, EnemyScore, Chain, ChainRemainingMilliseconds)
         loop 出撃後の騎士団Score/Chain更新
             GameServer -->> PublicAPIServer: GuildBattleScoreUpdate(所属GuildIDに応じた値)
             PublicAPIServer -->> Client: GuildBattleScoreUpdate
         end
         Note over Client,GameServer: 切断後はGetGuildBattleStatusで正本へ同期して再購読
+        Note over Client,GameServer: チェインの時間経過リセットのみでは追加通知を送らない
+        Note over GameServer: 開戦30:00到達で新規受付停止
+        alt 当該Playerに受付済みのキュー待機要求あり
+            GameServer ->> GameServer: 当該Playerの受付済み要求処理完了まで購読維持
+            GameServer -->> PublicAPIServer: 当該Playerの購読ストリーム終了
+            PublicAPIServer -->> Client: Response stream正常終了
+        else 当該Playerのキュー待機要求なし
+            GameServer -->> PublicAPIServer: 30:00で購読ストリーム終了
+            PublicAPIServer -->> Client: Response stream正常終了
+        end
     else 購読不可
         GameServer -->> PublicAPIServer: ApiErrorResponse
         PublicAPIServer -->> Client: ApiErrorResponse
@@ -666,6 +676,8 @@ sequenceDiagram
     Note over GameServer: 騎士団戦開始から30:00到達
 
     GameServer->>GameServer: 新規処理受付停止
+    GameServer->>GameServer: キュー待機要求がないPlayerの通知ストリームを終了
+    Note over GameServer: キュー待機中のPlayerは当該要求の処理完了時にストリーム終了
     GameServer->>PrivateAPIServer: BeginGuildBattleResolving(GuildBattleID, GameServerInstanceID)
     PrivateAPIServer->>Database: in_progress -> resolving (所有権確認と同一Transaction)
 
@@ -693,7 +705,7 @@ sequenceDiagram
 
     GameServer->>GameServer: GuildResults[2]とPlayerRecords[]を生成
     GameServer->>PrivateAPIServer: CompleteGuildBattle(GuildBattleID, GameServerInstanceID, GuildResults, PlayerRecords)
-    PrivateAPIServer->>Database: 結果保存 + Player勝敗数更新 + resolving -> completed + membership lock解除 + excluded削除を同一Transactionで確定
+    PrivateAPIServer->>Database: 結果・勝敗更新 + completed + 対戦2Guildロック解除; 同時間帯全対戦完了時だけexcluded解除・削除
     Database-->>PrivateAPIServer: 完了結果
     PrivateAPIServer-->>GameServer: CompleteGuildBattle
 

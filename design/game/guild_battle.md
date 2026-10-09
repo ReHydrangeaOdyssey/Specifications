@@ -72,7 +72,7 @@ flowchart TD
     Start[出撃種別確定・スコア計算開始] --> Basic[選択キャラクター累計BPから出撃基本スコア算出]
     Basic --> Enemy[相手平均防御力・城レベル補正・タクティクス防御力補正を算出]
     Enemy --> Loop{未計算の選択キャラクターがある?}
-    Loop -->|Yes| Ability[キャッスルブレイク専用攻撃力UP・ダメージUP Abilityを評価]
+    Loop -->|Yes| Ability[各キャラクターの攻撃力UP・ダメージUP Abilityを効果別に各1度判定]
     Ability --> Attack[Ability・Formation・Tactics補正で攻撃力算出]
     Attack --> Damage[相手最終防御力・城防御補正を差引き Ability倍率反映]
     Damage --> Clamp[最終ダメージを0以上へ補正]

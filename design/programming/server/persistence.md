@@ -73,8 +73,8 @@ Create Replay保存に失敗してStatusだけ`in_progress`にしません。
 - 最終Guild結果
 - Player勝敗数
 - `resolving -> completed`
-- 対象Guildの`membership_locked=false`
-- 対象の除外一覧削除
+- 当該対戦2Guildの`membership_locked=false`
+- 同じ対象日・開始時刻の`GUILD_BATTLE`行を`GuildBattleID`昇順で`SELECT ... FOR UPDATE`し, 今回のCompletedを含め残る未完了対戦が0件の場合だけ, 除外Guildの`membership_locked=false`と対象の除外一覧削除（同時間帯の完了処理を直列化）
 
 入力のPlayer重複、対象外Player、Guild結果とPlayer結果の矛盾、最終Scoreと勝敗の矛盾等を検証し、いずれか失敗した場合は全体Rollbackします。
 

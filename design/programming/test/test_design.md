@@ -41,6 +41,9 @@ tests/
 - Castle Break確率
 - GuildBattle Score
 - GuildBattleID生成
+- CB専用Abilityのキャラクター別・効果種別別に各1回の判定と攻撃力UP/ダメージUPの独立成立
+- CBイベント種別とキリ番専用Tacticsの適用条件・スコア計算フロー
+- チェイン残り時間（ミリ秒）の0～300000 clampと5分ちょうど境界
 
 IEEE-754 32bit浮動小数点として、仕様に記載された演算順を変えずに期待値を評価します。代数的に同値な別式への変形を前提にしません。
 
@@ -119,6 +122,11 @@ IEEE-754 32bit浮動小数点として、仕様に記載された演算順を変
 - Owner mismatch拒否
 - `RetryPreloadFailedGuildBattle`
 - `RematchPreloadFailedGuildBattles`
+- 同一開始時刻の複数対戦中, 最初のCompletedでは除外Guildを解除せず, 最後のCompletedでのみロック解除・除外一覧削除（並行Completeを含む）
+- `SubscribeGuildBattleUpdates`の初回スナップショット・所属基準の両Guildスコアとチェイン/残り時間・複数購読者への配信
+- 出撃Response送信後に出撃後効果・Replay・更新通知, 次要求処理の前に後処理完了
+- チェイン時間経過リセットではPushしない, 通信断後はGetGuildBattleStatusの値へ再同期する
+- 開戦30:00の購読正常終了と, 30:00以前のキュー待ちPlayerだけ処理完了後に終了する分岐
 
 ### Coordinator
 
@@ -159,6 +167,10 @@ IEEE-754 32bit浮動小数点として、仕様に記載された演算順を変
 - Damage random
 
 仕様で候補順序が固定されている箇所は、その順序も期待値として検証します。
+
+### GuildBattle殲滅のClient/Server一致
+
+`GuildBattleAnnihilationResponse`の`OwnCharacters`, `EnemyCharacters`, `EnemyPlayerID`, `EnemyFormationID`, `BattleTacticsEffects`, `Seed`とJoin時同期済み編成を同一入力として, Client/Serverの戦闘中の選択・最終HP・計算結果が一致することを検証します。最大HP依存回復, 効果持続, PlayerIDによる候補順についても検証し, Clientの直前表示HPを戦闘入力に使用しないことを確認します。
 
 ### Tactics
 

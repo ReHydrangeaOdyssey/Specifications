@@ -33,7 +33,7 @@ stateDiagram-v2
 | `preload_failed` | `scheduled` | `RetryPreloadFailedGuildBattle` | 運営Component | 同一ペア維持, `initial_seed=NULL`, 未割当へ戻す |
 | `preload_failed` | `scheduled` | `RematchPreloadFailedGuildBattles` | GuildBattleCoordinator | 再抽選済みペア保存, `initial_seed=NULL`, 未割当へ戻す |
 | `in_progress` | `resolving` | `BeginGuildBattleResolving` | 所有GameServer | 所有権一致 |
-| `resolving` | `completed` | `CompleteGuildBattle` | 所有GameServer | 最終結果, Player勝敗数, status, membership lock解除, 除外一覧削除を同一トランザクションで確定 |
+| `resolving` | `completed` | `CompleteGuildBattle` | 所有GameServer | 最終結果, Player勝敗数, status, 対戦2Guildのmembership lock解除; 同時間帯全対戦完了の場合のみ除外Guild unlock・一覧削除を同一トランザクションで確定 |
 
 `scheduled`かつ未割当の騎士団戦削除は状態遷移ではなく`DeleteUnassignedGuildBattles`で行う.
 
@@ -61,8 +61,8 @@ InitialSeedだけ保存済み, Create Replayだけ保存済み, `in_progress`だ
 5. `PlayerRecords`のPlayerID重複を拒否する. PlayerID `0`以外は対戦2Guildのいずれかへの所属を確認し, 指定Resultが所属Guildの最終結果と一致することを確認した上で, 勝利なら`guild_battle_win_count+1`, 敗北なら`guild_battle_lose_count+1`, 引き分けなら更新なしとする.
 6. `status=completed`へ更新する.
 7. 対戦2Guildの`GUILD.membership_locked=false`へ更新する. 複数Guildを更新する場合はGuildID昇順でLock・更新する.
-8. 対象対戦の`start_at`から対象日・開始時刻を求め, 同時間帯の`GUILD_BATTLE_EXCLUDED_GUILD`に保存されたGuildもGuildID昇順で`membership_locked=false`へ更新する.
-9. 対応する`GUILD_BATTLE_EXCLUDED_GUILD`を削除する.
+8. 対象対戦の`start_at`から対象日・開始時刻を求め, 同じ対象日・開始時刻に属する`GUILD_BATTLE`レコードを`GuildBattleID`昇順で行ロック（`SELECT ... FOR UPDATE`）してから, 今回の`completed`更新を含め同時間帯の騎士団戦がすべて`completed`となったか同一トランザクション内で判定する. 別の騎士団戦に未完了状態がある場合は除外Guildのロックも除外一覧も維持する.
+9. 同時間帯の全騎士団戦が`completed`となった場合に限り, `GUILD_BATTLE_EXCLUDED_GUILD`内の除外GuildをGuildID昇順で`membership_locked=false`へ更新し, 対応する除外一覧を削除する. この判定・更新は上記の同時間帯行ロックで`CompleteGuildBattle`の並行実行を直列化し, 除外一覧の二重処理を防ぐ.
 
 最終結果保存, Player勝敗数更新, `completed`遷移, membership lock解除の一部だけが確定した中間状態を作らない.
 

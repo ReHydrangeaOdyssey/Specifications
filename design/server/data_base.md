@@ -449,7 +449,7 @@ erDiagram
 
 `GUILD_BATTLE.game_server_instance_id`は未割当時NULLを許可する. GuildBattleCoordinatorはPrivate API経由で未割当の騎士団戦を選択したGameServerへ原子的に割当し, 割当成功時に対象`GameServerInstanceID`を保存する. GameServer自身は未割当騎士団戦を自己割当しない. 既に他GameServerへ割当済みの場合は上書きしない. `status`, `start_at`, `game_server_instance_id`を使用する割当検索にIndexを設定する.
 `SaveScheduledGuildBattles`保存時に`start_at`を`TargetDate`と`GuildBattleStartTime`からJSTで生成し, `end_at = start_at + 30分`として保存する. `initial_seed`は開戦前Preload完了まではNULLを許可し, Preload成功後の`StartGuildBattle`でCreate Replay保存と`status=in_progress`更新と同一トランザクションにより保存する.
-`GUILD_BATTLE_EXCLUDED_GUILD`はマッチング生成時に所属0人のため除外したGuildを対象日・開始時刻単位で保持する. 通常終了時は`CompleteGuildBattle`が対戦2Guildと同時間帯除外Guildの所属ロック解除および除外一覧削除を同一トランザクションで実行する. マッチング生成中止時はGuildBattleCoordinatorが既存の取得・削除APIを使用する.
+`GUILD_BATTLE_EXCLUDED_GUILD`はマッチング生成時に所属0人のため除外したGuildを対象日・開始時刻単位で保持する. 通常終了時は`CompleteGuildBattle`が当該対戦2Guildの所属ロックを解除する. 同対象日・開始時刻の全騎士団戦が`completed`となった時点の`CompleteGuildBattle`だけが, 同一トランザクションで除外Guildのロックを解除し除外一覧を削除する. マッチング生成中止時はGuildBattleCoordinatorが既存の取得・削除APIを使用する.
 Public API Serverは騎士団戦要求を中継する際に`GuildBattleID`から`game_server_instance_id`を取得できる. Public API Serverは取得結果をローカルキャッシュしてよいが, キャッシュは正本として扱わない.
 
 ## アリーナ
@@ -565,7 +565,7 @@ erDiagram
 Recoveryファイル名は`guild_battle_<GuildBattleID>_<GameServerInstanceID>.json`とする. ファイル内には元のPrivate API名, Operation ID, 要求Payload, 保存順序を保持する.
 騎士団戦終了時にローカル保存データを保存順にDatabaseへ再送する. GameServer起動時にもRecoveryディレクトリを走査し, 残存ファイルを保存順に再送する. 再送中に1件でも失敗した場合はファイルを残し, 全件成功した場合だけ対応ファイルを削除する.
 
-`CompleteGuildBattle`はこの一般規則とは別に, 初回失敗後1回だけ同一`X-Operation-ID`で再試行し, 再試行も失敗した場合はErrorLogを保存し, `DiscordNotificationEnabled=true`の場合はDiscord Botへ通知する. その後の原因調査・復旧は運営が手動で行う. 最終結果保存, Player勝敗数更新, `GUILD_BATTLE.status=completed`, membership lock解除, 除外一覧削除は同一Databaseトランザクションで確定し, いずれか失敗時は全体をRollbackする.
+`CompleteGuildBattle`はこの一般規則とは別に, 初回失敗後1回だけ同一`X-Operation-ID`で再試行し, 再試行も失敗した場合はErrorLogを保存し, `DiscordNotificationEnabled=true`の場合はDiscord Botへ通知する. その後の原因調査・復旧は運営が手動で行う. 最終結果保存, Player勝敗数更新, `GUILD_BATTLE.status=completed`, 当該対戦2Guildのmembership lock解除は同一Databaseトランザクションで確定する. 同対象日・開始時刻の全対戦がcompletedになった場合だけ除外Guild解除と除外一覧削除も同一トランザクションに含め, いずれか失敗時は全体をRollbackする.
 
 
 ### 騎士団戦Database更新の冪等性

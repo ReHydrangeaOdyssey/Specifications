@@ -1,12 +1,12 @@
 # GuildBattle Runtimeプログラミング設計
 
-## 結論
+## 対象と正本
 
-GuildBattleは`GuildBattleID`単位の単一Runtime AggregateとしてGameServer内で所有し、要求を成立順に直列適用できる構造にします。RequestSequence、GuildBattle本体PRNG、Player Runtime、Tactics継続効果、Score / Chain / CBC、受付状態を同一整合性境界として扱います。
+GameServerは`GuildBattleID`単位で1つのGuildBattle Runtimeを所有し, 受付済み状態変更要求を受信順に直列処理する. 戦闘・スコア計算の正本は`specification/game/`と`design/game/`, APIの入出力と処理順は`design/server/public_api.md`, `design/server/guild_battle.md`, `design/server/api_payload.md`を使用する. 本書では独自のゲームルールを定義しない.
 
-以下の図は「保持対象」を表す論理モデルであり、具体的なRust field名を固定するものではありません。
+`RequestSequence`はPlayerごとの要求順序であり, GuildBattle全体の出撃Sequenceとは異なる. 購読は読み取り専用で, いずれのSequenceも消費しない.
 
-## Runtime Aggregate
+## Runtimeの状態と所有範囲
 
 ```mermaid
 classDiagram
@@ -15,7 +15,7 @@ classDiagram
         Version
         InitialSeed
         MainRandom
-        Sequence
+        SortieSequence
         AcceptingRequests
         DbFailureState
     }
@@ -23,15 +23,18 @@ classDiagram
         GuildID
         Score
         Chain
+        LastChainIncrementAt
+        CbcStatus
     }
     class PlayerRuntimeState {
         PlayerID
         RequestSequence
-        HPs
+        CharacterHPs
         BP
         TP
         HealState
         ReviveState
+        SortieCooldown
         AttackCount
         AcquiredScore
     }
@@ -44,211 +47,173 @@ classDiagram
         SourcePlayerID
         SourceGuildID
     }
-    class CbcState
-    class BattleQueue
-    class ReplayEventEmitter
-
+    class AcceptedRequestQueue
+    class ReplayEmitter
+    class SubscriptionRegistry
     GuildBattleRuntime "1" --> "2" GuildRuntimeState
     GuildBattleRuntime "1" --> "many" PlayerRuntimeState
     GuildBattleRuntime "1" --> "many" TacticsActiveEffectState
-    GuildBattleRuntime --> CbcState
-    GuildBattleRuntime --> BattleQueue
-    GuildBattleRuntime --> ReplayEventEmitter
+    GuildBattleRuntime --> AcceptedRequestQueue
+    GuildBattleRuntime --> ReplayEmitter
+    GuildBattleRuntime --> SubscriptionRegistry
 ```
 
-`PlayerRuntimeState`の詳細な共有型は`GuildBattlePlayerRuntimeState`等の既存定義を使用します。
+図は論理的な保持対象であり, 具体的なRustフィールド名・データ構造の新規規定ではない. Character, CBC, Heal, Revive, Tacticsの共有状態には`design/shared/common_data_struct.md`および`design/shared/types.md`の定義を用いる. `SubscriptionRegistry`はゲーム状態の正本ではなく, 認証済み接続の宛先と終了待ち状態だけを保持する.
 
-## 初期化
+## 初期化・Replay
 
-PreloadではPrivate API経由で必要なGuild / Member / Party / Item等を取得し、開戦時に確定した可変初期状態を`GuildBattleInitialSnapshot`へ保存します。
+PreloadではPrivate API経由でGuild / Member / Party / Item等の必要な情報を取得し, 開戦時の可変初期状態を`GuildBattleInitialSnapshot`へ固定する. InitialSeed, Version, GuildID, SnapshotのCreate Replayを最初のEventとする. `StartGuildBattle`成功時にCreate Replayの保存と`scheduled -> in_progress`を同一Database Transactionで確定する. Replay復元で現在のDatabaseの可変値を初期状態として使用しない.
 
-開戦時のInitialSeedとSnapshot、GuildID、Versionを含むCreate Replayが最初のReplay Eventです。`StartGuildBattle`成功によりCreate Replay保存と`scheduled -> in_progress`が同一Transactionで確定します。
+成功した状態変更は成立順にReplay Eventとして記録する. Replayに記録するEventの意味と書式は`design/system/guild_battle_replay.proto`, 保存障害と再送は`design/system/log.md`を正とする.
 
-Replay復元時は現在のDatabase可変状態を初期状態として使用しません。
+## JoinとRequestSequence
 
-## Join
-
-初回Join成立時だけGuildBattle本体PRNGを1回消費します。
+初回Join成功時のみGuildBattle本体PRNGを1回消費し, 次を初期RequestSequenceとする.
 
 ```text
 RequestSequence = main_random.next_bounded(1_000_000_000) + 1
 ```
 
-- Player間でRequestSequenceが重複しても構いません。
-- 再Joinでは現在値を返し、PRNGを消費しません。
-- Join成立順とPRNG消費はReplay対象です。
-- Join時にClientVersionをGameServer Versionと比較します。
-- `ValidateAccountSession`で24時間Session有効性を確認します。
-- Local編成とPreload済みServer編成が異なる場合はServer編成を返して同期します。
+Player間の数値重複は許す. 再Joinでは現在値を返し, PRNGを消費しない. Join成立順と初期Sequenceの消費はReplay対象. `ClientVersion`はGameServer Versionと照合し, Account Sessionは`ValidateAccountSession`で検証する. Client編成がPreload済みServer編成と一致しない場合, Server側をClientへ返して同期する.
 
-## 状態変更要求の共通処理
+## 受付・直列実行・共通Validation
+
+GameServerが受信した要求は受信時刻の早い順に処理する. 完全同時の順序は処理系定義とし, 並び替えにPRNGを使用しない. 開戦30:00以降の新規状態変更要求は受付けないが, 30:00以前に受付キューへ入った要求は最後まで処理する.
 
 ```mermaid
 flowchart TD
-    R[Request到達] --> O[GuildBattle所有確認]
-    O --> P[Player / Battle / Auth Context確認]
-    P --> S[RequestSequence一致確認]
-    S --> D[操作固有Domain Validation]
-    D --> M[Runtime状態変更]
-    M --> N[成功時RequestSequence + 1]
-    N --> E[Replay Eventを成立順にReplayQueueへ追加]
-    E --> X[Response]
+    R[要求到達] --> T{30:00より前に受付可能か}
+    T -->|No| REJ[新規要求を受付けない]
+    T -->|Yes| Q[受付キューに順番どおり登録]
+    Q --> O[GuildBattle Owner確認]
+    O --> A[PlayerとAuthContextとJoin状態確認]
+    A --> S[RequestSequence一致検証]
+    S --> V[操作固有Validation]
+    V --> F{要求種別}
+    F -->|出撃| SO[出撃専用フローに従う]
+    F -->|その他の変更操作| M[操作固有の状態とDB更新を適用]
+    M --> N[成功時Player RequestSequenceを1加算]
+    N --> E[成立EventをReplayQueueへ追加]
+    E --> RES[成功Response]
+    SO --> SR[出撃専用Response先行と後処理]
 ```
 
-操作失敗時はRequestSequenceを進めません。DB更新を伴う操作では仕様で定義された順序・冪等性を優先し、共通Pipelineで勝手に順序を入れ替えません。
-
-## Request処理順
-
-GameServerが受信した要求は先着順で処理します。
-
-- 受信時刻が異なる場合は早い要求を先に処理します。
-- 完全に同時と扱われる要求間は処理系定義です。
-- 同時要求の順序決定にPRNGを使いません。
-- Clientの「通信中」はServer Runtime状態として追加しません。
+失敗した操作はRequestSequenceを進めず, 成立Replay Eventを記録しない. **出撃は成功Responseを先行して返す特例**であり, 上図の「その他の変更操作」のReplay→Response順序を出撃に適用しない. DB更新を行う操作のTransaction / 冪等性 / RetryはPrivate API仕様を優先し, 共通処理で順序を変更しない. Clientの「通信中」表示状態をGameServerの独立したPlayer状態として追加しない.
 
 ## GetGuildBattleStatus
 
-再接続用の状態復元APIです。
+`GetGuildBattleStatus`はRequestSequence不要・Sequence不消費の状態参照で, 再接続時の正本同期に使用する. 現在HP, BP/最大BP, TP/最大TP, Heal/Reviveと残り時間, 出撃待機, Active Tactics Effects, Item残数, 両Guild Score, 所属Guild Chain, CBC, 現在RequestSequenceを返す. CharacterID, Follower, MainSkill, Ability, Formation等の静的編成はJoin時に同期済みのClient情報を利用し再送しない.
 
-入力にRequestSequenceを要求せず、実行してもSequenceを加算しません。以下の現在状態を返します。
-
-- Character現在HP
-- BP / 最大BP
-- TP / 最大TP
-- HealState / ReviveStateと残り時間
-- 出撃待機時間
-- Active Tactics Effects
-- Item残数
-- 両Guild Score
-- Chain
-- CBC状態
-- 現在RequestSequence
-
-CharacterID、Follower、MainSkill、Ability、Formation等の静的編成はJoin時に同期済みClient側情報を使用し、このAPIで再送しません。
-
-## Sortie
-
-成功する出撃の主要状態更新順は仕様上固定されています。
+## 出撃専用処理
 
 ```mermaid
 flowchart TD
-    A[出撃Validation成立] --> S[GuildBattle全体Sequence加算]
-    S --> AC[attack_count += 1]
-    AC --> EX[加算後attack_countでEXTERLIZE]
-    EX --> K[出撃種別判定]
-    K -->|Castle Break| CB[Castle Break処理]
-    K -->|Annihilation| T[相手Player / Character抽選・戦闘]
-    CB --> RS[RequestSequence + 1]
+    A[出撃Validation成立] --> S[GuildBattle全体出撃Sequence加算]
+    S --> AC[Player attack_countを先に1加算]
+    AC --> EX[加算後attack_countでEXTERLIZE判定]
+    EX --> K[種別決定 CBC キリ番CB 強襲CB 殲滅]
+    K -->|CB| CB[CB計算 能力はキャラクターと効果種別ごとに各1回]
+    K -->|殲滅| T[相手選択と戦闘計算 初期状態とSeedを保存]
+    CB --> RS[Player RequestSequence加算]
     T --> RS
-    RS --> RESP[出撃結果Responseを要求元へ送信]
-    RESP --> B[出撃完了Battle Special評価]
-    B --> SC[acquired_scoreへ今回Score加算]
-    SC --> CH[Chain処理]
-    CH --> RP[Replay Event]
-    RP --> N[購読中の当該騎士団戦全参加者へScore/Chain更新通知]
+    RS --> RESP[要求元へ出撃結果Response]
+    RESP --> B[出撃完了BattleSpecial BP/TP回復]
+    B --> SC[acquired_score加算]
+    SC --> CH[両Guild Score Chain確定]
+    CH --> RP[成立Replay Event追加]
+    RP --> N[購読中Playerへスコア チェイン 残り時間通知]
+    N --> END[当該出撃処理完了 次の受付済み要求へ]
 ```
 
-`RequestSequence`加算後の出撃結果Responseは要求元Clientへ先に返します。その後BP/TP回復、`acquired_score`加算、両騎士団Score/Chain更新、Replay Event追加までを同じ出撃処理として直列実行し、確定した所属別の`GuildBattleScoreUpdate`を通知ストリームへ送ります。購読自体は状態変更要求ではなくRequestSequenceを消費しません。配信失敗でGameServerのスコアを巻き戻しません。
+出撃種別は`GuildBattleSortieEventType`に従い, CBC→キリ番CB→強襲無効→強襲CB→殲滅の既定のフローで決める. `EX_DRIVE`, `SLASHER`, `ENDER_BREAK`のキリ番専用効果は`GUILD_BATTLE_SORTIE_EVENT_NUMBERED_CASTLE_BREAK`でだけ適用する. CB専用アビリティでは`ABILITY_EFFECT_BUFF`と`ABILITY_EFFECT_CASTLE_BREAK_DAMAGE_INCREASE`を独立に判定する. キャラクター1体につき各効果種別は当該CBで最大1度だけ判定し, 次のCBへ判定済み状態を持ち越さない. CB算式とフローは`specification/game/guild_battle.md`と`design/game/guild_battle.md`を正とする.
 
-`GuildBattleAnnihilationResponse`の`OwnCharacters`、`EnemyCharacters`、`EnemyPlayerID`、`EnemyFormationID`、`BattleTacticsEffects`、`Seed`は, 対象の戦闘開始時点で確定した入力です。Clientの直前表示状態から再構築するのではなく、この入力で同じ`game-core`を実行します。`BattleTacticsEffects`には両陣営の戦闘に影響する継続効果のみを含め, 無関係な効果・履歴・最終戦闘結果は送信しません。
+殲滅では`GuildBattleAnnihilationResponse`に戦闘開始時点の`OwnCharacters`, `EnemyCharacters`, `EnemyPlayerID`, `EnemyFormationID`, 戦闘に関係する`BattleTacticsEffects`, `Seed`を格納する. ClientはJoin時同期済み自身の編成とこの入力で同一`game-core`を実行する. 表示済みの古いHPやTacticsを流用せず, 関係しない継続効果・最終HP・行動履歴を追加送信しない.
 
-出撃種別判定の具体順序、相手抽選順、Damage等はゲーム仕様と`design/server/guild_battle.md`を正とし、本Runtime設計で再定義しません。
+出撃結果Responseは要求元へ先に送るが, その後のBattle Special回復, `acquired_score`, スコア・チェイン確定, Replay Event追加まで同一出撃の直列実行範囲とする. GameServerにおけるスコアの正本はResponseではなくRuntimeの確定値である. 送信通知の失敗によって出撃を巻き戻さない.
 
-## スコア・チェイン通知購読
+## 通知購読とチェイン残り時間
 
-`SubscribeGuildBattleUpdates`は`GuildBattleID`に対するJoin済みPlayerの認証済み通知ストリームを登録します。ゲーム状態の正本を複製せず、GameServerから送るメッセージは`GuildBattleScoreUpdate`の4フィールドのみです。初回は現行スコア・チェインを配信し、以降は出撃後処理の確定後に両Guildの全購読者へそれぞれの所属側値を配信します。Clientの接続切断時に購読を解除し、再開時には`GetGuildBattleStatus`で再同期します。複数Public API Server経由で接続したClientにも所有GameServerから各ストリームで配信します。
+`SubscribeGuildBattleUpdates`はJoin済みPlayerの認証済みHTTP/2 Response streamで, `RequestSequence`を使用しない. 初回と出撃後処理確定時の`GuildBattleScoreUpdate`には, 受信者の所属騎士団基準の`AllyScore`, `EnemyScore`, `Chain`と`ChainRemainingMilliseconds`を含める. 送信時点の現在状態を正本として確定し, `ChainRemainingMilliseconds`は0～300000の`uint32`で表す.
 
-## Tactics
-
-UseTactics成功時は以下を扱います。
-
-1. Tactics利用可能性、UseCondition、TP、使用回数を確認します。
-2. ランダム要素ありならGuildBattle本体PRNGの`next_u32()`を1回だけ消費してSeedを作ります。
-3. `Random::new(Seed)`でTactics専用PRNGを生成します。
-4. Tactics専用PRNGだけでTactics固有ランダム処理を行います。
-5. 継続効果は`TacticsActiveEffectState`として保存します。
-6. 成功時RequestSequenceを進め、Replay Eventを追加します。
-
-ランダム要素なしはResponse Seedを`0`としますが、Seed値そのものからランダム利用有無を判定しません。
-
-### 継続効果
-
-- DURATION型は絶対時刻`expires_at`で終了判定します。
-- COUNT型は`remaining_count`と`count_consume_trigger`で管理します。
-- `source_player_id` / `source_guild_id`を発動時に固定し、相対Target解決へ使用します。
-- `OPPONENT_PARTY`はActivation時点で特定Playerへ固定するのではなく、各出撃時の現在対戦相手へ解決します。
-
-## Item
-
-Item使用ではRuntime所持数と使用条件を確認し、Private API経由でPlayer Item永続値を更新します。GuildBattle中のDB変更としてOperation IDによる冪等化対象にします。
-
-## Heal / Revive
-
-HealとReviveは独立状態機械として実装します。
+- Chain=0または前回チェイン加算から5分が経過し加算不成立のままリセットされた場合は残り時間を0とする.
+- その他は`max(300000 - (送信値確定時刻 - 前回チェイン加算時刻)[ms], 0)`とし, 5分ちょうどの加算はリセット判定に含めない.
+- 同じPlayerの連続出撃など, チェイン値を加算しない場合は前回加算時刻を新たな加算時刻として扱わない.
+- 時間経過だけでチェインが0になる場合に追加のPush通知は送らない. Clientのタイマー減算は表示用途だけであり, Serverチェイン値を確定しない.
+- 接続断の通知履歴を再送しない. 再接続時には`GetGuildBattleStatus`の正本を先に同期し, 新しい購読の初回スナップショットで残り時間を取得する.
 
 ```mermaid
-stateDiagram-v2
-    state Heal {
-        [*] --> HEAL_NONE
-        HEAL_NONE --> HEALING: StartHeal
-        HEALING --> HEAL_NONE: CancelHeal
-        HEALING --> HEAL_COMPLETED: 待機時間経過
-        HEAL_COMPLETED --> HEAL_NONE: CompleteHeal
-    }
-
-    state Revive {
-        [*] --> NORMAL
-        NORMAL --> ANNIHILATED: 全滅条件
-        ANNIHILATED --> REVIVING: StartRevive
-        REVIVING --> ANNIHILATED: CancelRevive
-        REVIVING --> REVIVE_COMPLETED: 待機時間経過
-        REVIVE_COMPLETED --> NORMAL: CompleteRevive
-    }
+sequenceDiagram
+    participant C as Client
+    participant P as Public API Server
+    participant G as GameServer
+    C->>P: SubscribeGuildBattleUpdates
+    P->>G: 認証済みContextと購読要求
+    G->>G: Owner Join 所属を検証
+    G-->>P: 現在値Score Chain ChainRemainingMilliseconds
+    P-->>C: 初回GuildBattleScoreUpdate
+    loop 30:00前に出撃後処理が確定するたび
+        G-->>P: 所属Guild基準のGuildBattleScoreUpdate
+        P-->>C: Score Chain 残り時間
+    end
+    Note over G: チェイン期限のみの変化では通知なし
+    Note over G: 30:00で新規受付停止
+    alt 当該Playerに30:00前のキュー待機要求あり
+        G->>G: 当該Playerの受付済み要求を完了
+        G-->>P: 当該Playerの購読終了
+        P-->>C: Response stream正常終了
+    else 当該Playerにキュー待機要求なし
+        G-->>P: 30:00で購読終了
+        P-->>C: Response stream正常終了
+    end
 ```
 
-各開始・Cancel・Complete要求は成立時だけRequestSequenceを進めてReplay Eventを生成します。
+他Playerの処理待ちによって当該Playerの購読終了を延期しない. 30:00以前に受付済みの当該Playerの要求が複数ある場合は, そのPlayerの受付済み処理がすべて完了した時点で終了する. 所有GameServerは接続ごとの通知対象判定と終了指示を行い, Public API ServerはmTLSで中継する. 他GuildBattleの状態は購読者へ送らない.
 
-出撃待機TimerはHeal / Reviveとは独立して保持します。
+## Tactics・アイテム・治療・復活
 
-## 30分終了処理
+`UseTactics`成立時にはUseCondition・TP・残使用回数を確認する. Random要素ありの場合だけGuildBattle本体PRNGから専用Seedを1回生成し, `Random::new(Seed)`のTactics専用PRNGで固有抽選を行う. Random要素なしはResponse Seedを0とするが, Seedの数値からRandom使用有無を判定しない. Active Effectsは`TacticsActiveEffectState`として, 終了時刻・残回数・発動元PlayerID/GuildIDとともに保持する. DURATIONは絶対時刻, COUNTは`remaining_count`と`count_consume_trigger`を使用し, `OPPONENT_PARTY`は各出撃時の現在の対戦相手へ解決する.
+
+Item使用はRuntimeの所持数・条件を検証し, 永続数の更新はPrivate API経由で`X-Operation-ID`の冪等性を適用する. 日次アイテム配布とServerスナップショットの同期方式は未確定として固定しない.
+
+Heal / Reviveは仕様の状態遷移と待機時間に従う. Start, Cancel, Completeが成立した場合だけRequestSequenceを加算しReplayへ記録する. 出撃待機時間はHeal / Reviveとは独立して保持する. 具体的な状態と時刻処理は`specification/game/guild_battle.md`および`design/server/guild_battle.md`の各APIシーケンスを正本とする.
+
+## 30:00受付終了と永続終了
 
 ```mermaid
 stateDiagram-v2
     [*] --> accepting
-    accepting --> resolving: 開始から30:00
-    resolving --> finalizing: 受付済みQueueが空
+    accepting --> resolving: 開戦30:00 新規受付停止
+    resolving --> finalizing: 受付済みキューの全処理終了
     finalizing --> completed: CompleteGuildBattle成功
 ```
 
-30:00で新規要求受付を停止し、Private APIへ`BeginGuildBattleResolving`を要求します。すでに受付済みのQueueをすべて処理した後に最終Scoreと勝敗を決定し、`CompleteGuildBattle`で永続化します。
+30:00で新規受付を停止し, 待機要求のないPlayerの通知ストリームを終了する. 30:00以前にキューへ受付済みの要求はすべて処理する. 処理待ちのPlayerの購読だけを当該Playerの全受付済み要求完了時まで延長する. `BeginGuildBattleResolving`で永続状態を`resolving`にしてから受付済みQueueを解消し, 最終スコア・勝敗を決定する. `CompleteGuildBattle`成功時に当該対戦を`completed`へ更新する.
 
-## DB障害状態
+対戦Guildのmembership lockは当該騎士団戦の`completed`確定と同時に解除する. 同対象日・開始時刻の除外Guildのmembership lockと除外一覧は, その時間帯の全騎士団戦が`completed`になった`CompleteGuildBattle`のTransactionでのみ解除・削除する. 別対戦が未完了の間は解除しない.
 
-当該GuildBattleのDB送信で初回失敗後、同一要求を1回Retryします。再失敗時はDB障害状態へ移行し、それ以降のGuildBattle中DB送信を停止してRecoveryへ保存します。
+## DB障害・不変条件
 
-Runtimeは「DB送信を継続してよいか」を判定できる状態を保持する必要がありますが、ファイルI/O自体は専用Workerへ分離します。
+騎士団戦中DB送信は初回失敗後に同じ要求を1回Retryし, 再失敗時はDB障害状態へ遷移して以後のDB送信を止めRecoveryへ保存する. Replay / Recovery fileの書込・再送は専用Workerの責務とし, 正本仕様は`design/system/log.md`と`design/server/guild_battle.md`を参照する. `CompleteGuildBattle`の失敗処理は別の専用規則を使用する.
 
-## 不変条件
-
-最低限、実装内で以下を崩さない構造にします。
-
-- 1 GuildBattleを1 GameServer Instanceだけが所有します。
-- PlayerごとのRequestSequenceは成功操作だけで増加します。
-- Join初回以外でRequestSequence生成用PRNGを消費しません。
-- Replay Eventは成立操作だけを状態反映後に追加します。
-- Replay Event順は成立順と一致します。
-- GuildBattle本体PRNGとTactics専用PRNGを混同しません。
-- 30:00以降は新規受付を増やしません。
+- 1つの`GuildBattleID`を同時に複数のGameServerが所有しない.
+- 成功したPlayerの状態変更だけでRequestSequenceを進める.
+- Join再実行と状態参照・購読でGuildBattle本体PRNGを消費しない.
+- 出撃を同じ受付Queueで直列に扱い, Response先行後の更新も次の出撃より前に完了する.
+- Replay Eventは成立順で追加し, LiveとReplayで状態が一致する.
+- 30:00以降は新規受付を増やさず, それ以前の受付済みQueueを最後まで解決する.
 
 ## 情報源
 
-- `design/server/guild_battle.md`
-- `design/server/game_server.md`
-- `design/server/api_payload.md`
-- `design/server/guild_battle_lifecycle.md`
-- `design/shared/common_data_struct.md`
+- `specification/game/guild_battle.md`
+- `specification/game/ability.md`
+- `specification/game/tactics.md`
 - `design/game/guild_battle.md`
-- `design/game/pseudorandom.md`
+- `design/server/guild_battle.md`
+- `design/server/guild_battle_lifecycle.md`
+- `design/server/public_api.md`
+- `design/server/api_payload.md`
+- `design/shared/common_data_struct.md`
+- `design/shared/types.md`
 - `design/system/guild_battle_replay.proto`
 - `design/system/log.md`
 - `design/test/test_policy.md`
