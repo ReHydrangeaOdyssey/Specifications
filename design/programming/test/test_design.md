@@ -76,7 +76,23 @@ IEEE-754 32bit浮動小数点として、仕様に記載された演算順を変
 - タイトル画面にキャッシュクリアとアセット追加のボタンがあることを確認します。
 - プレイヤーが選択した画像をゲーム内キャラクターへ割り当てられることを確認します。
 
-接続不要な具体的ゲーム機能、追加画像の保存・復元、キャッシュクリアの対象範囲など、未確定の挙動をテストで固定しません。
+### ブラウザ実装・アセット・音声の検証
+
+以下は添付ライブラリ選定資料が採用条件または確認対象として挙げた項目です。**試験済みという意味ではなく**, 実機実施と結果記録が必要です。
+
+- `wasm32-unknown-unknown`を対象に依存を解決し, `Cargo.lock`固定後に`cargo tree --target wasm32-unknown-unknown`および`cargo build --target wasm32-unknown-unknown --release --locked`を確認します。
+- iPhone Safari/PWAおよびAndroid Chrome/PWAで, ユーザー選択フォルダからOPFSへのPNG/HCAコピーを検証します。OPFSにバージョン別に配置し, 新バージョン検証後に使用先を切り替えることと取り込み中断からの回復を確認します。
+- PNGが`File` / `Blob`から`createImageBitmap()`で読み込め, WebGL 2テクスチャ化・描画できることを確認します。表示終了時の`ImageBitmap.close()`と`deleteTexture()`による資源解放を確認します。
+- 40キャラクターと代表的エフェクトをWebGL 2で描画し, GPU負荷・描画安定性を実機計測します。FPSやRAMの合格値は仕様で未確定であるため任意の閾値を固定しません。
+- `cridecoder`によるHCAのWASM向けビルドとiPhone Safariでの音声再生が可能か確認します。採用確定は合格後とします。
+- 短いSE・ボイスの`AudioBuffer`再利用と, 長いBGM・ボイスのPCM逐次供給（`AudioWorklet` / `MessagePort`）を確認します。長い音声を全体PCM展開せず再生することを確認します。
+- HCAのループ開始/終了, チャンネル数, サンプリングレート, 暗号化有無, 再生開始遅延, 欠音, 同時SE再生を確認します。AudioWorkletの`process()`内にHCAデコードや大きなメモリ確保を置かないことを確認します。
+- GPUテクスチャ, デコード済みPCM, WASMヒープ, ブラウザ一時メモリを分けて観測します。iOS端末で長時間の騎士団戦を行い, 強制再読み込みの有無を確認します。
+- `opt-level = 3`と`opt-level = "z"`で圧縮後WASMサイズ, HCAデコード時間, 初回ロード時間を比較し, Client依存とライセンスを監査します。検証結果・合格閾値は現時点で未記録です。
+
+ClientとPublic API Server間はHTTP/2 over TLS 1.3で通信し, API PayloadはProtocol Buffersであることを確認します。`SubscribeGuildBattleUpdates`ではHTTP/2 Response stream上の`GuildBattleScoreUpdate`をProtocol Buffers varint長prefix付きで受信できることを確認します。Public APIの通信方式としてWebSocketは使用しません。ブラウザ側の具体的な通信API・ライブラリ, HTTP Method・Pathは未確定のため, 本テスト設計で補完しません。
+
+接続不要な具体的ゲーム機能, キャラクター画像の割当情報の永続化・復元, キャッシュクリアの対象範囲など, 未確定の挙動をテストで固定しません。PNG/HCAファイル本体のOPFS保存は定義済みです。
 
 ## 結合テスト
 
@@ -303,3 +319,4 @@ Recovery fileからの再送でも同じテストを行います。
 - `design/server/session.md`
 - `design/system/log.md`
 - `design/system/guild_battle_replay.proto`
+- 添付`rust_wasm_png_hca_library_selection(1).md`（2026-10-09）, 第1～7節.

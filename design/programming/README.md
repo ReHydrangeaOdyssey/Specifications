@@ -4,7 +4,7 @@
 
 現行仕様から実装上の責務・状態・処理順まで確定できる範囲を、`design/programming/`以下へ整理します。
 
-本書群では、ゲーム仕様を追加しません。仕様で明示されていない値・挙動・通信Path・Framework構成は補完せず、実装上必要な境界だけを定義します。
+本書群では、ゲーム仕様を追加しません。仕様で明示されていない値・挙動・通信Path・Framework構成は補完せず、実装上必要な境界だけを定義します。ClientのRust/WASM・WebGL 2・Web Audio・OPFSの選定事項は`client/client.md`へ反映し, ライブラリ採用の未検証条件は維持します。Public API通信方式は既存のHTTP/2 over TLS 1.3・Protocol Buffersを正とし, 騎士団戦通知にはHTTP/2 Response streamを使用します。WebSocketは採用しません。
 
 ## 設計原則
 
@@ -111,3 +111,4 @@ flowchart LR
 - `design/system/rust_dependencies.md`
 - `design/test/test_policy.md`
 - `specification/game/`配下
+- 添付`rust_wasm_png_hca_library_selection(1).md`（2026-10-09）, 第1～7節（Client選定の追加根拠）.

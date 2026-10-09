@@ -37,7 +37,8 @@ stateDiagram-v2
 
 * キャッシュクリアボタンを配置する.
 * アセット追加ボタンを配置する. このボタンからプレイヤーが画像を選び, ゲーム内のキャラクターへ割り当てられる.
-* アセット追加操作を独立したシーンで扱うかどうかは未定義とする. このため, 上記遷移図へ新しいシーンを追加しない.
+* アセット追加では, ユーザーが選択したフォルダ内のPNGアセット等をOPFSへコピーして取り込む. PNGはブラウザの`createImageBitmap()`によるデコードを使用する. 詳細は「[クライアント仕様](client.md)」を参照する.
+* フォルダ選択UIの端末別実現方法, キャラクターへの割当操作とその永続化, アセット追加操作を独立したシーンで扱うかどうかは未定義とする. このため, 上記遷移図へ新しいシーンを追加しない.
 
 ![title_image](../../images/title.png)
 
@@ -54,3 +55,8 @@ stateDiagram-v2
 
 ![form_guild_battle_image](../../images/form_guild_battle.png)
 
+
+## 情報源
+
+* `design/client/client.md`.
+* 添付`rust_wasm_png_hca_library_selection(1).md`（2026-10-09）, 第1～4節.

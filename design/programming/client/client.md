@@ -51,6 +51,51 @@ classDiagram
 
 `logical module`は責務名であり、Rustの具体的な`struct`名を固定するものではありません。
 
+## Web Client実行方式とブラウザ境界
+
+- ClientはRust/WASM（`wasm32-unknown-unknown`）を対象とし, iPhone Safari/PWAおよびAndroid Chrome/PWA上で動作させます。
+- ブラウザとの接続には`wasm-bindgen`, `web-sys`, `js-sys`, `wasm-bindgen-futures`を使用します。Browser APIのPromiseは`wasm-bindgen-futures`を用いてRustの`Future`と連携させます。
+- 描画基盤として汎用2Dエンジンを追加せず, WebGL 2を`web-sys`経由で使用する独自スプライトバッチレンダラーとします。
+- Rust側の共有`game-core`および既存のProtocol Buffers生成型`protocol`の責務は維持します。既存の`prost`とこれらの内部crateは, 選定資料の「5クレート」に含まれないため削除しません。
+- ClientとPublic API Server間の通信方式はHTTP/2 over TLS 1.3, API PayloadはProtocol Buffersとします。`SubscribeGuildBattleUpdates`はHTTP/2 Response streamを使用し, `GuildBattleScoreUpdate`をProtocol Buffers varint長prefix付きで受信します。WebSocketはPublic API通信方式として採用しません。ブラウザ側でこの通信仕様を利用する具体的なAPI・ライブラリは未確定です。
+
+### 描画パイプライン
+
+```text
+OPFSのPNG → File / Blob → createImageBitmap() → WebGL 2 texImage2D()
+            → 不要なImageBitmapをclose() → スプライトバッチ描画
+```
+
+- ブラウザでPNGをデコードし, 必要な画像をGPUへアップロードします。すべての展開済み画像をWASMヒープへ保持しません。
+- 描画順とブレンド状態を保持しつつバッチ化し, draw callやJS/WASM境界の往復を削減します。テクスチャ共有・アトラス化・インスタンシング等の適用範囲は実測結果に基づき決定します。
+- 使用終了時には`ImageBitmap.close()`と`deleteTexture()`によって不要な資源を解放します。
+- GPUテクスチャ, WASMヒープ, ブラウザ内の一時メモリを別々に把握します。WebGL 2とCanvas 2Dの比較優位やFPS値は現時点で保証しません。
+
+### HCAデコード・音声パイプライン
+
+- HCAデコード候補は`cridecoder`（選定資料に記載された`0.3.6`）です。`default-features = false`を指定し, 不要なPythonバインディングを有効化しません。
+- HCAからPCMへ変換した音声をWeb Audio APIへ渡します。短いSE/ボイスでは必要に応じて全体を`AudioBuffer`へデコードして再利用します。
+- 長いBGM/ボイスはOPFSから必要な圧縮ブロックを読み, 小容量PCMバッファへ逐次デコードします。`AudioWorkletNode`へ`MessagePort`経由でPCMチャンクを供給し, `AudioWorkletProcessor`の小容量キューから再生します。
+- `AudioWorkletProcessor.process()`内でHCAデコードや大容量のメモリ確保を行いません。制御側または専用Workerが先読みし, 音声出力側と役割を分離します。
+- 先読みPCM量は固定せず実機計測で決定します。`SharedArrayBuffer`を利用する方式は初期実装では採用しません。
+- HCAのiPhone Safari/WASMでのコンパイル・正しい再生・ピークメモリは未検証です。`cridecoder`は検証合格を最終採用条件とする候補であり, 動作確認済みとは記載しません。
+
+### OPFSアセット管理
+
+- ユーザーの初回フォルダ選択により取得したPNG/HCAファイルをOPFSへコピーします。元フォルダへの恒久的なアクセスや監視は行いません。GameServerから画像・音声アセットを配信しません。
+- OPFSにバージョン別ディレクトリを設けます。新バージョンを検証してから使用先を切り替え, 取り込み中断から回復できる状態を保持します。
+- `FileSystemSyncAccessHandle`はDedicated Worker上のOPFSランダムアクセスが必要な場合に検討する候補であり, 現時点では採用確定ではありません。不要なら非同期APIを使用します。
+- 圧縮HCAファイル全体と全体PCMを同時に常駐させません。デコード済みPCM, GPU資源, WASMメモリは用途別に管理し, 不要な`AudioBuffer`の参照を解除します。
+- OPFSへの**画像/音声ファイル本体**の保存は選定済みです。キャラクター画像の**割当情報**の保存先・保持期間・復元ルール, ファイルの上書き/削除規則, キャッシュクリア対象は引き続き未確定です。
+
+### 依存・ビルド・検証条件
+
+- Client用ブラウザ連携の選定crateは`wasm-bindgen`, `web-sys`, `js-sys`, `wasm-bindgen-futures`および採用検証を要する`cridecoder`です。`web-sys`は使用API単位でfeaturesを指定します。
+- 描画用の`image`, `png`, `pix`, `wgpu`, `glow`, 汎用2Dゲームエンジン, オーディオ出力専用Rustライブラリは採用しません。
+- `Cargo.lock`を保存して依存を固定し, `cargo tree --target wasm32-unknown-unknown`で推移的依存を確認します。`cargo build --target wasm32-unknown-unknown --release --locked`でビルドを検証します。
+- 選定資料にある`opt-level = 3`, `lto = "fat"`, `codegen-units = 1`, `panic = "abort"`, `strip = "symbols"`は計測用のRelease設定案です。`opt-level = "z"`との圧縮後WASMサイズ・HCAデコード時間・初回ロード時間の比較を行い, 本番設定の最終値は検証後に定めます。
+- 実機では40キャラクターと代表的エフェクトの描画, iOS長時間動作, 同時SE, BGM逐次再生, HCAループ・チャンネル数・サンプリングレート・暗号化有無・再生遅延・欠音, 依存のライセンス確認を実施します。合格閾値および検証結果は未定義・未記録です。
+
 ## ログイン・サーバー未接続時
 
 - ログインの可否やServerへの接続可否と、接続不要なゲームプレイの可否を分離します。
@@ -63,7 +108,7 @@ classDiagram
 - タイトル画面にキャッシュクリアとアセット追加の操作を提供します。
 - アセット追加ではプレイヤーが選択した画像をゲーム内キャラクターへ割り当てます。
 - 画像・UVデータはClient側資産とし、Server用`ProcessedMasterData`の対象へ追加しません。
-- 保存先、保持期間、画像形式、上書き規則、キャッシュクリアの対象範囲は仕様未確定として扱います。
+- PNG/HCAファイル本体の保存先はOPFSとし, 初回に選択したフォルダからコピーします。追加画像のうちPNG以外の対応形式, 容量・解像度制限, キャラクター割当情報の永続化・復元, 上書き・削除規則, キャッシュクリアの対象範囲は未確定です。
 
 ## 認証状態
 
@@ -176,7 +221,9 @@ Seedが`0`かどうかだけでランダム要素の有無を判定しません�
 
 - ClientとGameServerで同一Versionのロジック・MasterDataを揃える必要があります。
 - Client側表示状態はServer正本と重複するため、再同期処理が必要です。
-- オフラインで利用できるゲーム機能および追加画像の保存・復元要件が未確定のため、その部分の実装と検証を具体化できません。
+- オフラインで利用できるゲーム機能, 画像のキャラクター割当情報の保存・復元規則やキャッシュクリアの対象範囲は未確定です。
+- ブラウザごとのアセット取り込み可否・メモリ上限およびHCA/WASMの実機性能は未検証です。
+- HTTP/2 over TLS 1.3のPublic APIおよびHTTP/2 Response streamをブラウザから利用する具体的な通信API・ライブラリは未確定です。
 
 ## 情報源
 
@@ -192,3 +239,6 @@ Seedが`0`かどうかだけでランダム要素の有無を判定しません�
 - `design/game/pseudorandom.md`
 - `design/shared/common_data_struct.md`
 - `design/test/test_policy.md`
+- 添付`rust_wasm_png_hca_library_selection(1).md`（2026-10-09）, 第1～7節.
+- `design/system/network.md`（既存のPublic API通信方式）.
+- `design/system/rust_dependencies.md`（Client依存の整理）.

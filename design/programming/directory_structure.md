@@ -85,6 +85,8 @@ workspace/
 
 ## 配置ルール
 
+- `apps/client/`はRust/WASMのWeb Clientとします。Client内でBrowser API連携（`wasm-bindgen` / `web-sys` / `js-sys` / `wasm-bindgen-futures`）, WebGL 2描画, OPFSアセット管理, HCAデコード/Web Audio出力を論理的に分離します。下位の具体的なRustファイル名・ディレクトリ名は固定しません。
+- Clientは共有`game-core`および`protocol`を使用し, 描画・音声・OPFSなどのBrowser APIを`game-core`へ持ち込みません。
 - `game-core`にはHTTP、Database、Kubernetes、ファイルI/Oを置きません。
 - Public APIの`routing`はDomain ruleを保持しません。
 - Private APIのDatabase transactionは`persistence`境界で開始し、Account/Guild/GuildBattleのApplication処理がtransaction unitを決定します。
@@ -113,3 +115,4 @@ workspace/
 - `design/server/game_server.md`
 - `design/server/guild_battle_coordinator.md`
 - `design/system/log.md`
+- 添付`rust_wasm_png_hca_library_selection(1).md`（2026-10-09）, 第1～7節.

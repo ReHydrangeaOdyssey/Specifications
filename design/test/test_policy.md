@@ -28,6 +28,7 @@
 * ProcessedMasterDataのValidation.
 * Clientのログイン・Server未接続時のゲームプレイ制御.
 * タイトル画面のキャッシュクリア・アセット追加とキャラクター画像の割り当て.
+* Rust/WASM ClientのWebGL 2・PNG・HCA/Web Audio・OPFSの実機検証.
 * 運営操作により状態を復旧する経路.
 
 ## テスト区分
@@ -167,7 +168,9 @@ GuildBattle Replayは「[リプレイProtocol Buffers定義](../system/guild_bat
 * タイトル画面にキャッシュクリアボタンとアセット追加ボタンがある.
 * アセット追加操作から, プレイヤーが選択した画像をゲーム内キャラクターへ割り当てられる.
 
-接続不要なゲーム機能の具体的一覧, 画像保存の永続化やキャッシュクリア時の扱いは仕様確定後にテスト条件を追加する.
+Clientの選定済み実装方式については, `design/programming/test/test_design.md`の「ブラウザ実装・アセット・音声の検証」を参照し, iPhone Safari/PWA, Android Chrome/PWA, WebGL 2, PNG, OPFS, HCA/音声を検証する. PNG/HCAファイル本体のOPFS保存は定義済みである一方, HCAデコーダーの最終採用には実機検証を要する. ClientとPublic API Server間のHTTP/2 over TLS 1.3・Protocol Buffersおよび騎士団戦通知のHTTP/2 Response streamを通信仕様として確認し, WebSocketをPublic API通信方式として使用しない.
+
+接続不要なゲーム機能の具体的一覧, キャラクター画像の割当情報の永続化・復元, キャッシュクリア時の扱いは仕様確定後にテスト条件を追加する.
 
 ## 編成Validationテスト
 
@@ -376,3 +379,7 @@ GuildBattle Replayは「[リプレイProtocol Buffers定義](../system/guild_bat
 不具合を修正した場合は, 再現可能な不具合について同じ不具合が再発しないテストを追加する.
 仕様変更で既存期待値が変更された場合は, 仕様文書の変更と同じ変更単位でテスト期待値を更新する.
 テストだけを変更して仕様との差異を吸収しない.
+
+## Clientライブラリ選定の情報源
+
+* 添付`rust_wasm_png_hca_library_selection(1).md`（2026-10-09）, 第1～7節.
