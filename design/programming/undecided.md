@@ -9,7 +9,7 @@
 - 対応iOS/Androidの最小OSバージョン, PWAインストール手順・配布URL・独自ドメイン（最小対応ブラウザはiOS Safari 16.3, Android Chrome 120で確定済み）
 - GitHub PagesとPublic APIのSite/Origin構成（`SameSite=Strict` Cookieを維持できる構成）, HTTP/2 + TLS 1.3の対象ブラウザ実通信検証
 - アセット追加シーンの戻り先・戻り操作, Safari/Chromeでのファイル/フォルダ取り込み操作, 元ファイル削除を伴う「移動」の権限と実現方式
-- Server配布のファイル名SHA-256ハッシュ対応辞書の取得API・配布時期・シリアライズ形式, ファイル名をSHA-256へ入力する際の文字列表現, OPFS内の割当情報の具体形式, 同名時の上書き規則（同名ファイルは内容SHA-256で判別し, それ以外の衝突処理は設けない）
+- Server配布の二段SHA-256辞書の取得API・配布時期・シリアライズ形式, ファイル名SHA-256入力前のUnicode正規化の扱い, OPFS内の割当情報の具体形式, 同名時の上書き規則（二段辞書のキー構造, ファイル名のUTF-8・拡張子を含む・大小文字を区別する規則, 内容SHA-256による配置先識別は確定済み）
 - OPFSセマンティックバージョン別ディレクトリの詳細なPath・検証基準・中断復旧手順, ブラウザ固有のquota/退避/削除, `cache`フォルダの具体的配置階層
 - `cridecoder`のiPhone Safari/WASM上のビルド・再生・メモリ・ライセンス監査を経た最終採否
 - 22,050Hz HCAのループ開始/終了位置とチャンネル数, 最適PCM先読み量, 実機性能・欠音検証
@@ -25,8 +25,6 @@
 - BP50回復薬の日次0:00配布の実行主体とJob/API, 対象Playerの確定タイミング, 未配布日の取扱い, 対象ItemIDの特定方式
 - 日次配布と騎士団戦中のGameServer所持数スナップショット・`UpdatePlayerItem`絶対所持数更新が異常時・遅延時等に重なる場合の同期方式
 - 進行中GuildBattleをGameServer異常終了後に別GameServerへ自動復旧する方式
-- 状態異常付与直前の`ABILITY_EFFECT_AVOIDANCE`判定について, 被付与キャラクター側の`AbilityBattleState.activated_this_turn`確認分岐と, 発動済み時の遷移を「キャラクター行動」フローのどこへ組み込むか（発動成立時の状態更新は共通のAbility発動処理に従う）
-- `ABILITY_EFFECT_AVOIDANCE_COUNTER`を通常攻撃の相手HP処理後に判定する現フローでは, 発動時の「回避」が先に適用済みの通常攻撃ダメージへ及ぼす処理が定義されていない（反撃時の味方HP処理への遷移は定義済み）
 
 ### 意図的に記載しない事項
 
@@ -44,7 +42,7 @@
 - WebGL 2の独自スプライトバッチ描画とブラウザ`createImageBitmap()`によるPNGデコードを使用する.
 - `wasm-bindgen`, `web-sys`, `js-sys`, `wasm-bindgen-futures`をブラウザ接続に用いる. `cridecoder`はHCAデコードの採用候補とし, 実機検証まで最終確定とはしない.
 - Web Audio APIでPCM再生し, 長い音声は`AudioWorklet`と`MessagePort`によってPCMチャンクを供給する.
-- PNG/HCA本体とキャラクター割当情報はOPFSへ保存し, 選択ディレクトリを再帰探索したファイル名のSHA-256ハッシュ対応辞書に基づき自動配置する. 同名ファイルはファイル内容のSHA-256で配置先を判定し, それ以上の衝突処理は設けない. Clientの自動削除は行わず, キャッシュクリアはOPFS内`cache`フォルダだけを対象とする. PNG/HCA本体はGameServerから配信しない. アセット追加はタイトルのボタンから専用シーンへ遷移する.
+- PNG/HCA本体とキャラクター割当情報はOPFSへ保存し, 選択ディレクトリを再帰探索したファイル名のSHA-256ハッシュ対応辞書に基づき自動配置する. 辞書はファイル名SHA-256から内容SHA-256・対応配置先パスへの二段構造とし, ファイル名は拡張子を含むUTF-8で英字大小文字を区別してハッシュ化する. 同名ファイルはファイル内容のSHA-256で配置先を判定し, それ以上の衝突処理は設けない. Clientの自動削除は行わず, キャッシュクリアはOPFS内`cache`フォルダだけを対象とする. PNG/HCA本体はGameServerから配信しない. アセット追加はタイトルのボタンから専用シーンへ遷移する.
 - ClientとPublic API Server間はHTTP/2 over TLS 1.3 + Protocol Buffersを正とし, `SubscribeGuildBattleUpdates`はHTTP/2 Response streamを使用する. ブラウザ標準Fetch API/ReadableStreamを選定済みcrateから使用する. WebSocketはPublic API通信方式に採用しない.
 - ログイン・Server未接続時はタイトルからホームへの遷移だけ許可し, 復帰後は通常の全機能を利用可能にする.
 - UI Frameworkは採用しない. HCAは22,050Hz・非暗号化・一部ループ・SE最大同時5.

@@ -95,7 +95,7 @@
 | 固定ダメージスキルの攻撃力UP | `ABILITY_EFFECT_FIXED_DAMAGE_INCREASE` | `ABILITY_CONDITION_SKILL_ATTACK` | `ABILITY_TARGET_NONE` | FIXED型攻撃スキルだけへ固定値加算 |
 | 敵の攻撃を回避 | `ABILITY_EFFECT_AVOIDANCE` | `ABILITY_CONDITION_ATTACKED` | `ABILITY_TARGET_SELF` | `status`未設定 |
 | 敵の攻撃をカウンター | `ABILITY_EFFECT_COUNTER` | `ABILITY_CONDITION_ATTACKED` | `ABILITY_TARGET_SELF` | 反撃処理を使用 |
-| 敵の攻撃を回避＆カウンター | `ABILITY_EFFECT_AVOIDANCE_COUNTER` | `ABILITY_CONDITION_ATTACKED` | `ABILITY_TARGET_SELF` | 同一被攻撃イベントで回避判定後に反撃判定も行う |
+| 敵の攻撃を回避＆カウンター | `ABILITY_EFFECT_AVOIDANCE_COUNTER` | `ABILITY_CONDITION_ATTACKED` | `ABILITY_TARGET_SELF` | 通常攻撃のHP減算前に発動判定し, 成立時は攻撃を回避して反撃する |
 | 戦闘不能時にカウンター | `ABILITY_EFFECT_COUNTER` | `ABILITY_CONDITION_INCAPACITATED` | `ABILITY_TARGET_SELF` | 戦闘不能確定時に反撃 |
 | ピンチの味方をかばう | `ABILITY_EFFECT_COVER` | `ABILITY_CONDITION_ALLY_HP_AT_OR_BELOW_THRESHOLD_ATTACKED` | `ABILITY_TARGET_ALLY_SINGLE` | `condition_value`を対象味方のHP割合閾値として使用 |
 | ダメージを1人で引き受ける | `ABILITY_EFFECT_DRAW_AGGRO` | `ABILITY_CONDITION_ENEMY_NORMAL_ATTACK_TARGETING` | `ABILITY_TARGET_SELF` | 対象リスト取得前のひきつけ処理を使用 |
@@ -164,7 +164,7 @@
 * `ABILITY_EFFECT_TARGET_HP_LOW_PRIORITY`: `condition_value`以下のHP割合の敵を通常攻撃の起点候補として優先する.
 * `ABILITY_EFFECT_TARGET_DEFENSE_DOWN_PRIORITY`: 防御デバフ状態の敵を通常攻撃の起点候補として優先する.
 * `ABILITY_EFFECT_DRAW_AGGRO_IGNORE`: 当該キャラクターの通常攻撃では敵側`ABILITY_EFFECT_DRAW_AGGRO`による起点変更を適用しない.
-* `ABILITY_EFFECT_AVOIDANCE_COUNTER`: 被攻撃時に同一Abilityの発動率判定を行い, 成立した場合は回避処理と反撃処理の両方を実行対象とする.
+* `ABILITY_EFFECT_AVOIDANCE_COUNTER`: 通常攻撃が成立する場合, 通常攻撃ダメージをHPへ反映する前に発動率判定する. 発動した場合は当該通常攻撃を回避し, 反撃処理として攻撃者へのダメージを処理する.
 * `ABILITY_EFFECT_SURVIVE_AT_ONE_HP`: ダメージ反映によってHP0以下になる直前に発動判定し, 成立した場合は当該ダメージ反映後HPを1とする.
 * `ABILITY_EFFECT_INCAPACITATED_ALLY_COUNT_STAT_CORRECTION`: 現在の戦闘不能味方人数に一致するMasterData entryの攻撃/防御補正を, 攻撃力/防御力算出時に動的に適用する. `BuffDebuffEffectState`へ固定値として取り込まない.
 * `ABILITY_EFFECT_CASTLE_BREAK_DAMAGE_INCREASE`: 騎士団戦のキャッスルブレイク時ダメージへ`correction_value`を倍率として適用する. キャッスルブレイクスコア式の`1.0 + アビリティダメージ補正値`には`アビリティダメージ補正値 = correction_value - 1.0`として渡す. 未発動なら補正値0.0とする.
@@ -200,7 +200,7 @@
 
 ### かばう
 
-`ABILITY_EFFECT_COVER`は攻撃対象リスト取得後に1回判定する. `AbilityMasterData.activation_rate`による発動条件を満たした場合, 取得済み攻撃対象リスト内の各キャラクターには当該攻撃のダメージを反映せず, `ABILITY_EFFECT_COVER`を発動したキャラクターへ代わりにダメージを反映する.
+`ABILITY_EFFECT_COVER`は攻撃対象リスト取得後に1回判定する. 発動したターンは, 相手の攻撃対象リストに含まれるすべての味方への攻撃を引き受ける. `AbilityMasterData.activation_rate`による発動条件を満たした場合, 取得済み攻撃対象リスト内の各キャラクターには当該攻撃のダメージを反映せず, `ABILITY_EFFECT_COVER`を発動したキャラクターへ代わりにダメージを反映する. 同一ターンの再発動判定は行わない.
 
 * ダメージ計算に使用する攻撃対象側の値は, かばう前に攻撃対象リストへ含まれていた各キャラクターの値を使用する.
 * 攻撃対象リストの要素数と同じ回数だけ個別にダメージ計算し, その各ダメージをかばうキャラクターへ反映する.
@@ -212,6 +212,8 @@
 複数キャラクターが同時に`ABILITY_EFFECT_DRAW_AGGRO`の発動候補となった場合は, フォーメーション内部番号の小さい順に候補リストを作成し, 「[疑似乱数](../../design/game/pseudorandom.md)」の「抽選」で1キャラクターだけを選ぶ. 発動確率判定は選ばれた1キャラクターについてだけ行い, 不成立の場合に別候補の再抽選・再判定は行わない.
 
 ### 追撃
+
+追撃の発動候補は行動キャラクターを除いた, `ABILITY_EFFECT_PURSUIT`を保持する味方キャラクターとする. 候補が複数存在する場合はフォーメーション内部番号の小さい順に並べ, 「[疑似乱数](../../design/game/pseudorandom.md#抽選)」により1キャラクターを抽選する. 発動率は選択したキャラクターの`AbilityMasterData.activation_rate`を使用し, 追撃対象は先行する味方の通常攻撃対象を引き継ぐ.
 
 ダメージ計算式は通常攻撃と同じ.
 

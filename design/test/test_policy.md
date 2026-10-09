@@ -236,14 +236,17 @@ HCA 22,050Hz・非暗号化・一部ループ・SE同時最大5, 性能閾値GPU
 * AbilityID単位でターン内発動済み状態を保持する.
 * 同一AbilityEffectIDの重複装備を拒否する.
 * `EVERY_N_TURNS`を`AbilityTurnTiming`の4タイミングそれぞれで評価する.
-* 状態異常回避判定を状態異常付与率判定より先に行う.
+* 状態異常回避判定を状態異常付与率判定より先に行う. 状態異常回避Abilityが同一ターンに発動済みの場合, 再度発動率判定せず状態異常攻撃の発動率判定へ進む.
+* `ABILITY_EFFECT_AVOIDANCE_DISABLE`および`ABILITY_EFFECT_COUNTER_DISABLE`が同一ターンに発動済みの場合, 当該Abilityの発動率を再判定しない.
 * 暗闇で攻撃失敗となった場合も`ABILITY_EFFECT_PURSUIT`のAbilityID単位のターン内発動済み判定を通す.
 * `ABILITY_EFFECT_COUNTER`の発動率判定がNoの場合, 2回目の相手HP処理ではなく相手HP確認へ進む.
-* `ABILITY_EFFECT_AVOIDANCE_COUNTER`のターン内発動済み判定・発動率判定を追撃判定前に行い, 発動した場合は味方HP処理へ進む.
+* `ABILITY_EFFECT_AVOIDANCE_COUNTER`のターン内発動済み判定・発動率判定は通常攻撃成立後, 相手HP処理より前に行い, 発動した場合は通常攻撃ダメージを与えず味方HP処理へ進む.
+* 味方HP処理後は2回目の相手HP処理を行わず, 相手HP確認へ進む.
+* 追撃候補は行動キャラクターを除いた追撃Ability保持者とし, 複数候補ならフォーメーション内部番号順に並べて1キャラクターを抽選する. 選択したAbilityIDの発動済み判定・発動率判定を実施する.
 * 回避無効化・反撃無効化・状態異常攻撃・状態異常回避・COVER・DRAW_AGGROの発動成立時に, 対応AbilityIDの発動処理を通過する.
 * AbilityによるBUFF / DEBUFFをSkillと同じ`BuffDebuffEffectState`へ反映する.
 * `ABILITY_EFFECT_DAMAGE_INCREASE`は通常攻撃だけへ適用し, `correction_value`乗算後に通常攻撃最大ダメージ上限99,999を適用する.
-* `ABILITY_EFFECT_COVER`は攻撃対象リスト取得後に候補をフォーメーション内部番号順で抽選し, 発動時は元対象の計算値を使用したダメージを対象数分だけかばうキャラクターへ反映する.
+* `ABILITY_EFFECT_COVER`は攻撃対象リスト取得後に候補をフォーメーション内部番号順で抽選し, 発動したターンの対象リスト内のすべての味方に代わって, 元対象の計算値を使用したダメージを対象数分だけかばうキャラクターへ反映する. 同一ターンの再発動判定を行わない.
 * `ABILITY_EFFECT_DRAW_AGGRO`は攻撃対象リスト取得前に候補をフォーメーション内部番号順へ並べ, 1キャラクターだけを抽選してその候補だけ発動率判定する. 不成立時に再抽選しない.
 * `ABILITY_EFFECT_FIXED_DAMAGE_INCREASE`は`SKILL_DAMAGE_VALUE_TYPE_FIXED`の攻撃スキルだけへ加算し, RATE型へ適用しない. 固定ダメージは加算後も250以上99,999以下へクランプする.
 * Ability MasterDataは`AbilityEffectID × AbilityConditionID × AbilityTarget`許可表に一致し, 表外の組み合わせをPipelineが拒否することを確認する. 戦闘不能味方人数連動補正は0～4人のMasterData entryを現在人数に応じて動的参照する.
