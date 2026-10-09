@@ -71,28 +71,29 @@ IEEE-754 32bit浮動小数点として、仕様に記載された演算順を変
 
 ## Client動作テスト
 
-- ログインできない状態またはServerに接続できない状態でも、通信不要なゲームプレイが利用できることを確認します。
-- 同状態では、Arena、GuildBattleおよびServerとの通信が必要な処理の利用が制限されることを確認します。
+- ログイン不可またはServer未接続の場合はタイトルからホーム画面へ遷移でき, 他のすべての機能が使用不可であることを確認します。
+- Server接続および必要な認証が復帰した場合は通常のすべての機能が使用可能に戻ることを確認します。
 - タイトル画面にキャッシュクリアとアセット追加のボタンがあることを確認します。
-- プレイヤーが選択した画像をゲーム内キャラクターへ割り当てられることを確認します。
+- 「アセットの追加」から専用シーンへ遷移することと, PNG/HCAの取り込み, 配布辞書のファイル名ハッシュ値に応じた自動配置, OPFSへの割当保存/復元を確認します。
+- キャッシュクリアがOPFS内の`cache`フォルダのファイルだけに作用し, アセット本体と割当情報を削除しないことを確認します。
 
 ### ブラウザ実装・アセット・音声の検証
 
 以下は添付ライブラリ選定資料が採用条件または確認対象として挙げた項目です。**試験済みという意味ではなく**, 実機実施と結果記録が必要です。
 
 - `wasm32-unknown-unknown`を対象に依存を解決し, `Cargo.lock`固定後に`cargo tree --target wasm32-unknown-unknown`および`cargo build --target wasm32-unknown-unknown --release --locked`を確認します。
-- iPhone Safari/PWAおよびAndroid Chrome/PWAで, ユーザー選択フォルダからOPFSへのPNG/HCAコピーを検証します。OPFSにバージョン別に配置し, 新バージョン検証後に使用先を切り替えることと取り込み中断からの回復を確認します。
+- iPhone Safari/PWAおよびAndroid Chrome/PWAで, ユーザー選択PNG/HCAのOPFSへのコピーを検証します。OPFSのセマンティックバージョン別配置と新バージョン検証後の切替, 取り込み中断からの回復を確認します。フォルダ選択と元ファイルの削除を伴う移動はブラウザごとに実現可否を確認します。
 - PNGが`File` / `Blob`から`createImageBitmap()`で読み込め, WebGL 2テクスチャ化・描画できることを確認します。表示終了時の`ImageBitmap.close()`と`deleteTexture()`による資源解放を確認します。
-- 40キャラクターと代表的エフェクトをWebGL 2で描画し, GPU負荷・描画安定性を実機計測します。FPSやRAMの合格値は仕様で未確定であるため任意の閾値を固定しません。
+- 40キャラクターと代表的エフェクトをWebGL 2で描画し, GPU負荷80%以下, 実行時メモリ2GB以下, FPS30以上を基準として計測します。メモリ計測範囲・GPU計測方式・端末条件は未確定であり, 条件確定後に合否判定します。
 - `cridecoder`によるHCAのWASM向けビルドとiPhone Safariでの音声再生が可能か確認します。採用確定は合格後とします。
 - 短いSE・ボイスの`AudioBuffer`再利用と, 長いBGM・ボイスのPCM逐次供給（`AudioWorklet` / `MessagePort`）を確認します。長い音声を全体PCM展開せず再生することを確認します。
-- HCAのループ開始/終了, チャンネル数, サンプリングレート, 暗号化有無, 再生開始遅延, 欠音, 同時SE再生を確認します。AudioWorkletの`process()`内にHCAデコードや大きなメモリ確保を置かないことを確認します。
+- HCAの一部ループ, チャンネル数, 22,050Hz, 非暗号化, 再生開始遅延, 欠音, SE同時最大5を確認します。AudioWorkletの`process()`内にHCAデコードや大きなメモリ確保を置かないことを確認します。PCM先読み量はデコード・I/O・音声スケジューリングの実測値から評価します。
 - GPUテクスチャ, デコード済みPCM, WASMヒープ, ブラウザ一時メモリを分けて観測します。iOS端末で長時間の騎士団戦を行い, 強制再読み込みの有無を確認します。
-- `opt-level = 3`と`opt-level = "z"`で圧縮後WASMサイズ, HCAデコード時間, 初回ロード時間を比較し, Client依存とライセンスを監査します。検証結果・合格閾値は現時点で未記録です。
+- `opt-level = 3`と`opt-level = "z"`で圧縮後WASMサイズ, HCAデコード時間, 初回ロード時間を比較し, Client依存とライセンスを監査します。WASMサイズ上限500MBは指定済みですが, 圧縮前後・計測方法・実測結果は未確定/未記録です。
 
-ClientとPublic API Server間はHTTP/2 over TLS 1.3で通信し, API PayloadはProtocol Buffersであることを確認します。`SubscribeGuildBattleUpdates`ではHTTP/2 Response stream上の`GuildBattleScoreUpdate`をProtocol Buffers varint長prefix付きで受信できることを確認します。Public APIの通信方式としてWebSocketは使用しません。ブラウザ側の具体的な通信API・ライブラリ, HTTP Method・Pathは未確定のため, 本テスト設計で補完しません。
+ClientとPublic API Server間はHTTP/2 over TLS 1.3で通信し, API PayloadはProtocol Buffersであることを確認します。`SubscribeGuildBattleUpdates`ではHTTP/2 Response stream上の`GuildBattleScoreUpdate`をProtocol Buffers varint長prefix付きで受信できることを確認します。Public APIの通信方式としてWebSocketは使用しません。ブラウザ標準`fetch()`/`ReadableStream`と既存crateによる通信を検証し, HTTP/2/TLS 1.3のネゴシエーション結果を確認します。GitHub Pages配布Origin・API Origin・`SameSite=Strict` RefreshToken・CORS/Credentialsの整合性も確認します。HTTP Method・Pathは未確定のため補完しません。
 
-接続不要な具体的ゲーム機能, キャラクター画像の割当情報の永続化・復元, キャッシュクリアの対象範囲など, 未確定の挙動をテストで固定しません。PNG/HCAファイル本体のOPFS保存は定義済みです。
+Server配布辞書のハッシュ方式・API, 酒場の回数集計主体, 配布Job等の未確定事項は仕様を待ちます。確定済みのオフライン制限・PNG/HCAと割当情報のOPFS保存・キャッシュクリア範囲についてはテストで確認します。
 
 ## 結合テスト
 

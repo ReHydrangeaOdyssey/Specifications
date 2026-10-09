@@ -175,7 +175,7 @@ sequenceDiagram
 
 `UseTactics`成立時にはUseCondition・TP・残使用回数を確認する. Random要素ありの場合だけGuildBattle本体PRNGから専用Seedを1回生成し, `Random::new(Seed)`のTactics専用PRNGで固有抽選を行う. Random要素なしはResponse Seedを0とするが, Seedの数値からRandom使用有無を判定しない. Active Effectsは`TacticsActiveEffectState`として, 終了時刻・残回数・発動元PlayerID/GuildIDとともに保持する. DURATIONは絶対時刻, COUNTは`remaining_count`と`count_consume_trigger`を使用し, `OPPONENT_PARTY`は各出撃時の現在の対戦相手へ解決する.
 
-Item使用はRuntimeの所持数・条件を検証し, 永続数の更新はPrivate API経由で`X-Operation-ID`の冪等性を適用する. 日次アイテム配布とServerスナップショットの同期方式は未確定として固定しない.
+Item使用はRuntimeの所持数・条件を検証し, 永続数の更新はPrivate API経由で`X-Operation-ID`の冪等性を適用する. BP50回復薬の日次配布はJST 0:00とする. 騎士団戦の最後の定刻は23:00開始で基本終了23:30だが, 遅延・障害時の競合を排除するものではないため日次アイテム配布とServerスナップショットの同期方式は未確定として固定しない. 酒場の`floor(酒場レベル / 3)`BP回復は専用UI操作として仕様化されたが, API・使用回数の集計主体・Runtime更新方式は未確定とする.
 
 Heal / Reviveは仕様の状態遷移と待機時間に従う. Start, Cancel, Completeが成立した場合だけRequestSequenceを加算しReplayへ記録する. 出撃待機時間はHeal / Reviveとは独立して保持する. 具体的な状態と時刻処理は`specification/game/guild_battle.md`および`design/server/guild_battle.md`の各APIシーケンスを正本とする.
 

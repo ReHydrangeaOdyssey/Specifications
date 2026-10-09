@@ -53,11 +53,11 @@ classDiagram
 
 ## Web Client実行方式とブラウザ境界
 
-- ClientはRust/WASM（`wasm32-unknown-unknown`）を対象とし, iPhone Safari/PWAおよびAndroid Chrome/PWA上で動作させます。
+- ClientはRust/WASM（`wasm32-unknown-unknown`）を対象とし, iPhone Safari/PWAおよびAndroid Chrome/PWA上で動作させます。配布先はGitHub Pagesを予定し, 最小バージョンは未確定です（2021年頃の最新版を候補として検討中）。
 - ブラウザとの接続には`wasm-bindgen`, `web-sys`, `js-sys`, `wasm-bindgen-futures`を使用します。Browser APIのPromiseは`wasm-bindgen-futures`を用いてRustの`Future`と連携させます。
-- 描画基盤として汎用2Dエンジンを追加せず, WebGL 2を`web-sys`経由で使用する独自スプライトバッチレンダラーとします。
+- 描画基盤として汎用2Dエンジンを追加せず, WebGL 2を`web-sys`経由で使用する独自スプライトバッチレンダラーとします。UI Frameworkも使用しません。
 - Rust側の共有`game-core`および既存のProtocol Buffers生成型`protocol`の責務は維持します。既存の`prost`とこれらの内部crateは, 選定資料の「5クレート」に含まれないため削除しません。
-- ClientとPublic API Server間の通信方式はHTTP/2 over TLS 1.3, API PayloadはProtocol Buffersとします。`SubscribeGuildBattleUpdates`はHTTP/2 Response streamを使用し, `GuildBattleScoreUpdate`をProtocol Buffers varint長prefix付きで受信します。WebSocketはPublic API通信方式として採用しません。ブラウザ側でこの通信仕様を利用する具体的なAPI・ライブラリは未確定です。
+- ClientとPublic API Server間の通信方式はHTTP/2 over TLS 1.3, API PayloadはProtocol Buffersとします。`SubscribeGuildBattleUpdates`はHTTP/2 Response streamを使用し, `GuildBattleScoreUpdate`をProtocol Buffers varint長prefix付きで受信します。WebSocketはPublic API通信方式として採用しません。ブラウザ標準の`fetch()`およびResponse Bodyの`ReadableStream`を使用し, `web-sys`等を経由してRust/WASMと接続します。HTTP/2/TLS 1.3はブラウザとServerのネゴシエーションに依存し, 実接続で検証します。
 
 ### 描画パイプライン
 
@@ -77,16 +77,16 @@ OPFSのPNG → File / Blob → createImageBitmap() → WebGL 2 texImage2D()
 - HCAからPCMへ変換した音声をWeb Audio APIへ渡します。短いSE/ボイスでは必要に応じて全体を`AudioBuffer`へデコードして再利用します。
 - 長いBGM/ボイスはOPFSから必要な圧縮ブロックを読み, 小容量PCMバッファへ逐次デコードします。`AudioWorkletNode`へ`MessagePort`経由でPCMチャンクを供給し, `AudioWorkletProcessor`の小容量キューから再生します。
 - `AudioWorkletProcessor.process()`内でHCAデコードや大容量のメモリ確保を行いません。制御側または専用Workerが先読みし, 音声出力側と役割を分離します。
-- 先読みPCM量は固定せず実機計測で決定します。`SharedArrayBuffer`を利用する方式は初期実装では採用しません。
+- HCAはサンプリングレート22,050Hz, 暗号化なしとし, 一部音源でループします。SEの同時再生上限は5音です。音源のループ区間, チャンネル数は個別ファイルで確認します。PCM先読み量は, デコード時間・OPFS読み出し遅延・音声処理のスケジューリング遅延が未計測のため最適値を算出できず, 実機計測で決定します。`SharedArrayBuffer`を利用する方式は初期実装では採用しません。
 - HCAのiPhone Safari/WASMでのコンパイル・正しい再生・ピークメモリは未検証です。`cridecoder`は検証合格を最終採用条件とする候補であり, 動作確認済みとは記載しません。
 
 ### OPFSアセット管理
 
-- ユーザーの初回フォルダ選択により取得したPNG/HCAファイルをOPFSへコピーします。元フォルダへの恒久的なアクセスや監視は行いません。GameServerから画像・音声アセットを配信しません。
-- OPFSにバージョン別ディレクトリを設けます。新バージョンを検証してから使用先を切り替え, 取り込み中断から回復できる状態を保持します。
-- `FileSystemSyncAccessHandle`はDedicated Worker上のOPFSランダムアクセスが必要な場合に検討する候補であり, 現時点では採用確定ではありません。不要なら非同期APIを使用します。
+- タイトル画面の「アセットの追加」から専用シーンへ遷移し, ユーザーが選んだPNG/HCAを取り込みOPFSへ保存します。端末別ファイル選択方式と元ファイル削除を伴う移動の可否は未確定です。GameServerからPNG/HCAファイル本体は配信しませんが, ファイル名ハッシュ値に対応する配置辞書はServerから配布されます。
+- OPFSのアセットバージョンにはセマンティックバージョニングを使用し, バージョン別ディレクトリを設けます。新バージョンを検証してから使用先を切り替え, 取り込み中断から回復できる状態を保持します。アプリ独自の容量・保存期間・画像解像度上限は設けず, ブラウザ固有quotaや退避・削除条件は別途検証します。
+- OPFSの初期実装は非同期APIを使用します。`FileSystemSyncAccessHandle`はDedicated Worker上で必要なランダムアクセスを計測し, 性能向上が実装・互換性・安定性上の負担を上回る場合のみ採用する条件付き候補です。採否は未確定です。
 - 圧縮HCAファイル全体と全体PCMを同時に常駐させません。デコード済みPCM, GPU資源, WASMメモリは用途別に管理し, 不要な`AudioBuffer`の参照を解除します。
-- OPFSへの**画像/音声ファイル本体**の保存は選定済みです。キャラクター画像の**割当情報**の保存先・保持期間・復元ルール, ファイルの上書き/削除規則, キャッシュクリア対象は引き続き未確定です。
+- PNG/HCA本体とキャラクター画像割当情報はOPFSへ保存します。ファイル名ハッシュ値とServer配布辞書を対応させて自動割当し, 保存済み情報をOPFSから復元します。Clientの自動削除は行わず, ユーザーがOPFSを明示的に消した場合に削除します（ブラウザのquota/ストレージ消去を除きます）。キャッシュクリアはOPFSの`cache`フォルダのファイルだけを対象とします。辞書取得API, ハッシュ算法, 同名/衝突/上書きの細則は未確定です。
 
 ### 依存・ビルド・検証条件
 
@@ -94,21 +94,21 @@ OPFSのPNG → File / Blob → createImageBitmap() → WebGL 2 texImage2D()
 - 描画用の`image`, `png`, `pix`, `wgpu`, `glow`, 汎用2Dゲームエンジン, オーディオ出力専用Rustライブラリは採用しません。
 - `Cargo.lock`を保存して依存を固定し, `cargo tree --target wasm32-unknown-unknown`で推移的依存を確認します。`cargo build --target wasm32-unknown-unknown --release --locked`でビルドを検証します。
 - 選定資料にある`opt-level = 3`, `lto = "fat"`, `codegen-units = 1`, `panic = "abort"`, `strip = "symbols"`は計測用のRelease設定案です。`opt-level = "z"`との圧縮後WASMサイズ・HCAデコード時間・初回ロード時間の比較を行い, 本番設定の最終値は検証後に定めます。
-- 実機では40キャラクターと代表的エフェクトの描画, iOS長時間動作, 同時SE, BGM逐次再生, HCAループ・チャンネル数・サンプリングレート・暗号化有無・再生遅延・欠音, 依存のライセンス確認を実施します。合格閾値および検証結果は未定義・未記録です。
+- 実機では40キャラクターと代表的エフェクトの描画, iOS長時間動作, 最大同時SE5, BGM逐次再生, HCAループ・再生遅延・欠音, 依存ライセンスを検証します。目標閾値はGPU負荷80%以下, 実行時メモリ2GB以下, FPS30以上, WASMサイズ500MB以下です。測定方法・対象機種・メモリの対象範囲・WASM圧縮前後は未確定で, 実測結果は未記録です。
 
 ## ログイン・サーバー未接続時
 
-- ログインの可否やServerへの接続可否と、接続不要なゲームプレイの可否を分離します。
-- Arena、GuildBattleおよび他のServer通信を必要とする処理は、ログインできない場合またはServerに接続できない場合に利用を制限します。
+- ログイン不可またはServer未接続の場合, タイトルからホームへ遷移することだけを許可し, その他の機能は利用できません。
+- Server接続と必要な認証が復帰した場合は, 接続可能状態と同じ機能を使用可能に戻します。
 - Serverを正本とする処理の状態や戦闘結果は、未接続時のClientだけで確定しません。
-- オフライン時に利用できる個別のゲーム機能および必要なローカルデータの範囲は未確定であり、具体的な機能一覧は本設計で追加しません。
 
 ## タイトル画面のキャラクター画像割り当て
 
 - タイトル画面にキャッシュクリアとアセット追加の操作を提供します。
 - アセット追加ではプレイヤーが選択した画像をゲーム内キャラクターへ割り当てます。
 - 画像・UVデータはClient側資産とし、Server用`ProcessedMasterData`の対象へ追加しません。
-- PNG/HCAファイル本体の保存先はOPFSとし, 初回に選択したフォルダからコピーします。追加画像のうちPNG以外の対応形式, 容量・解像度制限, キャラクター割当情報の永続化・復元, 上書き・削除規則, キャッシュクリアの対象範囲は未確定です。
+- PNG以外の画像は受け付けません。画像・音声本体とキャラクター割当情報の永続化先はOPFSとし, Server配布のファイル名ハッシュ辞書を使用した自動配置と保存情報の復元を行います。
+- アプリ独自の容量・解像度・保持期間上限と自動削除は設けません。キャッシュクリアはOPFS内の`cache`フォルダのみ対象とします。
 
 ## 認証状態
 
@@ -208,22 +208,40 @@ Seedが`0`かどうかだけでランダム要素の有無を判定しません�
 - 戦闘演出は計算結果をEvent Queue等へ変換して再生します。
 - 演出完了タイミングによって`game-core`の乱数消費順や計算結果を変えません。
 
+## Web Public API実装・配置制約
+
+- 既存の`web-sys`, `wasm-bindgen-futures`, `js-sys`からブラウザ標準`fetch()`を呼び出し, `prost`/`protocol`でRequest/ResponseのProtocol Buffersを処理します。`SubscribeGuildBattleUpdates`は`ReadableStream`を逐次読み, chunk境界を跨ぐvarint長prefixとMessageを復元します。HTTP/2/TLS 1.3はブラウザとServerによるネゴシエーションで, Client JavaScriptから強制しません。
+- Refresh/LogoutなどCookieを必要とするCross-Origin要求は`credentials: include`とし, Server側は既存のOrigin検証, 許可Origin限定のCORS, `Access-Control-Allow-Credentials`を適用します。ただし`SameSite=Strict`はCross-Siteでは送信不可です。
+- GitHub Pages標準`github.io`と別SiteのPublic APIを組み合わせた構成は既存Cookie規則と両立しません。同一Siteとなる配布用独自ドメイン等の配置案は検討対象で, 採用するドメイン名は未確定です。`__Host-RefreshToken`のHost-only/HttpOnly/Secure/Strict制約を緩和しません。
+- 一般的なBrowser File Picker/`<input type="file">`から取り込み, OPFSへ保存できますが, OPFSはOSのファイル管理UIへ通常のディレクトリとして公開されません。元ファイルの削除を伴う移動やディレクトリ一括選択は端末別の対応を確認する必要があります。
+- `cridecoder`の最終採否は`wasm32-unknown-unknown`ビルド, iPhone Safariで22,050Hzの非暗号化HCA・ループ再生, 5同時SE, 長時間再生時の欠音・メモリ, および依存ライセンス監査を検証して決定します。現時点の検証結果はありません。
+
+### 外部情報源
+
+- MDN Fetch API: https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch
+- MDN Cookie: https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Set-Cookie
+- WebKit OPFS: https://webkit.org/blog/12257/the-file-system-access-api-with-origin-private-file-system/
+- MDN FileSystemSyncAccessHandle: https://developer.mozilla.org/en-US/docs/Web/API/FileSystemSyncAccessHandle
+- MDN `webkitdirectory`: https://developer.mozilla.org/en-US/docs/Web/API/HTMLInputElement/webkitdirectory
+- GitHub Pages custom domain: https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site
+- cridecoder公式: https://github.com/seiunx-dev/cridecoder
+
 ## メリット・デメリット
 
 ### メリット
 
 - ClientとGameServerのArena再現性を共有ロジックで検証できます。
 - UI/演出と計算を分離できるため、演出変更が戦闘結果へ影響しません。
-- Server通信を必要としないゲームプレイをログイン状態・接続状態から独立して扱えます。
+- Server未接続でもタイトルからホーム画面へ遷移できます。
 - GuildBattle再接続時にServer状態へ戻せます。
 
 ### デメリット
 
 - ClientとGameServerで同一Versionのロジック・MasterDataを揃える必要があります。
 - Client側表示状態はServer正本と重複するため、再同期処理が必要です。
-- オフラインで利用できるゲーム機能, 画像のキャラクター割当情報の保存・復元規則やキャッシュクリアの対象範囲は未確定です。
+- ブラウザによるOPFSストレージ消去やquota上限はClientから保証できません。ファイル名ハッシュ辞書の形式・取得方法は未確定です。
 - ブラウザごとのアセット取り込み可否・メモリ上限およびHCA/WASMの実機性能は未検証です。
-- HTTP/2 over TLS 1.3のPublic APIおよびHTTP/2 Response streamをブラウザから利用する具体的な通信API・ライブラリは未確定です。
+- GitHub Pages標準ドメインと別SiteのAPIでは, `SameSite=Strict` CookieをRefreshへ送信できません。配布ドメイン/APIの構成とHTTP/2 + TLS 1.3接続の実証が必要です。
 
 ## 情報源
 

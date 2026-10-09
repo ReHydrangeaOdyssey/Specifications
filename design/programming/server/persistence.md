@@ -53,7 +53,7 @@ Guild移動により旧GuildのLeader/Subleader状態変更が必要な場合も
 
 通常Playerの所持数増加と`PLAYER_ITEM_DAILY_GRANT`へのJST対象日付の配布実績登録を, 同一Transactionで実行します。`(player_id, target_date)`の一意性を利用して同日二重配布を防止します。配布数は1日10個であり, 翌日のJST午前0時から新しい日次配布の対象日付になります。
 
-配布を開始する仕組み, 未配布日の取扱い, GameServerが騎士団戦中に保持するItem残数および`UpdatePlayerItem`の絶対所持数更新との同期方式は未確定であり, この設計では固定しません。
+配布時刻は毎日JST 0:00です。具体的な起動ジョブ, 対象Playerの抽出時刻, 未配布日の取扱い, 対象ItemIDの確定方法, GameServerが騎士団戦中に保持するItem残数および`UpdatePlayerItem`の絶対所持数更新との同期方式は未確定であり, この設計では固定しません。通常の最終騎士団戦は23:00開始・23:30終了ですが, 処理遅延や復旧等による競合の可能性は別途評価します。
 
 ### StartGuildBattle
 

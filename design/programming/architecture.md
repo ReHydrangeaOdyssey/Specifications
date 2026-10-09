@@ -25,7 +25,7 @@
 
 | Component | 主責務 | 明示的に持たない責務 |
 |---|---|---|
-| Client（Rust/WASM Web） | UI、WebGL 2描画、Web Audio再生、OPFSアセット管理、ローカル編成、認証状態、ログイン・Server未接続時のゲームプレイ、キャラクター画像の追加・割り当て、Arena再現、GuildBattle表示状態 | 戦闘結果の正本、RefreshToken平文参照、ServerのPNG/HCAアセット配信 |
+| Client（Rust/WASM Web） | UI、WebGL 2描画、Web Audio再生、OPFSアセット管理、ローカル編成、認証状態、未接続時のホーム画面遷移制御、アセット追加専用シーンとハッシュ辞書による画像の自動割り当て、Arena再現、GuildBattle表示状態 | 戦闘結果の正本、RefreshToken平文参照、ServerのPNG/HCAアセット配信 |
 | Public API | TLS境界、deserialize、Boundary Validation、Token検証、Rate Limit、Cookie、Routing | Domain判定、DB transaction |
 | Private API | Account/Guild Domain、Session、DB操作、GuildBattle Lifecycle | Arena抽選、戦闘計算、GuildBattleマッチング |
 | GameServer | Arena、GuildBattle実行状態、戦闘計算、Replay生成 | GuildBattle生成・マッチング・自己割当 |
@@ -36,7 +36,7 @@
 
 Clientの実装環境はRust/WASMとし, ブラウザAPIへのアクセスには`wasm-bindgen` / `web-sys` / `js-sys` / `wasm-bindgen-futures`を使用します。画像/音声ファイルをOPFSから読み, WebGL 2およびWeb Audioへ渡します。サーバー正本の戦闘結果は従来どおり`game-core`による再現とGameServerの結果を区別します。
 
-ClientとPublic API Server間の通信方式は`design/system/network.md`を正とし, HTTP/2 over TLS 1.3とProtocol Buffersを使用します。騎士団戦通知はHTTP/2 Response streamで行います。ライブラリ選定資料のWebSocketはPublic API通信方式として採用しません。ブラウザから通信する具体的なAPI・ライブラリは未確定です。
+ClientとPublic API Server間の通信方式は`design/system/network.md`を正とし, HTTP/2 over TLS 1.3とProtocol Buffersを使用します。騎士団戦通知はHTTP/2 Response streamで行います。ライブラリ選定資料のWebSocketはPublic API通信方式として採用しません。ブラウザ標準`fetch()`と`ReadableStream`を選定済み`web-sys`等から使用します。HTTP/2/TLS 1.3は実接続によるネゴシエーションを確認し, GitHub Pages配布OriginとAPI Originは既存の`SameSite=Strict` Cookieを維持できる構成とする必要があります。
 
 ## Data Path / Control Path
 

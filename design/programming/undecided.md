@@ -2,43 +2,50 @@
 
 ## 結論
 
-以下は現行仕様で固定されていない、または明示的に定義しないとされているため、プログラミング設計でも決定しません。
+以下は現在も未決定の事項です。既に決められた仕様と, 意図的に記載しない情報を混同しません。
 
-- ログイン・Server未接続時に利用できる具体的なゲーム機能と必要なローカルデータ
-- ログイン・Server未接続状態から接続可能状態へ戻った場合のClient側状態の扱い
-- 追加画像のPNG以外の受け入れ可否, 容量・解像度制限, キャラクターへの画像割当情報の保存先・保持期間・復元方法, 再割り当て・削除規則（PNG/HCAファイル本体の保存先はOPFSに確定済み）
-- キャッシュクリアの対象範囲および追加した画像・キャラクターとの対応付けへの影響
-- アセット追加操作の具体的UIフロー（独立シーンの有無を含む）, Safari/Chromeにおけるユーザーフォルダ選択の具体的実現方法
-- 汎用2D描画エンジンは不採用とするが, 描画以外のUI Frameworkの採否は未指定
-- HTTP/2 over TLS 1.3 + Protocol BuffersおよびHTTP/2 Response streamに対応するWebブラウザ側のAPI呼び出し方法と具体的な通信API・ライブラリ（通信方式は定義済み）
-- 対応するiOS / Android / Safari / Chromeの最小バージョン, PWA配布・インストール方法
-- `cridecoder`のiPhone Safari/WASM上でのビルド・音声再生・ピークメモリ・ライセンス監査を経た最終採否
-- HCAのループ・サンプリングレート・暗号化条件, PCM先読み量, 同時SE数など実機検証に基づく対応範囲・性能基準
-- GPU負荷・メモリ・FPS・WASMサイズの合格閾値と本番Release最適化設定
-- OPFS内のバージョン命名規則・検証内容・容量制限・保存可能期間およびブラウザごとの制限
-- 細かなランダムアクセス用`FileSystemSyncAccessHandle`の必要性と採否（初期方式は通常の非同期API）
-- MasterData編集原本の具体形式
-- Public APIのHTTP method / HTTP path
-- `public_api.proto`にgRPC Serviceを追加すること
+- 対応iOS/Android/Safari/Chromeの最小バージョン（2021年頃の最新版は検討案であり未採用）, PWAインストール手順・配布URL・独自ドメイン
+- GitHub PagesとPublic APIのSite/Origin構成（`SameSite=Strict` Cookieを維持できる構成）, HTTP/2 + TLS 1.3の対象ブラウザ実通信検証
+- アセット追加シーンの戻り先・戻り操作, Safari/Chromeでのファイル/フォルダ取り込み操作, 元ファイル削除を伴う「移動」の権限と実現方式
+- Serverから配布するファイル名ハッシュ対応辞書のAPI・配布時期・形式・算法・衝突時規則, OPFS内の割当情報の具体形式, 同名時の上書き規則
+- OPFSセマンティックバージョン別ディレクトリの詳細なPath・検証基準・中断復旧手順, ブラウザ固有のquota/退避/削除, `cache`フォルダの具体的配置階層
+- `cridecoder`のiPhone Safari/WASM上のビルド・再生・メモリ・ライセンス監査を経た最終採否
+- 22,050Hz HCAのループ開始/終了位置とチャンネル数, 最適PCM先読み量, 実機性能・欠音検証
+- GPU負荷80%, メモリ2GB, FPS30, WASMサイズ500MBの測定方法・範囲・評価端末・測定時間, 本番Release最適化設定の最終値
+- `FileSystemSyncAccessHandle`の非同期API比較計測を経た最終採否
+- Public APIのHTTP Method / HTTP Path, `public_api.proto`へのgRPC Service追加の採否
 - Discord Botの本番配置先
 - GuildBattleCoordinatorが内部APIを受信する場合のServer構成
 - 推奨初期値として記載された運用値の最終運用値
-- 仕様上未確定のゲーム効果・数値式
-- 騎士団施設の武器庫・食糧庫・鍛冶屋について, レベルごとの攻撃力・最大HP・防御力補正量および計算式への適用位置
-- 酒場のBP回復量・回復方法・発動条件, 最大3回の集計単位とリセット条件
-- 施設レベルアップ用ゴールドの所持主体・初期値・保有量管理, 施設ごとの消費量・権限・更新API/処理方式（ゴールド獲得クエスト自体は現段階の再現対象外）
-- BP50回復薬の日次10個配布を実行する契機・対象Playerの確定タイミング・未配布日の扱い, 対象ItemIDの確定方法
-- 日次配布の所持数加算と騎士団戦中のGameServer所持数スナップショット・`UpdatePlayerItem`絶対所持数更新が重なった場合の同期方法
+- 騎士団の武器庫/食糧庫/鍛冶屋補正を既存戦闘計算へ入れる位置・順序・スナップショット反映段階（補正量自体は確定済み）
+- 酒場最大3回の使用回数の集計主体（Player/Guild等）, 最大BP上限の取扱い, 酒場回復のGameServer API・RequestSequence・永続化方式（回復量・ボタン・JSTリセットは確定済み）
+- 施設レベルアップ用ゴールドの所持主体・初期値・保有量管理, 施設ごとの消費量・権限・更新API/処理方式（獲得クエストは現段階の再現対象外）
+- BP50回復薬の日次0:00配布の実行主体とJob/API, 対象Playerの確定タイミング, 未配布日の取扱い, 対象ItemIDの特定方式
+- 日次配布と騎士団戦中のGameServer所持数スナップショット・`UpdatePlayerItem`絶対所持数更新が異常時・遅延時等に重なる場合の同期方式
 - 進行中GuildBattleをGameServer異常終了後に別GameServerへ自動復旧する方式
+
+### 意図的に記載しない事項
+
+- MasterData編集原本の具体的形式（現時点で仕様書へ記載しない方針, 未決定扱いにしない）
+
+### 「仕様上未確定のゲーム効果・数値式」の具体箇所
+
+- `specification/game/guild.md`「施設の効果」と`specification/game/guild_battle.md`「騎士団施設の効果」：数値補正自体は確定したが, 他補正との適用順序・計算段階は未確定.
+- `specification/game/guild.md`「施設レベルアップとゴールド」：ゴールド管理とレベルアップ処理の具体仕様は未確定.
+- `design/game/master_data_pipeline.md`の「具体的な数値式が仕様上未確定の効果」という包括的注意書きについて, 上記以外の具体的なゲーム効果は現在のゲーム仕様資料から特定できない. 未確認の効果を推測して列挙しない.
 
 ## ライブラリ選定と既存仕様の確認により定義済みとなった事項
 
-- ClientはRust/WASMのWeb Clientとし, iPhone Safari/PWA・Android Chrome/PWAを対象とする.
+- ClientはRust/WASMのWeb Clientとし, iPhone Safari/PWA・Android Chrome/PWAを対象とする. 配布先はGitHub Pagesを予定し, 最小バージョンは未確定とする.
 - WebGL 2の独自スプライトバッチ描画とブラウザ`createImageBitmap()`によるPNGデコードを使用する.
 - `wasm-bindgen`, `web-sys`, `js-sys`, `wasm-bindgen-futures`をブラウザ接続に用いる. `cridecoder`はHCAデコードの採用候補とし, 実機検証まで最終確定とはしない.
 - Web Audio APIでPCM再生し, 長い音声は`AudioWorklet`と`MessagePort`によってPCMチャンクを供給する.
-- PNG/HCAファイルは選択フォルダからOPFSへコピーし, OPFSのバージョン別ディレクトリへ配置する. GameServerからPNG/HCAを配信しない.
-- ClientとPublic API Server間はHTTP/2 over TLS 1.3 + Protocol Buffersを正とし, `SubscribeGuildBattleUpdates`はHTTP/2 Response streamを使用する. WebSocketはPublic API通信方式に採用しない.
+- PNG/HCA本体とキャラクター割当情報はOPFSへ保存し, ファイル名ハッシュ対応辞書に基づき自動配置する. Clientの自動削除は行わず, キャッシュクリアはOPFS内`cache`フォルダだけを対象とする. PNG/HCA本体はGameServerから配信しない. アセット追加はタイトルのボタンから専用シーンへ遷移する.
+- ClientとPublic API Server間はHTTP/2 over TLS 1.3 + Protocol Buffersを正とし, `SubscribeGuildBattleUpdates`はHTTP/2 Response streamを使用する. ブラウザ標準Fetch API/ReadableStreamを選定済みcrateから使用する. WebSocketはPublic API通信方式に採用しない.
+- ログイン・Server未接続時はタイトルからホームへの遷移だけ許可し, 復帰後は通常の全機能を利用可能にする.
+- UI Frameworkは採用しない. HCAは22,050Hz・非暗号化・一部ループ・SE最大同時5.
+- 性能閾値はGPU負荷80%以下, メモリ2GB以下, FPS30以上, WASMサイズ500MB以下.
+- 騎士団施設の武器庫/食糧庫/鍛冶屋の補正量, 酒場の`floor(酒場レベル / 3)`BP回復とJST 0:00回数リセット, BP50回復薬の毎日JST 0:00配布時刻は確定済み.
 
 ## 実装時の扱い
 
