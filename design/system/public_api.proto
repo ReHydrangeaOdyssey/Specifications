@@ -608,14 +608,14 @@ message GuildBattleSortieRequest {
 }
 
 message GuildBattleCastleBreakResponse {
-  uint64 score = 1;
+  float score = 1; // SortieScore; calculation result without truncation.
   uint64 seed = 2;
   uint64 next_request_sequence = 3;
   GuildBattleSortieEventType event_type = 4; // NUMBERED_CASTLE_BREAK / ASSAULT_CASTLE_BREAK / CBC.
 }
 
 message GuildBattleAnnihilationResponse {
-  uint64 score = 1;
+  float score = 1; // SortieScore; calculation result without truncation.
   repeated BattleCharacterStatus enemy_characters = 2; // Up to 5 elements, at battle start.
   uint64 seed = 3;
   reserved 4; // 旧enemy_tactics_id. Battle Tactics snapshotへ集約.
@@ -638,6 +638,7 @@ message GuildBattleScoreUpdate {
   uint64 ally_score = 2; // Subscriber's guild perspective.
   uint64 enemy_score = 3;
   uint32 chain = 4; // Subscriber's guild chain.
+  uint32 chain_remaining_milliseconds = 5; // Remaining time from server snapshot, 0..300000; no reset-only event.
 }
 
 message UseTacticsRequest {
