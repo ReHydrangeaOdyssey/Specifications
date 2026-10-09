@@ -121,6 +121,11 @@ IEEE-754 32bit浮動小数点として、仕様に記載された演算順を変
 - 未許可遷移拒否
 - Owner mismatch拒否
 - `RetryPreloadFailedGuildBattle`
+- Retry時, 旧IDを`replaced`, 新IDを`scheduled`で保持し, 開戦予定時刻とマッチング枠を別に持つこと
+- 中止時, `CancelPreloadFailedGuildBattle`で`canceled`へ遷移させ, 終端状態と未完了状態の混在を判定すること
+- `BP`の`u16`境界値255/256/500/65535とwire`uint32`入力の範囲検査
+- `SortieScore`は`f32`, guild合計`Score`は`u64`で, 端数のある複数出撃結果を加算する場合に合計加算時だけ切り捨てること
+- 城防御補正が`parameters.castle_level`を1度だけ参照すること
 - `RematchPreloadFailedGuildBattles`
 - 同一開始時刻の複数対戦中, 最初のCompletedでは除外Guildを解除せず, 最後のCompletedでのみロック解除・除外一覧削除（並行Completeを含む）
 - `SubscribeGuildBattleUpdates`の初回スナップショット・所属基準の両Guildスコアとチェイン/残り時間・複数購読者への配信

@@ -88,7 +88,9 @@ Status更新は`GuildBattleLifecycleService`の意図APIだけから行います
 | `StartGuildBattle` | `scheduled -> in_progress` |
 | `BeginGuildBattleResolving` | `in_progress -> resolving` |
 | `CompleteGuildBattle` | `resolving -> completed` |
-| `RetryPreloadFailedGuildBattle` / Rematch | `preload_failed -> scheduled` |
+| `RetryPreloadFailedGuildBattle` | 旧IDの`preload_failed -> replaced`と新IDの`scheduled`作成を原子的に実行 |
+| `RematchPreloadFailedGuildBattles` | 同一IDで`preload_failed -> scheduled` |
+| `CancelPreloadFailedGuildBattle` | `preload_failed -> canceled`; 対戦Guild解除と同一枠の終端確認 |
 
 任意Statusを受け取る汎用`UpdateGuildBattleStatus`は設けません。
 

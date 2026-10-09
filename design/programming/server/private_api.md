@@ -86,7 +86,10 @@ mTLSで確定した呼び出し元Service IdentityをAPI Allowlistへ照合し�
 stateDiagram-v2
     [*] --> scheduled
     scheduled --> preload_failed: MarkGuildBattlePreloadFailed
-    preload_failed --> scheduled: Retry / Rematch系処理
+    preload_failed --> replaced: Retry（旧ID）
+    [*] --> scheduled: Retry（新ID）
+    preload_failed --> scheduled: Rematch
+    preload_failed --> canceled: Cancel
     scheduled --> in_progress: StartGuildBattle
     in_progress --> resolving: BeginGuildBattleResolving
     resolving --> completed: CompleteGuildBattle
@@ -102,7 +105,9 @@ stateDiagram-v2
 | Guild Membership変更 | Member / leader / subleader / 人数・Lock条件等 |
 | StartGuildBattle | InitialSeed + Create Replay + `scheduled -> in_progress` |
 | 冪等GuildBattle更新 | Domain更新 + `GUILD_BATTLE_DB_OPERATION` |
-| CompleteGuildBattle | 最終結果 + Player勝敗 + `completed` + 当該対戦のmembership unlock; 同時間帯の全Battle完了時のみ除外Guild unlock + 除外一覧削除 |
+| CompleteGuildBattle | 最終結果 + Player勝敗 + `completed` + 当該対戦のmembership unlock; 同一マッチング枠の全Battle終端時のみ除外Guild unlock + 除外一覧削除 |
+| RetryPreloadFailedGuildBattle | 旧IDの`replaced`遷移 + 新IDの`scheduled`作成 + 後継ID参照を原子的に確定 |
+| CancelPreloadFailedGuildBattle | `canceled`遷移 + 対戦Guild unlock + 同枠の終端判定 + 除外Guild unlockを原子的に確定 |
 
 途中だけCommitする処理へ分割しません。
 

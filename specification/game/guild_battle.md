@@ -72,7 +72,7 @@
 * 所属プレイヤーが0人の騎士団は対戦組み合わせ生成対象から除外し, 除外GuildID一覧をDatabaseへ保存する.
   - 除外したGuild一覧はDatabaseへ保持し, 当該開始時刻の騎士団戦終了処理でGameServerが取得する.
   - 除外後の通常候補が0件の場合は騎士団戦を生成せず, 除外Guildの所属変更禁止を即時解除する. この状態はエラーとしてError Logへ保存し, `DiscordNotificationEnabled=true`の場合はBotへ通知する.
-  - 通常候補が存在する場合, 除外Guildの所属変更禁止は同一対象日・開始時刻のすべての騎士団戦が終了（`completed`）してから解除する. 個別の騎士団戦が先に完了しても, 同時間帯に未完了の騎士団戦が残る間は解除しない.
+  - 通常候補が存在する場合, 除外Guildの所属変更禁止は同一マッチング対象日・固定開始時刻の全対戦が終端状態（`completed`・`canceled`・`replaced`）となり, 再開で生成された後継対戦にも未完了レコードがない時点で解除する. `preload_failed`の運営判断待ちは終端状態ではない. 個別の対戦が先に完了しても未完了の対戦があれば解除しない.
 * 抽出した騎士団一覧をGuildID昇順に並べる.
 * サーバー共通の時刻ベースSeed生成処理でマッチング用Seedを生成する.
 * GuildID昇順の騎士団一覧に, マッチング用Seedを使用して「[疑似乱数](../../design/game/pseudorandom.md)」の「[抽選](../../design/game/pseudorandom.md#抽選)」を適用し, シャッフル後の先頭から2騎士団ずつ順にペアを作成する.
@@ -86,16 +86,21 @@
   - 数式では`GuildBattleID = YYYYMMDD * 10^11 + GuildBattleStartTimeEnumValue * 10^8 + PairIndex`とする.
   - `GuildBattleStartTimeEnumValue`は3桁, `PairIndex`は8桁として0埋めした表現に相当する.
   - `PairIndex`は0から開始し, ペア生成順に1ずつ増加する.
+* Preload失敗後に同一ペアで再開する場合, 旧`GuildBattleID`を変更・再利用せず, 新しい`GuildBattleID`の対戦を別レコードで生成する. `RestartAt`は固定開始時刻Enum以外も指定できるため, 再開用IDは通常マッチング時の日時・Enum連結方式とは別の新規採番領域を使用する.
+  - 再開用IDは`2^63 + 再開用連番`（連番は1から始まる63bit整数）とする. Private API ServerがDatabaseの専用Sequenceから連番を原子的に採番し, `u64`として扱う. 通常ID（`2^63`未満）と重複させない.
+  - 新対戦の`start_at=RestartAt`, `end_at=RestartAt + 30分`. 元対戦は`replaced`として残し, 新対戦は`scheduled`として作成する. 新旧のIDを同一視せず, 以降の割当・Preload・Join・Replayでは新IDを使用する.
+  - 元のマッチング対象日・固定開始時刻は対戦の再開時刻とは別に保持し, 新対戦へ引き継ぐ. 除外騎士団のロック解除判定は再開時刻ではなく元のマッチング対象日・固定開始時刻を使う.
+
 
 ## 開戦前Preload失敗
 
 * 開戦前Preloadでいずれか1人のPlayerデータ取得に失敗した場合, そのPlayerが所属するGuildを含む当該1対戦だけを取りやめる. 他の騎士団戦は継続する.
 * 取りやめた対戦は`GUILD_BATTLE_STATUS_PRELOAD_FAILED`へ遷移し, `in_progress`へ遷移しない.
 * GameServerはErrorLogを保存し, `DiscordNotificationEnabled=true`の場合はBotへPreload失敗を通知する. その後の再開・再抽選・中止は運営判断とする.
-* 問題解決後に運営が同一ペアで再開する場合は, `RetryPreloadFailedGuildBattle`で新しい開始時刻を指定して`scheduled`かつ未割当へ戻し, 通常の割当と開戦前Preloadを再実行する.
+* 問題解決後に運営が同一ペアで再開する場合は, `RetryPreloadFailedGuildBattle`で新しい開始時刻を指定し, 旧レコードを`replaced`で保持したまま新IDの`scheduled`かつ未割当の対戦を作成し, 通常の割当と開戦前Preloadを再実行する.
 * 問題解決後に運営が再抽選を選択した場合, GuildBattleCoordinatorが対象GuildをGuildID昇順へ並べ, 共通時刻ベースSeedを新たに生成してShuffleする. `PRELOAD_FAILED`のGuildBattleIDを昇順に並べ, 生成したペアを順に割り当てる.
 * 再抽選結果はPrivate APIの`RematchPreloadFailedGuildBattles`で保存し, 対象対戦を`scheduled`かつ未割当へ戻す. 再抽選後は通常の割当処理と開戦前Preloadを改めて実行する.
-* 運営が再抽選せず中止すると判断した場合は, 対象Guildの`GUILD.membership_locked`を`false`へ戻して所属変更禁止を解除する.
+* 運営が中止すると判断した場合は, 専用の`CancelPreloadFailedGuildBattle`で対象対戦を`preload_failed -> canceled`へ遷移させ, 対象2Guildの`membership_locked=false`を同一トランザクションで確定する. 同じマッチング対象日・固定開始時刻の全対戦（後継対戦を含む）が終端状態になった場合のみ, 除外Guildの所属ロックを解除して除外一覧を削除する.
 
 ## 騎士団施設の効果
 
@@ -133,11 +138,11 @@
 * 「[出撃](guild_battle.md#出撃)」は1プレイヤーずつ処理を行う.
   - 出撃要求送信後から処理結果応答を受信するまで, Clientは通信中として当該プレイヤーの追加操作送信を抑止する.
   - GameServerはこの通信待ちを独立したプレイヤー状態として保持しない.
-* 計算で使用される値はすべて32bit浮動小数点数として扱う.
-  - IEEE-754規格に従う.
-  - プレイヤーから見える値のみ小数点以下をすべて切り捨てた整数として見せる.
-  - 「[pt](guild_battle.md#事前用語説明)」は小数点以下をすべて切り捨てた整数として扱う.
-    - 騎士団合計ptへ加算する場合に限る.
+* 出撃のスコアを算出する途中式および出撃の計算結果はすべてIEEE-754の32bit浮動小数点数（`f32`）として扱う. BP・HP・行動回数等の整数状態の集計は各仕様で定義された整数型で保持し, スコア式へ入力する際に`f32`へ変換する.
+  - 途中式・出撃計算結果およびPlayer個人の`acquired_score`では小数部分を切り捨てない（論理型`SortieScore`）.
+  - 騎士団合計ptへ1出撃のスコアを加算する時だけ, 当該出撃の`f32`スコアの小数点以下を切り捨て, `Score`（`u64`）へ加算する. 既存の騎士団合計ptを浮動小数点数へ変換して再計算しない.
+  - 画面表示では小数点以下を切り捨てた値を表示する. 表示処理はGameServerの未切り捨て計算結果を変更しない.
+  - `GuildBattleAnnihilationResponse.Score`および`GuildBattleCastleBreakResponse.Score`は未切り捨ての`SortieScore`として返す. `GetGuildBattleStatus`と更新通知の`AllyScore`/`EnemyScore`は加算確定済みの整数`Score`を返す.
 * 計算の途中式はすべてこの仕様書に記載された順序で行われる.
 * 「ランダム」といった記載がある場合はシード値に基づいた再現性のある「疑似乱数生成式」から算出される.
   - 初期シード値は`固定値 ^ 騎士団戦時の固有ID`とする.
@@ -265,6 +270,8 @@
 ### 殲滅スコア
 
 各Playerは騎士団戦ごとに`attack_count`と`acquired_score`を保持し, どちらも開戦時に0で初期化する. 出撃要求がGameServerの出撃可否・RequestSequence検証を通過し, 殲滅またはキャッスルブレイクとして当該出撃を実行することが確定した時点で`attack_count`を1加算する. 当該出撃のEXTERLIZE補正は加算後の`attack_count * parameters.attack_count_score`で求める. 当該出撃の取得スコア確定後にその値を`acquired_score`へ加算する. これにより初回の成功出撃は`attack_count=1`としてEXTERLIZE補正を計算する.
+`acquired_score`への加算値は未切り捨ての`SortieScore`とし, 騎士団合計ptへ加算する際だけ同じ出撃結果の小数部分を切り捨てる.
+
 
 最終結果が「[pt](guild_battle.md#事前用語説明)」となる.
 オーバーキルによるダメージは含まれない.
@@ -312,7 +319,7 @@ EXTERLIZE補正 = attack_count * 適用対象となる`TACTICS_BATTLE_SPECIAL_EX
 累計スコア = 出撃基本スコア
 
 相手平均防御力 = GameServerが当該騎士団戦の騎士団戦データとして保持する相手プレイヤー全員の編成する全キャラクターの防御力 / 同キャラクター数
-タクティクス城レベル補正 = 適用対象となる`TACTICS_EFFECT_BATTLE_SPECIAL.parameters.castle_level`を, 上昇効果は正値, 低下効果は負値として「[タクティクス](tactics.md#効果値の統合規則)」に従って系列統合した値
+タクティクス城レベル補正 = `TACTICS_EFFECT_CASTLE_DEFENSE_CORRECTION`の参照値である, 適用対象となる`TACTICS_EFFECT_BATTLE_SPECIAL.parameters.castle_level`を, 上昇効果は正値, 低下効果は負値として「[タクティクス](tactics.md#効果値の統合規則)」に従って系列統合した値. 同一の`castle_level`値を効果IDとBattle Specialの双方から二重計上しない
 補正後城レベル = 「城レベル」 + タクティクス城レベル補正
 タクティクス防御力補正 = `TACTICS_EFFECT_DEFENSE_CORRECTION`の効果値と, 適用対象となる`TACTICS_EFFECT_BATTLE_SPECIAL.parameters.defense`を「[タクティクス](tactics.md#効果値の統合規則)」に従って系列統合した値
 相手城防御補正 = 補正後城レベル * 10

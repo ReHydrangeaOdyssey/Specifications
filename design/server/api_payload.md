@@ -480,7 +480,7 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| Score | `Score` | キャッスルブレイクで取得したpt |
+| Score | `SortieScore` | キャッスルブレイクで取得した未切り捨ての32bit浮動小数点スコア |
 | Seed | `Seed` | 出撃で使用したシード値 |
 | NextRequestSequence | `RequestSequence` | 要求成功後の次要求シーケンス番号 |
 | EventType | `GuildBattleSortieEventType` | キリ番CB・強襲CB・CBCのいずれか. 「[出撃種別](../../specification/game/guild_battle.md#制約)」の判定結果を使用する |
@@ -491,7 +491,7 @@ GameServerが決定した戦闘開始時点の入力を送信し, ClientはGameS
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| Score | `Score` | 殲滅で取得したpt（GameServerの正本） |
+| Score | `SortieScore` | 殲滅で取得した未切り捨ての32bit浮動小数点スコア（GameServerの正本） |
 | OwnCharacters | `BattleCharacterStatus[]` | 出撃で選択した自分側キャラクターの戦闘開始時ステータス. 最大5件. `SelectID`に記載した有効な編成IDの順 |
 | EnemyPlayerID | `PlayerID` | 抽選で確定した相手プレイヤーID. 行動順抽選のPlayerID順に使用 |
 | EnemyFormationID | `FormationID` | 対戦相手の戦闘開始時フォーメーションID |
@@ -1167,9 +1167,25 @@ Private APIは再抽選を行わない. `GuildBattleID[]`と`Battles[]`のID集�
 
 | 項目 | 型 | 内容 |
 |---|---|---|
-| Battle | `ScheduledGuildBattle` | 同一ペアのまま`scheduled`へ戻した騎士団戦 |
+| Battle | `ScheduledGuildBattle` | 同一ペアの新しい`GuildBattleID`で作成した`scheduled`騎士団戦. 元のGuildBattleIDは使用しない |
 | StartAt | `DateTime` | 保存後の新しい開戦時刻 |
 | EndAt | `DateTime` | 保存後の終了時刻 |
+| PreviousGuildBattleID | `GuildBattleID` | `replaced`として保持した旧ID |
+
+### CancelPreloadFailedGuildBattleRequest
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| GuildBattleID | `GuildBattleID` | 運営が中止する`PRELOAD_FAILED`対戦のID |
+
+### CancelPreloadFailedGuildBattleResponse
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| GuildBattleID | `GuildBattleID` | 中止された対戦のID |
+| Status | `GuildBattleStatus` | `GUILD_BATTLE_STATUS_CANCELED` |
+
+同一マッチング対象日・固定開始時刻の全対戦が終端（`completed`, `canceled`, `replaced`）になった場合だけ除外騎士団を解除する. 運営中止は`SetGuildMembershipLock`単体では実行しない.
 
 ### RetryUnassignedGuildBattleAssignmentRequest
 

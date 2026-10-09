@@ -452,7 +452,7 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 
 - `status=scheduled`の`GUILD_BATTLE`について, GuildBattleID, 対戦GuildID, `start_at`, `end_at`, `status`, `game_server_instance_id`を取得する.
 - `start_at`, GuildBattleID昇順で返す.
-- 固定開始時刻から生成した通常対戦だけでなく, `RetryPreloadFailedGuildBattle`で任意の`RestartAt`へ変更された対戦も対象とする.
+- 固定開始時刻から生成した通常対戦だけでなく, `RetryPreloadFailedGuildBattle`で任意の`RestartAt`を指定して新IDで生成された対戦も対象とする.
 - 状態変更は行わない.
 - GuildBattleCoordinatorの起動時および定期Reconcileに使用する.
 
@@ -706,15 +706,39 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 
 #### 処理内容
 
-- 運営が問題解決後に同一ペアで再開すると判断した場合に使用し, `GuildBattleLifecycleService`の`preload_failed -> scheduled`遷移として扱う.
-- 対象`GuildBattleID`が`GUILD_BATTLE_STATUS_PRELOAD_FAILED`であることを確認する.
-- `guild_a_id` / `guild_b_id`は変更しない.
-- 要求`RestartAt`を新しい`start_at`とし, `end_at = RestartAt + 30分`, `initial_seed=NULL`, `status=scheduled`, `game_server_instance_id=NULL`へ更新する.
-- 保存後は通常の騎士団戦割当と開戦前Preloadを再実行する.
+- 運営が問題解決後に同一ペアで再開すると判断した場合に使用する. `preload_failed`の旧`GuildBattleID`を再利用せず, 新しい`GuildBattleID`で`scheduled`レコードを挿入する.
+- 対象旧`GuildBattleID`が`GUILD_BATTLE_STATUS_PRELOAD_FAILED`であることを同一トランザクションで確認する.
+- 旧レコードの`guild_a_id` / `guild_b_id`および`matching_target_date` / `matching_start_time`を新レコードへ引き継ぐ.
+- Private API Serverが専用Sequenceから新IDを原子的に採番し, `2^63 + 連番`を使用する. 元IDの再利用および元IDの主キー更新は行わない.
+- 新レコードには`start_at=RestartAt`, `end_at=RestartAt + 30分`, `initial_seed=NULL`, `status=scheduled`, `game_server_instance_id=NULL`を設定する.
+- 旧レコードを`status=replaced`とし, `replaced_by_guild_battle_id`へ新IDを保存する. 新レコード挿入と旧レコード更新を同一トランザクションで確定する.
+- 同一マッチング枠のトランザクション単位排他と, 元ID・状態検証により多重再開を防ぐ.
+- 保存後はレスポンスで返された新IDに対して通常の割当・開戦前Preloadを再実行する.
 
 #### 要求・レスポンス
 
 [API Payload](api_payload.md)の「RetryPreloadFailedGuildBattleRequest」「RetryPreloadFailedGuildBattleResponse」を参照する.
+
+### Preload失敗対戦の運営中止
+
+#### メソッド名
+
+`CancelPreloadFailedGuildBattle`
+
+#### 呼び出し元
+
+- mTLSで認証済みの運営Componentだけが呼び出せる.
+
+#### 処理内容
+
+- 対象`GuildBattleID`の`status=preload_failed`を確認し, `GuildBattleLifecycleService`で`canceled`へ遷移させる.
+- 同一トランザクションで当該対戦2Guildの`membership_locked=false`を保存する.
+- 同じ`matching_target_date` / `matching_start_time`の全対戦（再開用の新IDを含む）が終端状態なら, 除外Guildの所属ロック解除と`GUILD_BATTLE_EXCLUDED_GUILD`削除も同じトランザクションで実行する.
+- 同一枠排他を`CompleteGuildBattle`および`RetryPreloadFailedGuildBattle`と共有する. 中止済みIDによる再開・再中止は許可しない.
+
+#### 要求・レスポンス
+
+[API Payload](api_payload.md)の「CancelPreloadFailedGuildBattleRequest」「CancelPreloadFailedGuildBattleResponse」を参照する.
 
 ### 未割当騎士団戦の運営削除
 
@@ -834,7 +858,7 @@ ReplayQueueおよびDatabase送信失敗時の扱いは「[ログ仕様](../syst
 
 - `GuildBattleLifecycleService`で`resolving -> completed`だけを実行する.
 - 対象`GuildBattleID`の所有GameServerが要求`GameServerInstanceID`と一致することを確認する.
-- 最終結果2Guild分の保存, 対象Playerの勝敗数更新, `status=completed`, 当該対戦2Guildの`membership_locked=false`を同一Databaseトランザクションで実行する. 同一対象日・開始時刻の全騎士団戦が`completed`となった場合に限り, 同一トランザクションで除外Guildも`membership_locked=false`へ更新し, `GUILD_BATTLE_EXCLUDED_GUILD`を削除する. 同時間帯の並行Complete処理は同対象日・開始時刻の`GUILD_BATTLE`行を`GuildBattleID`昇順に行ロックして, 終了判定と除外一覧更新を直列化する.
+- 最終結果2Guild分の保存, 対象Playerの勝敗数更新, `status=completed`, 当該対戦2Guildの`membership_locked=false`を同一Databaseトランザクションで実行する. 同一`matching_target_date`・`matching_start_time`の全騎士団戦（後継対戦含む）が`completed`・`canceled`・`replaced`の終端状態となった場合に限り, 同一トランザクションで除外Guildも`membership_locked=false`へ更新し, `GUILD_BATTLE_EXCLUDED_GUILD`を削除する. 並行するComplete・Cancel・Retryはマッチング枠単位排他とGuildBattleID昇順の行Lockで終了判定と後継対戦追加を直列化する.
 - `GuildResults`のGuildID集合がDatabase上の対戦2Guildと一致し, 2件の勝敗組み合わせが最終Scoreと整合することを確認する. Scoreが異なる場合は高い側`WIN`・低い側`LOSE`, 同値の場合は両側`DRAW`だけを許可する.
 - `PlayerRecords`で同一PlayerIDを重複指定できない. PlayerID `0`以外はDatabase上で対戦2Guildのいずれかに所属していることを確認し, 指定`Result`が所属Guildの`GuildResults.Result`と一致することを確認する.
 - 勝利の場合は対象Playerの`guild_battle_win_count`を1加算し, 敗北の場合は`guild_battle_lose_count`を1加算する. 引き分けの場合は更新しない.

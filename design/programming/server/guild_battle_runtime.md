@@ -129,7 +129,9 @@ flowchart TD
 
 殲滅では`GuildBattleAnnihilationResponse`に戦闘開始時点の`OwnCharacters`, `EnemyCharacters`, `EnemyPlayerID`, `EnemyFormationID`, 戦闘に関係する`BattleTacticsEffects`, `Seed`を格納する. ClientはJoin時同期済み自身の編成とこの入力で同一`game-core`を実行する. 表示済みの古いHPやTacticsを流用せず, 関係しない継続効果・最終HP・行動履歴を追加送信しない.
 
-出撃結果Responseは要求元へ先に送るが, その後のBattle Special回復, `acquired_score`, スコア・チェイン確定, Replay Event追加まで同一出撃の直列実行範囲とする. GameServerにおけるスコアの正本はResponseではなくRuntimeの確定値である. 送信通知の失敗によって出撃を巻き戻さない.
+出撃結果Responseは要求元へ先に送るが, その後のBattle Special回復, `acquired_score`, スコア・チェイン確定, Replay Event追加まで同一出撃の直列実行範囲とする. GameServerにおける騎士団合計スコアの正本はResponseの未切り捨て`SortieScore`ではなくRuntimeの確定済み`Score`である. 送信通知の失敗によって出撃を巻き戻さない.
+出撃計算式はすべて`f32`で評価し, 出撃Responseの`Score`およびPlayerの`acquired_score`は`SortieScore`（`f32`）で保持する. 騎士団合計ptだけ, 1出撃ごとに小数点以下を切り捨てて`Score`（`u64`）へ加算する.
+
 
 ## 通知購読とチェイン残り時間
 
@@ -189,7 +191,7 @@ stateDiagram-v2
 
 30:00で新規受付を停止し, 待機要求のないPlayerの通知ストリームを終了する. 30:00以前にキューへ受付済みの要求はすべて処理する. 処理待ちのPlayerの購読だけを当該Playerの全受付済み要求完了時まで延長する. `BeginGuildBattleResolving`で永続状態を`resolving`にしてから受付済みQueueを解消し, 最終スコア・勝敗を決定する. `CompleteGuildBattle`成功時に当該対戦を`completed`へ更新する.
 
-対戦Guildのmembership lockは当該騎士団戦の`completed`確定と同時に解除する. 同対象日・開始時刻の除外Guildのmembership lockと除外一覧は, その時間帯の全騎士団戦が`completed`になった`CompleteGuildBattle`のTransactionでのみ解除・削除する. 別対戦が未完了の間は解除しない.
+対戦Guildのmembership lockは当該騎士団戦の`completed`確定と同時に解除する. 除外Guildのmembership lockと除外一覧は, 元の`matching_target_date`/`matching_start_time`が同じ全対戦（再開で作成された新IDも含む）が`completed`・`canceled`・`replaced`の終端状態となったときに`CompleteGuildBattle`または`CancelPreloadFailedGuildBattle`のTransactionで解除・削除する. 別対戦が未完了の間は解除しない.
 
 ## DB障害・不変条件
 

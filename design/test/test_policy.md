@@ -76,6 +76,13 @@ Database, Public API Server, Private API Server, GameServer, GuildBattleCoordina
 * `CompleteGuildBattle`で対戦外Player, PlayerID重複, Guild結果とPlayer結果の不一致, 最終Scoreと不整合な2Guild勝敗組み合わせを拒否すること.
 * Lifecycle APIで定義されていない`GuildBattleStatus`遷移を拒否すること.
 * `RetryPreloadFailedGuildBattle`による同一ペア再Preload.
+* BPを`u16`として保持し, ダミー最大BP500を正常に初期化・送受信できること.
+* 出撃計算・出撃Response・`acquired_score`は小数を維持し, 1出撃の騎士団合計加算時だけ小数を切り捨てること.
+* 城防御補正が`TACTICS_EFFECT_BATTLE_SPECIAL.parameters.castle_level`を参照し, 効果IDとの二重計上がないこと.
+* Retryの旧IDが`replaced`で残り, 新規IDが高位領域で採番されて新しい`scheduled`対戦として割当・Preloadされること.
+* `CancelPreloadFailedGuildBattle`で中止した対戦が`canceled`になり, 同枠のCompleted/Canceled混在時にだけ除外Guild解除が成立すること.
+* 同枠にRetry新IDの未完了対戦が残る限り除外Guildを解除せず, 完了時に解除すること.
+* Retry・Cancel・Completeの並行実行時に旧ID重複使用, 後継ID重複, 誤った除外Guild解除がないこと.
 * `RematchPreloadFailedGuildBattles`による再抽選後の再割当.
 * 未割当Battleの再割当および削除.
 * Database Recoveryファイルの生成, 再送, 削除.
@@ -287,7 +294,7 @@ GuildBattle Replayは「[リプレイProtocol Buffers定義](../system/guild_bat
 * 30:00時点で新規受付を停止し, 受付済みQueueをすべて解決してから勝敗判定する.
 * 勝敗数は1回以上出撃成立した通常PlayerとDummy PlayerID `0`だけを対象にする.
 * `CompleteGuildBattle`成功時だけ最終結果, Player勝敗数, 当該対戦の`completed`, 当該対戦2Guildのmembership lock解除を同時に確定する.
-* 同対象日・開始時刻の対戦が複数ある場合, 1対戦目完了では除外Guildのロックと除外一覧を保持し, 最後の対戦が`completed`となったトランザクションで除外Guildのロック解除と除外一覧削除を確定する. 並行する2件のCompleteでも同じ結果となる.
+* 同じ元マッチング枠の対戦が複数ある場合, 未完了対戦が残る間は除外Guildのロックと除外一覧を保持し, 最後の対戦が`completed`または`canceled`の終端状態になったトランザクションで除外Guildのロック解除と除外一覧削除を確定する. 旧`replaced`対戦だけでは解除せず新IDの対戦も判定し, 並行Complete/Cancel/Retryでも同じ結果となる.
 
 ### GuildBattle 出撃・通知の追加検証
 

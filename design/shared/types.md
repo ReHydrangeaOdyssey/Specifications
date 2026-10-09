@@ -73,9 +73,10 @@
 | `HP` | `u32` | `uint32` | `bigint` | HP |
 | `Attack` | `u16` | `uint32` | `integer` | 攻撃力 |
 | `Defense` | `u16` | `uint32` | `integer` | 防御力 |
-| `BP` | `u8` | `uint32` | `smallint` | BP |
+| `BP` | `u16` | `uint32` | `integer` | BP. 受信時は0～65535を検証する. 通常Player初期最大BPは200, ダミーPlayer最大BPは500 |
 | `TP` | `u8` | `uint32` | `smallint` | TP. 型としての絶対上限は255. 騎士団戦での通常最大値は100で, 最大TP補正適用後も255を超えない |
-| `Score` | `u64` | `uint64` | `numeric(20,0)` | pt/スコア |
+| `Score` | `u64` | `uint64` | `numeric(20,0)` | 騎士団合計ptおよび永続最終スコア. 出撃の32bit浮動小数点計算値を騎士団合計に加算する際に限り小数部分を切り捨てる |
+| `SortieScore` | `f32` | `float` | `real` | 殲滅・キャッスルブレイクの出撃ごとの計算結果およびPlayer個人の`acquired_score`. 途中計算値を切り捨てず保持する |
 | `Sequence` | `u64` | `uint64` | `numeric(20,0)` | 騎士団戦全体の処理順を表すシーケンス番号 |
 | `RequestSequence` | `u64` | `uint64` | `numeric(20,0)` | 騎士団戦参加プレイヤーごとの要求検証用シーケンス番号 |
 | `Seed` | `u64` | `uint64` | `numeric(20,0)` | 疑似乱数シード |
@@ -263,7 +264,7 @@ enum TacticsEffectID {
   TACTICS_EFFECT_DEFENSE_CORRECTION = 1; // 防御力補正.
   TACTICS_EFFECT_SPEED_CORRECTION = 2; // 速度補正.
   TACTICS_EFFECT_SCORE_CORRECTION = 3; // スコア補正.
-  TACTICS_EFFECT_CASTLE_DEFENSE_CORRECTION = 4; // 城防御補正.
+  TACTICS_EFFECT_CASTLE_DEFENSE_CORRECTION = 4; // 城防御補正. 効果値はTACTICS_EFFECT_BATTLE_SPECIAL.parameters.castle_levelを参照する.
   TACTICS_EFFECT_SCORE_LIMIT_CORRECTION = 5; // スコア上限補正.
   TACTICS_EFFECT_MAX_TP_CORRECTION = 6; // 最大TP補正.
   TACTICS_EFFECT_BP_RECOVERY = 7; // BP回復.
@@ -744,7 +745,7 @@ message TacticsBattleState {
 
 message GuildBattlePlayerRuntimeState {
   uint32 attack_count = 1; // 当該騎士団戦で出撃に成功した累計回数. 初期値0. 論理型Count.
-  uint64 acquired_score = 2; // 当該騎士団戦で当該Playerが個別に取得した累計スコア. 初期値0. 論理型Score.
+  float acquired_score = 2; // 当該騎士団戦で当該Playerが個別に取得した累計スコア. 初期値0. 論理型SortieScore. 小数を保持する.
 }
 
 message TacticsBattleSpecialParameters {
@@ -852,7 +853,9 @@ enum GuildBattleStatus {
   GUILD_BATTLE_STATUS_IN_PROGRESS = 1; // 開戦中かつ新規処理受付中.
   GUILD_BATTLE_STATUS_RESOLVING = 2; // 30:00到達後, 新規受付停止済みで既存キュー解決中.
   GUILD_BATTLE_STATUS_COMPLETED = 3; // 騎士団戦終了.
-  GUILD_BATTLE_STATUS_PRELOAD_FAILED = 4; // 開戦前Preload失敗により当該対戦を取りやめ, 運営判断待ちとなっている.
+  GUILD_BATTLE_STATUS_PRELOAD_FAILED = 4; // 開戦前Preload失敗により運営判断待ち.
+  GUILD_BATTLE_STATUS_CANCELED = 5; // 運営判断で取りやめた終端状態.
+  GUILD_BATTLE_STATUS_REPLACED = 6; // 同一ペア再開で新IDの対戦に置換された旧レコードの終端状態.
 }
 ```
 

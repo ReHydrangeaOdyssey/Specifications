@@ -119,9 +119,9 @@ Endpoint不在判定時間について仕様の推奨初期値はConfiguration�
 
 `preload_failed`は自動的に通常対戦へ戻しません。運営判断に従います。
 
-- 同一Pair再試行: `RetryPreloadFailedGuildBattle`
+- 同一Pair再試行: `RetryPreloadFailedGuildBattle`で旧IDを`replaced`として保持し, 新IDの`scheduled`対戦を作成・割当
 - 再抽選: GuildID昇順から新SeedでShuffleし、`RematchPreloadFailedGuildBattles`
-- 中止: Membership Lock解除
+- 中止: `CancelPreloadFailedGuildBattle`で`preload_failed -> canceled`およびMembership Lock解除を原子的に実行
 
 再抽選では`PRELOAD_FAILED`のGuildBattleIDを昇順に並べて新Pairを対応させます。
 

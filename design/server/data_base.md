@@ -412,6 +412,9 @@ erDiagram
         GuildID guild_b_id FK
         DateTime start_at
         DateTime end_at
+        DateTime matching_target_date
+        GuildBattleStartTime matching_start_time
+        GuildBattleID replaced_by_guild_battle_id FK
         Seed initial_seed
         GuildBattleStatus status
         GameServerInstanceID game_server_instance_id
@@ -443,13 +446,15 @@ erDiagram
     GUILD_BATTLE ||--|{ GUILD_BATTLE_RESULT : has
     GUILD ||--o{ GUILD_BATTLE_RESULT : receives
     GUILD_BATTLE ||--o{ GUILD_BATTLE_DB_OPERATION : idempotency
+    GUILD_BATTLE |o--o| GUILD_BATTLE : replaced_by
     GUILD ||--o{ GUILD_BATTLE_EXCLUDED_GUILD : excluded_from_matching
 ```
 
 
-`GUILD_BATTLE.game_server_instance_id`は未割当時NULLを許可する. GuildBattleCoordinatorはPrivate API経由で未割当の騎士団戦を選択したGameServerへ原子的に割当し, 割当成功時に対象`GameServerInstanceID`を保存する. GameServer自身は未割当騎士団戦を自己割当しない. 既に他GameServerへ割当済みの場合は上書きしない. `status`, `start_at`, `game_server_instance_id`を使用する割当検索にIndexを設定する.
-`SaveScheduledGuildBattles`保存時に`start_at`を`TargetDate`と`GuildBattleStartTime`からJSTで生成し, `end_at = start_at + 30分`として保存する. `initial_seed`は開戦前Preload完了まではNULLを許可し, Preload成功後の`StartGuildBattle`でCreate Replay保存と`status=in_progress`更新と同一トランザクションにより保存する.
-`GUILD_BATTLE_EXCLUDED_GUILD`はマッチング生成時に所属0人のため除外したGuildを対象日・開始時刻単位で保持する. 通常終了時は`CompleteGuildBattle`が当該対戦2Guildの所属ロックを解除する. 同対象日・開始時刻の全騎士団戦が`completed`となった時点の`CompleteGuildBattle`だけが, 同一トランザクションで除外Guildのロックを解除し除外一覧を削除する. マッチング生成中止時はGuildBattleCoordinatorが既存の取得・削除APIを使用する.
+`GUILD_BATTLE.game_server_instance_id`は未割当時NULLを許可する. `matching_target_date`と`matching_start_time`は元のマッチング枠を示し, 再開した場合も変更しない. `replaced_by_guild_battle_id`は後継IDを参照するNULL許容外部キーとする. 同枠のComplete・Retry・Cancelは`pg_advisory_xact_lock(YYYYMMDD, GuildBattleStartTimeEnumValue)`を共通して取得する. ID生成用の再開専用Sequenceは再利用せず原子的に採番する.
+GuildBattleCoordinatorはPrivate API経由で未割当の騎士団戦を選択したGameServerへ原子的に割当し, 割当成功時に対象`GameServerInstanceID`を保存する. GameServer自身は未割当騎士団戦を自己割当しない. 既に他GameServerへ割当済みの場合は上書きしない. `status`, `start_at`, `game_server_instance_id`を使用する割当検索にIndexを設定する.
+`SaveScheduledGuildBattles`保存時に`start_at`を`TargetDate`と`GuildBattleStartTime`からJSTで生成し, `end_at = start_at + 30分`として保存する. 同時に`matching_target_date=TargetDate`, `matching_start_time=StartTime`を保存し, 後継対戦にもこの2値を引き継ぐ. `replaced_by_guild_battle_id`は置換されない場合NULLとする. `initial_seed`は開戦前Preload完了まではNULLを許可し, Preload成功後の`StartGuildBattle`でCreate Replay保存と`status=in_progress`更新と同一トランザクションにより保存する.
+`GUILD_BATTLE_EXCLUDED_GUILD`はマッチング生成時に所属0人のため除外したGuildを対象日・開始時刻単位で保持する. 通常終了時は`CompleteGuildBattle`が当該対戦2Guildの所属ロックを解除する. 同`matching_target_date`・`matching_start_time`の全対戦（後継対戦を含む）が`completed`・`canceled`・`replaced`の終端状態となり, 未完了対戦が存在しない時点の`CompleteGuildBattle`または`CancelPreloadFailedGuildBattle`が, 同一トランザクションで除外Guildのロックを解除し除外一覧を削除する. マッチング生成中止時はGuildBattleCoordinatorが既存の取得・削除APIを使用する.
 Public API Serverは騎士団戦要求を中継する際に`GuildBattleID`から`game_server_instance_id`を取得できる. Public API Serverは取得結果をローカルキャッシュしてよいが, キャッシュは正本として扱わない.
 
 ## アリーナ
@@ -565,7 +570,7 @@ erDiagram
 Recoveryファイル名は`guild_battle_<GuildBattleID>_<GameServerInstanceID>.json`とする. ファイル内には元のPrivate API名, Operation ID, 要求Payload, 保存順序を保持する.
 騎士団戦終了時にローカル保存データを保存順にDatabaseへ再送する. GameServer起動時にもRecoveryディレクトリを走査し, 残存ファイルを保存順に再送する. 再送中に1件でも失敗した場合はファイルを残し, 全件成功した場合だけ対応ファイルを削除する.
 
-`CompleteGuildBattle`はこの一般規則とは別に, 初回失敗後1回だけ同一`X-Operation-ID`で再試行し, 再試行も失敗した場合はErrorLogを保存し, `DiscordNotificationEnabled=true`の場合はDiscord Botへ通知する. その後の原因調査・復旧は運営が手動で行う. 最終結果保存, Player勝敗数更新, `GUILD_BATTLE.status=completed`, 当該対戦2Guildのmembership lock解除は同一Databaseトランザクションで確定する. 同対象日・開始時刻の全対戦がcompletedになった場合だけ除外Guild解除と除外一覧削除も同一トランザクションに含め, いずれか失敗時は全体をRollbackする.
+`CompleteGuildBattle`はこの一般規則とは別に, 初回失敗後1回だけ同一`X-Operation-ID`で再試行し, 再試行も失敗した場合はErrorLogを保存し, `DiscordNotificationEnabled=true`の場合はDiscord Botへ通知する. その後の原因調査・復旧は運営が手動で行う. 最終結果保存, Player勝敗数更新, `GUILD_BATTLE.status=completed`, 当該対戦2Guildのmembership lock解除は同一Databaseトランザクションで確定する. 同一`matching_target_date`・`matching_start_time`の全対戦が終端状態（`completed`・`canceled`・`replaced`）となった場合だけ除外Guild解除と除外一覧削除も同一トランザクションに含め, いずれか失敗時は全体をRollbackする.
 
 
 ### 騎士団戦Database更新の冪等性
@@ -578,4 +583,4 @@ Private API Serverは更新対象Databaseトランザクション内で`GUILD_BA
 
 対象日・`GuildBattleStartTime`ごとに, その開始時刻を設定している騎士団を抽出し, 疑似乱数の「抽選」を使用して順序を決める. 先頭から2騎士団ずつペアにし, 奇数の場合は最後の騎士団を事前作成済みダミープレイヤーの初期騎士団と組み合わせる. 各ペアについて`GUILD_BATTLE`を`scheduled`状態で作成する.
 
-`GuildBattleID`は`u64`で, `GuildBattleID = YYYYMMDD * 10^11 + GuildBattleStartTimeEnumValue * 10^8 + PairIndex`とする. これは`<YYYYMMDD 8桁><GuildBattleStartTime Enum値 3桁><PairIndex 8桁>`を10進連結した値に相当する.
+`GuildBattleID`は`u64`で, 通常のマッチング生成時は`GuildBattleID = YYYYMMDD * 10^11 + GuildBattleStartTimeEnumValue * 10^8 + PairIndex`とする. これは`<YYYYMMDD 8桁><GuildBattleStartTime Enum値 3桁><PairIndex 8桁>`を10進連結した値に相当する. Preload失敗後の同一ペア再開では通常IDを再利用せず, Private API ServerがDatabaseの再開専用Sequenceから一意の連番（1～`2^63-1`）を採番し, `2^63 + 連番`で新規IDを作成する. 専用Sequenceの値はDatabaseのトランザクションRollbackで巻き戻さない. 通常IDと再開用IDを区別するため通常IDは`2^63`未満とする. 新旧`GUILD_BATTLE`を別レコードで保存し, 旧レコードの`replaced_by_guild_battle_id`で新IDを参照する.

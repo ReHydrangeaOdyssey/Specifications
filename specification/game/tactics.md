@@ -37,6 +37,7 @@
 * 速度補正.
 * スコア補正.
 * 城防御補正.
+  - `TACTICS_EFFECT_CASTLE_DEFENSE_CORRECTION`が参照する効果値は`TACTICS_EFFECT_BATTLE_SPECIAL.parameters.castle_level`とする. キャッスルブレイクの「タクティクス城レベル補正」へ1度だけ適用し, 効果IDと参照値を別々の補正値として加算しない.
 * スコアリミット補正.
 * 最大TP補正.
 * BP回復.
@@ -277,6 +278,8 @@ Battle Specialの効果対象は通常タクティクスと同じ`TacticsTarget`
 `TACTICS_BATTLE_SPECIAL_HIDE`, `TACTICS_BATTLE_SPECIAL_PROVOKE`, `TACTICS_BATTLE_SPECIAL_CLAUSTRUM`の対象選択補正は「[騎士団戦仕様の被弾確率](guild_battle.md#被弾確率)」で被弾重みへ反映する. HIDEは低下方向, PROVOKEとCLAUSTRUMは上昇方向として扱う.
 
 `TACTICS_BATTLE_SPECIAL_EXTERLIZE`のため, GameServerは各Playerについて騎士団戦単位の`attack_count`と`acquired_score`を保持する. どちらも騎士団戦開始時の初期値は0とする. 出撃要求がGameServerの出撃可否・RequestSequence検証を通過して当該出撃の実行が確定した時点で`attack_count`を1加算し, その出撃のEXTERLIZE補正値を`attack_count * parameters.attack_count_score`で算出してバトル獲得スコアのタクティクス補正系列へ適用する. 当該出撃の取得スコアが確定した後にその値を`acquired_score`へ加算する. 初回の成功出撃は`attack_count=1`として補正を計算する.
+`acquired_score`は論理型`SortieScore`（`f32`）で保持し, 各出撃結果の小数部分を保持したまま加算する. 騎士団合計ptへの加算時のみ切り捨てる.
+
 
 ## タクティクス固有乱数
 

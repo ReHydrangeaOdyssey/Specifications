@@ -85,7 +85,7 @@ Bot通知に失敗してもゲーム状態を巻き戻さない.
 |---|---|---|
 | 原因が解消済みで, 同じ2Guildの対戦を維持する | 同一ペア再開 | `RetryPreloadFailedGuildBattle`へ新しい`RestartAt`を指定する |
 | 原因が解消済みで, 対戦組み合わせを変更する | 再抽選 | GuildBattleCoordinatorへ再抽選を要求し, `RematchPreloadFailedGuildBattles`で結果を保存する |
-| 対戦を実施しない | 中止 | 対象Guildの`membership_locked=false`へ戻す |
+| 対戦を実施しない | 中止 | `CancelPreloadFailedGuildBattle`で`canceled`遷移と対象Guildのunlockを同一トランザクションで行う |
 
 ### 同一ペア再開
 
@@ -93,7 +93,7 @@ Bot通知に失敗してもゲーム状態を巻き戻さない.
 2. 原因が解消済みであることを確認する.
 3. 新しい開戦時刻`RestartAt`を決定する.
 4. `RetryPreloadFailedGuildBattle`を実行する.
-5. 対象Battleが`scheduled`かつ未割当へ戻ったことを確認する.
+5. 旧Battleが`replaced`となり, 応答の新`GuildBattleID`で別レコードの`scheduled`かつ未割当Battleが生成されたことを確認する.
 6. GuildBattleCoordinatorが通常のGameServer割当とPreloadを再実行することを確認する.
 7. 再度`PRELOAD_FAILED`となった場合は同じ判断手順へ戻る.
 
@@ -107,9 +107,7 @@ Bot通知に失敗してもゲーム状態を巻き戻さない.
 
 ### 中止
 
-中止時は対象Guildの所属変更禁止を解除する.
-Databaseを直接編集せず`SetGuildMembershipLock`を使用する.
-中止後も`GUILD_BATTLE.status`は`GUILD_BATTLE_STATUS_PRELOAD_FAILED`のままとし, 状態遷移は行わない. 対象Guildの`membership_locked=false`への更新だけを行う.
+中止時は`CancelPreloadFailedGuildBattle`を使用し, 対象Battleを`GUILD_BATTLE_STATUS_CANCELED`へ遷移させ, 対戦Guildの所属変更禁止を同一トランザクションで解除する. `SetGuildMembershipLock`単体による中止やDatabase直接編集は行わない. 同一マッチング枠に未完了Battleが残る場合は, 除外騎士団の所属ロックと除外一覧を維持し, 最後のBattleが終端状態になった時に解除する.
 
 ## 未割当GuildBattleと水平スケーリング失敗
 
@@ -263,7 +261,8 @@ GuildBattle開始前処理ではDatabaseの`GUILD.membership_locked`を正本と
 | Preload失敗の再抽選 | GuildBattleCoordinator + `RematchPreloadFailedGuildBattles` | 対象が`PRELOAD_FAILED`で再抽選を選択 |
 | 未割当Battle再割当 | `RetryUnassignedGuildBattleAssignment` | `scheduled`かつ未割当 |
 | 未割当Battle削除 | `DeleteUnassignedGuildBattles` | `scheduled`かつ未割当で実施しないと判断 |
-| Guild lock変更 | `SetGuildMembershipLock` | 仕様で定義された中止・終了・開戦前処理 |
+| Guild lock変更 | `SetGuildMembershipLock` | 開戦前の所属固定等. Preload中止・最終終了は専用Lifecycle APIを使用 |
+| Preload失敗対戦の中止 | `CancelPreloadFailedGuildBattle` | `PRELOAD_FAILED`で運営が中止を決定 |
 
 運営操作のためにDatabaseを直接更新することを通常手順としない.
 

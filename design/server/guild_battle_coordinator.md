@@ -7,7 +7,7 @@
 * Clientから直接接続させない.
 * Databaseへ直接接続せず, Database保存・取得はPrivate API Server経由で行う.
 * 騎士団戦の戦闘状態, `RequestSequence`, ReplayQueue, 戦闘計算結果は保持しない.
-* Database上の`GUILD_BATTLE.status`を任意値へ更新しない. `preload_failed -> scheduled`はPrivate APIの`RetryPreloadFailedGuildBattle`または`RematchPreloadFailedGuildBattles`だけを使用し, その他の永続状態遷移は「[騎士団戦永続ライフサイクル](guild_battle_lifecycle.md)」に従う.
+* Database上の`GUILD_BATTLE.status`を任意値へ更新しない. `preload_failed -> scheduled`はPrivate APIの`RematchPreloadFailedGuildBattles`を使用し, `RetryPreloadFailedGuildBattle`は旧対戦を`replaced`へ変更して新IDで`scheduled`を作成する. 中止は`CancelPreloadFailedGuildBattle`だけを使用し, その他の永続状態遷移は「[騎士団戦永続ライフサイクル](guild_battle_lifecycle.md)」に従う.
 * Arena処理は担当しない.
 * 固定シード値はGameServerと同じ`202205311459`とする.
   - これは機密情報ではないので公開されても問題ない.
@@ -74,7 +74,7 @@
 ## 再起動時
 
 * `GuildBattleCoordinator`は永続状態の正本をメモリだけに保持しない.
-* 起動時および定期Reconcile時にPrivate APIの`GetGuildBattleCoordinationState`を使用してDatabase上のすべての`scheduled`騎士団戦と割当状態を確認する. `RetryPreloadFailedGuildBattle`で固定開始時刻以外の`RestartAt`へ変更された対戦も対象とする.
+* 起動時および定期Reconcile時にPrivate APIの`GetGuildBattleCoordinationState`を使用してDatabase上のすべての`scheduled`騎士団戦と割当状態を確認する. `RetryPreloadFailedGuildBattle`で固定開始時刻以外の`RestartAt`を指定して新IDで生成された`scheduled`対戦も対象とする.
 * `scheduled`かつ未割当の騎士団戦は通常の割当対象へ戻す.
 * `scheduled`かつ割当済みの騎士団戦は割当先GameServerへ`StartGuildBattlePreload`を再送してよい. `StartGuildBattlePreload`の冪等性により二重Preloadを防止する.
 * `scheduled`かつ割当済みで, 割当先`GameServerInstanceID`に対応するEndpointが運用設定された不在判定時間を超えて連続して存在しない場合は, Private APIの`ReleaseScheduledGuildBattleAssignments`で当該割当を解除して未割当へ戻し, 別の`ready` GameServerへ再割当する. Endpoint不在判定時間の推奨初期値は15秒連続とする.
@@ -84,11 +84,12 @@
 
 ## Preload失敗後の再処理
 
-* `GUILD_BATTLE_STATUS_PRELOAD_FAILED`の同一ペア再開は運営がPrivate APIの`RetryPreloadFailedGuildBattle`を実行し, `scheduled`かつ未割当へ戻した後に通常のCoordinator割当・Preload開始処理へ戻す.
+* `GUILD_BATTLE_STATUS_PRELOAD_FAILED`の同一ペア再開は運営がPrivate APIの`RetryPreloadFailedGuildBattle`を実行し, 旧対戦を`replaced`として保持して新IDの`scheduled`かつ未割当対戦を作成する. Coordinatorは返却された新IDについて通常の割当・Preload開始処理を行う.
 * 運営が再抽選を選択した場合, 再抽選ロジックは`GuildBattleCoordinator`が実行する.
 * 再抽選対象GuildをGuildID昇順へ並べ, `GenerateTimeBasedSeed`でSeedを新規生成してShuffleする.
 * `PRELOAD_FAILED`のGuildBattleIDを昇順へ並べて新しいペアを割り当て, Private APIの`RematchPreloadFailedGuildBattles`へ保存を要求する.
 * 保存後は`scheduled`かつ未割当となるため, 通常のCoordinator割当・Preload開始処理へ戻す.
+* 運営が中止を選択した場合は, 運営ComponentがPrivate APIの`CancelPreloadFailedGuildBattle`を使用する. Coordinatorは中止済み対戦を割り当てない.
 
 ## 運営操作
 
