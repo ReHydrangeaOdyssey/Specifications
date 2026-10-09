@@ -1,6 +1,6 @@
 # Tactics Runtime設計
 
-## 結論
+## 概要
 
 Tacticsは「使用可否判定」「即時効果」「継続効果」「Battle Specialイベント適用」「固有Random」を分離して扱います。
 
@@ -71,7 +71,7 @@ GuildBattle中の出撃判定、Castle Break判定、戦闘開始、迎撃、敵
 
 数値パラメータ統合は仕様の「同系列加算後、異系列乗算」を使用し、速度だけは系列に関係なく加算します。被弾重みは仕様上の例外式を使用します。
 
-## 情報源
+## 参照資料
 
 - `specification/game/tactics.md`
 - `design/game/battle.md`

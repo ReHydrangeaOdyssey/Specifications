@@ -46,7 +46,7 @@ stateDiagram-v2
 * アセット追加シーンからの戻り先・戻り操作は未定義とする.
 
 * ユーザーがPNG画像およびHCA音声を選択し, Clientへ取り込めるシーンとする. コピーまたは移動の操作を想定するが, 元ファイルの削除を伴う移動および端末別のファイル/フォルダ選択方法は未確定とする.
-* 取り込んだファイルと割当情報はOPFSに保持し, Server配布のファイル名ハッシュ対応辞書に従いキャラクター画像を自動配置する. アセットの自動削除は行わない.
+* 取り込んだファイルと割当情報はOPFSに保持し, Server配布のファイル名SHA-256ハッシュ対応辞書に従いキャラクター画像を自動配置する. 同名ファイルはファイル内容のSHA-256で配置先を判別する. アセットの自動削除は行わない.
 * PNGの表示には`createImageBitmap()`を使用する. 詳細は「[クライアント仕様](client.md)」を参照する.
 
 ![title_image](../../images/title.png)
@@ -65,7 +65,7 @@ stateDiagram-v2
 ![form_guild_battle_image](../../images/form_guild_battle.png)
 
 
-## 情報源
+## 参照資料
 
 * `design/client/client.md`.
 * 添付`rust_wasm_png_hca_library_selection(1).md`（2026-10-09）, 第1～4節.

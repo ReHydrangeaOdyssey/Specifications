@@ -66,6 +66,7 @@ flowchart TD
 * Public API Serverは接続を可能な限り再利用し, API要求ごとにTLS接続を新規作成する方式とはしない.
 * RefreshTokenは`Secure`, `HttpOnly`, `SameSite=Strict`, `Path=/`, Domain属性なしの`__Host-RefreshToken` CookieだけでClientへ保持させる. Response BodyへRefreshTokenを返さない.
 * `RefreshAccessToken`および`Logout`では設定済みClient Originと`Origin` Headerの一致をPublic API Serverで確認する. CORSを使用する構成ではCredential許可Originを設定済みClient Originだけに限定し, wildcardを使用しない.
+* ClientはGitHub PagesからJavaScript/WASMを取得してブラウザで実行し, API要求はブラウザのFetch APIを介してPublic API Serverへ送信する. WASM実行への移行は, 通信先Originに関するCORS・Cookieの制約を変更しない. GameServerはClientから直接接続させない.
 * Clientの配布先はGitHub Pagesを予定するが, 通常の`github.io`と別SiteのPublic APIの組み合わせでは`SameSite=Strict` Cookieが送信されない. `__Host-RefreshToken`の属性は変更しない. Client配布ドメインとPublic APIドメインは同一Siteとなる構成など, 既存認証条件と両立する方法を別途決定する. Web Clientはブラウザ標準Fetch APIで通信し, HTTP/2/TLS 1.3はブラウザとServerがネゴシエーションするため接続時に検証する. ブラウザ側でTLSバージョンを手動指定する仕様は設けない.
 * Public API Request Bodyには有限の最大サイズを設定し, IngressとPublic API Serverの双方で上限を適用する. 最大サイズは各Public API Payloadについて仕様上取り得る最大serialization sizeを満たす値として設定し, 無制限にはしない.
 * `AccessToken`および`DiscordAuthorizationToken`にもwire上の有限の最大長を設定し, JWT構文解析および署名検証より前に上限超過を拒否する. 最大長は定義済みClaimと設定値から生成される正規Tokenを格納可能な値として設定し, 無制限にはしない.

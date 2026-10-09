@@ -1,6 +1,6 @@
 # game-core設計
 
-## 結論
+## 概要
 
 `game-core`はClientとGameServerで共有する、外部I/Oを持たない決定的ゲーム計算層とします。
 
@@ -104,7 +104,7 @@ HTTP Context、Database Connection、System Clock取得、Kubernetes情報は渡
 - Telemetry exporter
 - Kubernetes API
 
-## 情報源
+## 参照資料
 
 - `design/game/battle.md`
 - `design/game/pseudorandom.md`

@@ -204,7 +204,7 @@ stateDiagram-v2
 - Replay Eventは成立順で追加し, LiveとReplayで状態が一致する.
 - 30:00以降は新規受付を増やさず, それ以前の受付済みQueueを最後まで解決する.
 
-## 情報源
+## 参照資料
 
 - `specification/game/guild_battle.md`
 - `specification/game/ability.md`

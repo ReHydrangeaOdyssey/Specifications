@@ -1,6 +1,6 @@
 # 永続化プログラミング設計
 
-## 結論
+## 概要
 
 PostgreSQLへの直接接続はPrivate API Serverに限定し、永続化はDomain単位のRepository境界とUse Case単位のTransactionで扱います。GuildBattle中の更新は`X-Operation-ID`と`GUILD_BATTLE_DB_OPERATION`でExactly-once相当の二重適用防止を実現します。
 
@@ -144,20 +144,12 @@ GuildBattleID
 
 Replayの完全再現性を保つため、DB保存用に別内容へ変換しません。
 
-## メリット・デメリット
+## 制約
 
-### メリット
+- Operation ID履歴とResponseを永続保存する。
+- GameServerからの永続更新はPrivate APIを経由し, 内部通信障害時はRecoveryの対象とする。
 
-- Transactionの原子性要件をUse Caseごとに検証できます。
-- Retry / Recoveryで加算やReplay保存の二重適用を防げます。
-- DB schema依存をPrivate APIへ閉じ込められます。
-
-### デメリット
-
-- Operation ID履歴とResponse保存が必要なため永続データ量が増えます。
-- GameServerからの永続更新がPrivate API経由になるため内部通信障害をRecovery対象として扱う必要があります。
-
-## 情報源
+## 参照資料
 
 - `design/server/data_base.md`
 - `design/server/private_api.md`

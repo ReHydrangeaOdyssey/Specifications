@@ -1,6 +1,6 @@
 # 実装横断ルール
 
-## 結論
+## 概要
 
 複数Componentにまたがる実装で最も重要なのは、正本・順序・再現性・冪等性をコード上でも曖昧にしないことです。
 
@@ -69,7 +69,7 @@ Replay Eventは破棄しません。System Log Queueは高負荷時に`DEBUG` / 
 
 Public APIで形式検証やToken検証を行っていても、Private API / GameServerは現在状態に基づくDomain判定を自分で行います。
 
-## 情報源
+## 参照資料
 
 - `design/shared/types.md`
 - `design/server/public_api_responsibility.md`

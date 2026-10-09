@@ -1,6 +1,6 @@
 # 疑似乱数設計
 
-## 結論
+## 概要
 
 PRNGは仕様定義済みの`Random`を唯一の共通実装とし、乱数消費順をゲーム状態の一部として扱います。
 
@@ -48,7 +48,7 @@ GameServerとCoordinatorの固定シード値は`202205311459`です。
 - Damage乱数は対象・HITごとに取得します。
 - Join初回だけRequestSequence生成で本体PRNGを消費し、再Joinでは消費しません。
 
-## 情報源
+## 参照資料
 
 - `design/game/pseudorandom.md`
 - `design/server/game_server.md`

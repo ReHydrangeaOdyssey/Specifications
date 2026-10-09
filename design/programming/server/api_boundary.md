@@ -1,6 +1,6 @@
 # API境界設計
 
-## 結論
+## 概要
 
 外部通信はPublic API Serverを唯一のClient向け境界とし、内部処理は責務の正本Componentへ中継します。Private API、GameServer、GuildBattleCoordinator間はPrivate Networkだけを信頼せずmTLSでService Identityを検証します。
 
@@ -90,7 +90,7 @@ GuildBattle中の冪等DB更新で`X-Operation-ID`が必要な要求は、初回
 - Version不一致等、専用Responseが定義されている場合はそのPayloadを使用します。
 - 未定義の内部情報や秘密情報をPublic Responseへ透過しません。
 
-## 情報源
+## 参照資料
 
 - `design/server/api.md`
 - `design/server/api_payload.md`

@@ -1,6 +1,6 @@
 # Clientプログラミング設計
 
-## 結論
+## 概要
 
 Clientは、画面・入力・演出、Public API通信、認証状態、ログイン・サーバー未接続時のゲームプレイ制御、ローカル編成、キャラクター画像の割り当て、ArenaおよびGuildBattle殲滅戦闘再現、GuildBattle表示状態を担当します。
 
@@ -53,7 +53,7 @@ classDiagram
 
 ## Web Client実行方式とブラウザ境界
 
-- ClientはRust/WASM（`wasm32-unknown-unknown`）を対象とし, iPhone Safari/PWAおよびAndroid Chrome/PWA上で動作させます。配布先はGitHub Pagesを予定し, 最小バージョンは未確定です（2021年頃の最新版を候補として検討中）。
+- ClientはRust/WASM（`wasm32-unknown-unknown`）を対象とし, iPhone Safari/PWAおよびAndroid Chrome/PWA上で動作させます。配布先はGitHub Pagesを予定し, 最小対応ブラウザはiOS Safari 16.3, Android Chrome 120です。対応OSの最小バージョンは未確定です。
 - ブラウザとの接続には`wasm-bindgen`, `web-sys`, `js-sys`, `wasm-bindgen-futures`を使用します。Browser APIのPromiseは`wasm-bindgen-futures`を用いてRustの`Future`と連携させます。
 - 描画基盤として汎用2Dエンジンを追加せず, WebGL 2を`web-sys`経由で使用する独自スプライトバッチレンダラーとします。UI Frameworkも使用しません。
 - Rust側の共有`game-core`および既存のProtocol Buffers生成型`protocol`の責務は維持します。既存の`prost`とこれらの内部crateは, 選定資料の「5クレート」に含まれないため削除しません。
@@ -82,11 +82,12 @@ OPFSのPNG → File / Blob → createImageBitmap() → WebGL 2 texImage2D()
 
 ### OPFSアセット管理
 
-- タイトル画面の「アセットの追加」から専用シーンへ遷移し, ユーザーが選んだPNG/HCAを取り込みOPFSへ保存します。端末別ファイル選択方式と元ファイル削除を伴う移動の可否は未確定です。GameServerからPNG/HCAファイル本体は配信しませんが, ファイル名ハッシュ値に対応する配置辞書はServerから配布されます。
+- タイトル画面の「アセットの追加」から専用シーンへ遷移し, ユーザーが選んだPNG/HCAを取り込みOPFSへ保存します。端末別ファイル選択方式と元ファイル削除を伴う移動の可否は未確定です。GameServerからPNG/HCAファイル本体は配信しませんが, ファイル名のSHA-256ハッシュ値と配置先ディレクトリに対応する辞書はServerから配布されます。
 - OPFSのアセットバージョンにはセマンティックバージョニングを使用し, バージョン別ディレクトリを設けます。新バージョンを検証してから使用先を切り替え, 取り込み中断から回復できる状態を保持します。アプリ独自の容量・保存期間・画像解像度上限は設けず, ブラウザ固有quotaや退避・削除条件は別途検証します。
 - OPFSの初期実装は非同期APIを使用します。`FileSystemSyncAccessHandle`はDedicated Worker上で必要なランダムアクセスを計測し, 性能向上が実装・互換性・安定性上の負担を上回る場合のみ採用する条件付き候補です。採否は未確定です。
 - 圧縮HCAファイル全体と全体PCMを同時に常駐させません。デコード済みPCM, GPU資源, WASMメモリは用途別に管理し, 不要な`AudioBuffer`の参照を解除します。
-- PNG/HCA本体とキャラクター画像割当情報はOPFSへ保存します。ファイル名ハッシュ値とServer配布辞書を対応させて自動割当し, 保存済み情報をOPFSから復元します。Clientの自動削除は行わず, ユーザーがOPFSを明示的に消した場合に削除します（ブラウザのquota/ストレージ消去を除きます）。キャッシュクリアはOPFSの`cache`フォルダのファイルだけを対象とします。辞書取得API, ハッシュ算法, 同名/衝突/上書きの細則は未確定です。
+- アセット取り込み時は選択されたディレクトリの配下を再帰的に探索し, 対象となるPNG/HCAファイルのファイル名からSHA-256ハッシュ値を算出する. Server配布辞書にはファイル名のSHA-256ハッシュ値と配置先ディレクトリの対応を保持する. 同名ファイルが複数存在する場合はファイル内容のSHA-256ハッシュ値を算出し, 辞書中の同名ファイルに対する内容ハッシュ値と照合して配置先を特定する. これ以外のハッシュ衝突に対する判定・回避処理は設けない.
+- PNG/HCA本体とキャラクター画像割当情報はOPFSへ保存します。ファイル名のSHA-256ハッシュ値とServer配布辞書を対応させて自動割当し, 保存済み情報をOPFSから復元します。Clientの自動削除は行わず, ユーザーがOPFSを明示的に消した場合に削除します（ブラウザのquota/ストレージ消去を除きます）。キャッシュクリアはOPFSの`cache`フォルダのファイルだけを対象とします。辞書取得API・配布時期・シリアライズ形式, ファイル名ハッシュの入力文字列表現, 同名ファイルの上書き規則は未確定です。
 
 ### 依存・ビルド・検証条件
 
@@ -107,7 +108,7 @@ OPFSのPNG → File / Blob → createImageBitmap() → WebGL 2 texImage2D()
 - タイトル画面にキャッシュクリアとアセット追加の操作を提供します。
 - アセット追加ではプレイヤーが選択した画像をゲーム内キャラクターへ割り当てます。
 - 画像・UVデータはClient側資産とし、Server用`ProcessedMasterData`の対象へ追加しません。
-- PNG以外の画像は受け付けません。画像・音声本体とキャラクター割当情報の永続化先はOPFSとし, Server配布のファイル名ハッシュ辞書を使用した自動配置と保存情報の復元を行います。
+- PNG以外の画像は受け付けません。画像・音声本体とキャラクター割当情報の永続化先はOPFSとし, Server配布のファイル名SHA-256ハッシュ辞書を使用した自動配置と保存情報の復元を行います。
 - アプリ独自の容量・解像度・保持期間上限と自動削除は設けません。キャッシュクリアはOPFS内の`cache`フォルダのみ対象とします。
 
 ## 認証状態
@@ -211,6 +212,7 @@ Seedが`0`かどうかだけでランダム要素の有無を判定しません�
 ## Web Public API実装・配置制約
 
 - 既存の`web-sys`, `wasm-bindgen-futures`, `js-sys`からブラウザ標準`fetch()`を呼び出し, `prost`/`protocol`でRequest/ResponseのProtocol Buffersを処理します。`SubscribeGuildBattleUpdates`は`ReadableStream`を逐次読み, chunk境界を跨ぐvarint長prefixとMessageを復元します。HTTP/2/TLS 1.3はブラウザとServerによるネゴシエーションで, Client JavaScriptから強制しません。
+- WebAssemblyおよびJavaScriptはブラウザ内で実行され, API要求にはブラウザのOrigin・CORS・Cookie制約が適用されます。WASM/JavaScript配布後の通信もPublic API Serverへ行い, GameServerへの直接接続へ変更しません。
 - Refresh/LogoutなどCookieを必要とするCross-Origin要求は`credentials: include`とし, Server側は既存のOrigin検証, 許可Origin限定のCORS, `Access-Control-Allow-Credentials`を適用します。ただし`SameSite=Strict`はCross-Siteでは送信不可です。
 - GitHub Pages標準`github.io`と別SiteのPublic APIを組み合わせた構成は既存Cookie規則と両立しません。同一Siteとなる配布用独自ドメイン等の配置案は検討対象で, 採用するドメイン名は未確定です。`__Host-RefreshToken`のHost-only/HttpOnly/Secure/Strict制約を緩和しません。
 - 一般的なBrowser File Picker/`<input type="file">`から取り込み, OPFSへ保存できますが, OPFSはOSのファイル管理UIへ通常のディレクトリとして公開されません。元ファイルの削除を伴う移動やディレクトリ一括選択は端末別の対応を確認する必要があります。
@@ -218,6 +220,8 @@ Seedが`0`かどうかだけでランダム要素の有無を判定しません�
 
 ### 外部情報源
 
+- MDN WebAssembly concepts: https://developer.mozilla.org/en-US/docs/WebAssembly/Guides/Concepts
+- MDN CORS: https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CORS
 - MDN Fetch API: https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch
 - MDN Cookie: https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Set-Cookie
 - WebKit OPFS: https://webkit.org/blog/12257/the-file-system-access-api-with-origin-private-file-system/
@@ -226,24 +230,15 @@ Seedが`0`かどうかだけでランダム要素の有無を判定しません�
 - GitHub Pages custom domain: https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site
 - cridecoder公式: https://github.com/seiunx-dev/cridecoder
 
-## メリット・デメリット
+## 制約
 
-### メリット
+- ClientとGameServerで戦闘ロジック・MasterDataのVersionを一致させる。
+- Server正本の状態とClientの表示状態は再同期する。
+- OPFSの保存容量・データ保持はブラウザの制限に従う。
+- アセット取り込みとHCA/WASMの動作性能は対象実機で検証する。
+- `SameSite=Strict` Cookieを使用するため, Client配布先とPublic APIのSite構成が認証条件を満たす必要がある。
 
-- ClientとGameServerのArena再現性を共有ロジックで検証できます。
-- UI/演出と計算を分離できるため、演出変更が戦闘結果へ影響しません。
-- Server未接続でもタイトルからホーム画面へ遷移できます。
-- GuildBattle再接続時にServer状態へ戻せます。
-
-### デメリット
-
-- ClientとGameServerで同一Versionのロジック・MasterDataを揃える必要があります。
-- Client側表示状態はServer正本と重複するため、再同期処理が必要です。
-- ブラウザによるOPFSストレージ消去やquota上限はClientから保証できません。ファイル名ハッシュ辞書の形式・取得方法は未確定です。
-- ブラウザごとのアセット取り込み可否・メモリ上限およびHCA/WASMの実機性能は未検証です。
-- GitHub Pages標準ドメインと別SiteのAPIでは, `SameSite=Strict` CookieをRefreshへ送信できません。配布ドメイン/APIの構成とHTTP/2 + TLS 1.3接続の実証が必要です。
-
-## 情報源
+## 参照資料
 
 - `design/client/client.md`
 - `design/client/scene_transition.md`

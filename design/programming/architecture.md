@@ -1,6 +1,6 @@
 # 全体アーキテクチャ
 
-## 結論
+## 概要
 
 実装は`Client`、`Public API Server`、`Private API Server`、`GameServer`、`GuildBattleCoordinator`、`Discord Bot`、`PostgreSQL`、`MasterData Pipeline`、共有内部crateへ分離します。
 
@@ -25,7 +25,7 @@
 
 | Component | 主責務 | 明示的に持たない責務 |
 |---|---|---|
-| Client（Rust/WASM Web） | UI、WebGL 2描画、Web Audio再生、OPFSアセット管理、ローカル編成、認証状態、未接続時のホーム画面遷移制御、アセット追加専用シーンとハッシュ辞書による画像の自動割り当て、Arena再現、GuildBattle表示状態 | 戦闘結果の正本、RefreshToken平文参照、ServerのPNG/HCAアセット配信 |
+| Client（Rust/WASM Web） | UI、WebGL 2描画、Web Audio再生、OPFSアセット管理、ローカル編成、認証状態、未接続時のホーム画面遷移制御、アセット追加専用シーンとファイル名SHA-256ハッシュ辞書による画像の自動割り当て、Arena再現、GuildBattle表示状態 | 戦闘結果の正本、RefreshToken平文参照、ServerのPNG/HCAアセット配信 |
 | Public API | TLS境界、deserialize、Boundary Validation、Token検証、Rate Limit、Cookie、Routing | Domain判定、DB transaction |
 | Private API | Account/Guild Domain、Session、DB操作、GuildBattle Lifecycle | Arena抽選、戦闘計算、GuildBattleマッチング |
 | GameServer | Arena、GuildBattle実行状態、戦闘計算、Replay生成 | GuildBattle生成・マッチング・自己割当 |
@@ -153,7 +153,7 @@ flowchart TD
     AC --> B
 ```
 
-## 情報源
+## 参照資料
 
 - `design/server/public_api_responsibility.md`
 - `design/server/private_api.md`

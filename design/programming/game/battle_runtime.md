@@ -1,6 +1,6 @@
 # 戦闘Runtime設計
 
-## 結論
+## 概要
 
 戦闘処理は「戦闘全体状態」「CharacterごとのRuntime状態」「PRNG状態」を明示的に持ち、仕様の処理順に従って1段階ずつ状態を更新します。
 
@@ -109,7 +109,7 @@ Damage乱数は対象・HITごとに個別取得します。
 - 毒の`poison_cycle_turns`は仕様どおり独立管理します。
 - 毒ダメージでHP0になった場合は戦闘不能時Abilityを発動しません。
 
-## 情報源
+## 参照資料
 
 - `design/game/battle.md`
 - `design/shared/types.md`

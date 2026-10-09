@@ -122,7 +122,7 @@
 | **Discord Bot** | `tokio`, `serenity`, `reqwest`, `rustls`, `serde`, `jsonwebtoken`, `getrandom`, `uuid`, `time` |
 | **Public API / Coordinator 本番追加** | `kube`, `k8s-openapi` |
 
-## 情報源
+## 参照資料
 
 ### 添付仕様書・設計書
 - `design/client/client.md`

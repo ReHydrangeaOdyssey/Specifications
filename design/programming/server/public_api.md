@@ -1,6 +1,6 @@
 # Public API Serverプログラミング設計
 
-## 結論
+## 概要
 
 Public API ServerはstatelessなEdge Adapterとして実装し、Domain状態・Database transaction・戦闘状態を所有しません。
 
@@ -133,20 +133,12 @@ Public APIで保持してよいCacheはRoutingや検証を高速化するため�
 
 仕様でRetry回数・冪等性が明示されていない内部要求について、Public API共通機構で自動Retryを追加しません。GuildBattle DB更新等のRetryは責務を持つGameServer / Private API側の仕様に従います。
 
-## メリット・デメリット
+## 制約
 
-### メリット
+- GuildBattle要求ではOwnerとEndpointを解決する。
+- Logout後もAccessTokenは有効期限まで有効とする既存Session仕様に従う。
 
-- 水平スケール時にSession affinityを要求しません。
-- 認証・RoutingとDomain Logicの責務が分離されます。
-- 内部Componentが自身の状態で最終認可するためEdge状態への依存を減らせます。
-
-### デメリット
-
-- GuildBattleはOwner解決とEndpoint解決が必要です。
-- Token失効を毎要求Database照会しないため、Logout後のAccessTokenは有効期限まで有効というSession仕様を受け入れる必要があります。
-
-## 情報源
+## 参照資料
 
 - `design/server/public_api_responsibility.md`
 - `design/server/public_api.md`

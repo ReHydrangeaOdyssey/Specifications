@@ -1,6 +1,6 @@
 # Private API Serverプログラミング設計
 
-## 結論
+## 概要
 
 Private API ServerはAccount / Session / GuildのDomain処理、GuildBattle永続Lifecycle、Database Transaction、永続データ取得・保存の正本Applicationです。Application ComponentからPostgreSQLへ直接接続する入口をここへ集中させます。
 
@@ -128,20 +128,12 @@ Argon2id検証はCPU / Memoryを消費するため、仕様で示されたBounde
 - `common-types`の論理型とDB型の対応は`design/shared/types.md`を正とします。
 - Transaction開始・Commit・RollbackはApplication use case単位で管理します。
 
-## メリット・デメリット
+## 制約
 
-### メリット
+- DBを使用する処理はPrivate APIを経由する。
+- Private API Serverでは接続数・認証処理負荷・Transactionを監視対象とする。
 
-- DB更新規則とTransaction境界を一箇所で管理できます。
-- Public APIやGameServerが独自SQLで永続状態を破壊する経路をなくせます。
-- GuildBattle Lifecycleの許可遷移を集中管理できます。
-
-### デメリット
-
-- DBが必要な処理はPrivate APIを経由するため内部通信が増えます。
-- Private API Serverが永続処理の集中点になるため、接続数・認証負荷・Transaction監視が必要です。
-
-## 情報源
+## 参照資料
 
 - `design/server/private_api.md`
 - `design/server/api.md`

@@ -1,6 +1,6 @@
 # 論理型と変換境界
 
-## 結論
+## 概要
 
 Rust内部では、仕様の論理型をDomain境界として扱います。Protocol Buffers型やDatabase物理型をそのままゲームロジックへ渡さない構造にします。
 
@@ -80,7 +80,7 @@ flowchart TD
 
 Client / GameServerのArena再現、GuildBattle ReplayではVersion一致を前提とします。
 
-## 情報源
+## 参照資料
 
 - `design/shared/types.md`
 - `design/shared/common_data_struct.md`

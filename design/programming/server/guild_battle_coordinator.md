@@ -1,6 +1,6 @@
 # GuildBattleCoordinatorプログラミング設計
 
-## 結論
+## 概要
 
 GuildBattleCoordinatorはGuildBattleのControl Pathだけを担当します。マッチング生成、GameServer検出、容量比較、割当、Preload開始指示、未割当`scheduled`のReconcile、Scale out開始判断を持ち、戦闘Runtime・RequestSequence・Replayは持ちません。
 
@@ -135,20 +135,12 @@ Endpoint不在判定時間について仕様の推奨初期値はConfiguration�
 - Database Transaction
 - 進行中Battleの別Instance復旧状態
 
-## メリット・デメリット
+## 制約
 
-### メリット
+- Coordinator / Private API / GameServerの間で割当状態を確認する。
+- `in_progress`のInstance障害を自動再配置する方式は未決定とする。
 
-- Schedulingと戦闘処理を分離できます。
-- Coordinator再起動後もDatabaseから`scheduled`を再構築できます。
-- GameServerが自己割当しないためOwner決定箇所が限定されます。
-
-### デメリット
-
-- Coordinator / Private API / GameServerの三者で割当確認が必要です。
-- `in_progress`のInstance障害を自動再配置しないため、現仕様では運用対応が残ります。
-
-## 情報源
+## 参照資料
 
 - `design/server/guild_battle_coordinator.md`
 - `design/server/game_server.md`

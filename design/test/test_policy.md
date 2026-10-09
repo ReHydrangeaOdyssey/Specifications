@@ -165,7 +165,7 @@ GuildBattle Replayは「[リプレイProtocol Buffers定義](../system/guild_bat
 * ログイン不可またはServer未接続の場合はタイトルからホーム画面への移動のみ可能で, その他の機能を利用できない.
 * 必要な認証とServer接続が復帰すると, 接続状態と同じすべての機能を使用可能に戻す.
 * タイトル画面にキャッシュクリアボタンとアセット追加ボタンがある.
-* 「アセットの追加」ボタンから専用シーンへ遷移し, PNG/HCAをOPFSへ取り込める. ファイル名ハッシュ値に対応するServer配布辞書に基づき画像が自動配置され, OPFSへ割当情報を保存・復元する.
+* 「アセットの追加」ボタンから専用シーンへ遷移し, PNG/HCAをOPFSへ取り込める. 選択ディレクトリ配下を再帰的に探索し, ファイル名のSHA-256ハッシュ値に対応するServer配布辞書に基づき画像が自動配置され, OPFSへ割当情報を保存・復元する. 同名ファイルはファイル内容のSHA-256によって配置先を区別する. それ以上のハッシュ衝突処理は検証対象としない.
 * キャッシュクリアがOPFSの`cache`フォルダだけを対象とし, その他のアセット・割当情報が維持される.
 
 Clientの選定済み実装方式については, `design/programming/test/test_design.md`の「ブラウザ実装・アセット・音声の検証」を参照し, iPhone Safari/PWA, Android Chrome/PWA, WebGL 2, PNG, OPFS, HCA/音声を検証する. PNG/HCAファイル本体のOPFS保存は定義済みである一方, HCAデコーダーの最終採用には実機検証を要する. ClientとPublic API Server間のHTTP/2 over TLS 1.3・Protocol Buffersおよび騎士団戦通知のHTTP/2 Response streamを通信仕様として確認し, WebSocketをPublic API通信方式として使用しない.
@@ -237,6 +237,10 @@ HCA 22,050Hz・非暗号化・一部ループ・SE同時最大5, 性能閾値GPU
 * 同一AbilityEffectIDの重複装備を拒否する.
 * `EVERY_N_TURNS`を`AbilityTurnTiming`の4タイミングそれぞれで評価する.
 * 状態異常回避判定を状態異常付与率判定より先に行う.
+* 暗闇で攻撃失敗となった場合も`ABILITY_EFFECT_PURSUIT`のAbilityID単位のターン内発動済み判定を通す.
+* `ABILITY_EFFECT_COUNTER`の発動率判定がNoの場合, 2回目の相手HP処理ではなく相手HP確認へ進む.
+* `ABILITY_EFFECT_AVOIDANCE_COUNTER`のターン内発動済み判定・発動率判定を追撃判定前に行い, 発動した場合は味方HP処理へ進む.
+* 回避無効化・反撃無効化・状態異常攻撃・状態異常回避・COVER・DRAW_AGGROの発動成立時に, 対応AbilityIDの発動処理を通過する.
 * AbilityによるBUFF / DEBUFFをSkillと同じ`BuffDebuffEffectState`へ反映する.
 * `ABILITY_EFFECT_DAMAGE_INCREASE`は通常攻撃だけへ適用し, `correction_value`乗算後に通常攻撃最大ダメージ上限99,999を適用する.
 * `ABILITY_EFFECT_COVER`は攻撃対象リスト取得後に候補をフォーメーション内部番号順で抽選し, 発動時は元対象の計算値を使用したダメージを対象数分だけかばうキャラクターへ反映する.

@@ -1,6 +1,6 @@
 # 実装ディレクトリ構造
 
-## 結論
+## 概要
 
 現仕様で明示されているComponentと内部crateをWorkspaceの上位境界にし、各Application内では「transport / application / domain or runtime / infrastructure」の責務が混在しないよう論理分割します。
 
@@ -94,20 +94,11 @@ workspace/
 - Coordinatorの`matching`と`assignment`を分離し、GameServer容量選択と対戦ペア生成を混在させません。
 - Protocol Buffers schemaは既存`public_api.proto`と`guild_battle_replay.proto`を正本とし、別のwire schemaを設計内で増やしません。
 
-## メリット・デメリット
+## 制約
 
-### メリット
+- 責務が異なる処理は, Application間で似たコードが存在しても無条件に共通化しない。
 
-- 仕様上の正本Componentとコード配置が一致します。
-- GameServerのHot PathへI/O責務が混入しにくくなります。
-- 再現性テストを`game-core`単体で実行できます。
-
-### デメリット
-
-- 小規模開発としてはディレクトリ数が増えます。
-- Application間で似たコードが発生した場合でも、責務が異なる処理を安易に共通化できません。
-
-## 情報源
+## 参照資料
 
 - `design/system/rust_dependencies.md`
 - `design/server/public_api_responsibility.md`

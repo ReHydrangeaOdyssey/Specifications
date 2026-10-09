@@ -1,6 +1,6 @@
 # GameServerプログラミング設計
 
-## 結論
+## 概要
 
 GameServerはArenaとGuildBattleのゲーム計算結果の正本です。Arena処理、GuildBattle所有状態、専用処理Thread、Replay / Log / Recoveryの非同期Worker、Private API Clientを明確に分離します。
 
@@ -163,7 +163,7 @@ GameServerは実行速度のためDB情報の一部をCacheできます。保持
 
 Cacheは永続状態の正本ではなく、Domain判定で最新状態の確認が必要と仕様にある箇所はPrivate APIまたは自身のRuntime正本を使用します。
 
-## 情報源
+## 参照資料
 
 - `design/server/game_server.md`
 - `design/server/guild_battle.md`

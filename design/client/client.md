@@ -3,7 +3,7 @@
 ## 実行環境・描画方式
 
 * Clientの実装方式はRustをWebAssembly（WASM）へコンパイルするWeb Clientとする.
-* 対象環境はiPhoneのSafari / PWAおよびAndroidのChrome / PWAとする. 配布先はGitHub Pagesを予定する. 対応OS・ブラウザの最小バージョンは未確定で, 2021年頃の最新版を下限とする案を検討中である. PWAインストール手順の詳細は未確定とする.
+* 対象環境はiPhoneのSafari / PWAおよびAndroidのChrome / PWAとする. 配布先はGitHub Pagesを予定する. 対象ブラウザの最小バージョンはiOS Safari 16.3, Android Chrome 120とする. 対応OSの最小バージョンは未確定とする. PWAインストール手順の詳細は未確定とする.
 * 対象は2Dゲームとし, 最大20対20のリアルタイム騎士団戦での表示を想定する. 「最大20対20」は性能検証の対象条件であり, この選定資料によって新たなゲームルールを定義するものではない.
 * 主描画方式はWebGL 2とし, `web-sys`を介した独自のスプライトバッチレンダラーを使用する. 汎用2DエンジンとCanvas 2Dを主レンダラーとしては使用しない. 別途UI Frameworkも使用しない.
 * PNGのデコードにはブラウザの`createImageBitmap()`を使用し, `ImageBitmap`からWebGL 2テクスチャへアップロードして描画する. PNGの全画素RGBAを描画のためにWASMメモリへ複製することは前提としない.
@@ -21,10 +21,11 @@
 
 ## アセットの取得・保存
 
-* PNGおよびHCAのファイル本体はGameServerから配信しない. アセットの配置に使用するファイル名のハッシュ値対応辞書はServerから配布される（辞書の取得API・形式・ハッシュ算法・衝突時の扱いは未確定）.
+* PNGおよびHCAのファイル本体はGameServerから配信しない. アセットの配置に使用するファイル名SHA-256ハッシュ対応辞書はServerから配布する. 辞書取得API・配布時期・シリアライズ形式は未確定とする.
 * タイトル画面の「アセットの追加」ボタンから専用シーン「アセット追加」へ遷移する. このシーンでユーザーが選択した画像・音声をClientへ取り込む. ユーザーがファイルをコピーまたは移動する操作を想定するが, OS側の元ファイルを削除する「移動」の可否・許可取得・ブラウザ別実現方法は未確定とする.
 * 追加できる画像の形式はPNGだけとし, 音声は選定済みのHCAを対象とする. Client独自のファイル容量・画像解像度制限・保存期間は設けない. ブラウザの容量quotaやデータ消去・ストレージ退避等による制約はClientで解除できないため, 永続保持を保証するものではない.
-* 取り込んだPNG/HCAファイル本体とキャラクター画像割当情報はすべてOPFSへ保存する. Serverから配布される辞書とファイル名のハッシュ値の対応に基づき, Clientがアセットを自動配置・割当する. 保存済みの対応情報はOPFSから復元する. 復元時期・割当情報のデータ形式, 辞書の配信時期, ハッシュ算法と衝突時規則は未確定とする.
+* 取り込んだPNG/HCAファイル本体とキャラクター画像割当情報はすべてOPFSへ保存する. Serverから配布される辞書とファイル名のSHA-256ハッシュ値の対応に基づき, Clientがアセットを自動配置・割当する. 保存済みの対応情報はOPFSから復元する. 復元時期・割当情報のデータ形式, 辞書の配信時期, 同名ファイルの上書き規則は未確定とする.
+* アセット取り込み時は選択されたディレクトリの配下を再帰的に探索し, 対象となるPNG/HCAファイルのファイル名からSHA-256ハッシュ値を算出する. Server配布辞書にはファイル名のSHA-256ハッシュ値と配置先ディレクトリの対応を保持する. 同名ファイルが複数存在する場合はファイル内容のSHA-256ハッシュ値を算出し, 辞書中の同名ファイルに対する内容ハッシュ値と照合して配置先を特定する. これ以外のハッシュ衝突に対する判定・回避処理は設けない.
 * 追加済みファイルと割当情報をClientが自動削除しない. ユーザーによるOPFSの明示的な消去を削除契機とする. ブラウザ自身によるストレージデータの削除やquota超過の扱いは別途検証が必要とする.
 * OPFS内ではセマンティックバージョニングで識別するバージョン別ディレクトリにアセットを配置する. 新バージョンの検証後に使用先を切り替え, インポート途中の中断から回復できるようにする. `MAJOR.MINOR.PATCH`の意味を採用し, 接頭辞やディレクトリ配置規則・検証内容は未確定とする.
 * PNGはOPFSから`File` / `Blob`として読み, `createImageBitmap()`でデコードする. HCAは必要なメタデータと圧縮ブロックを読み, 圧縮ファイル全体とPCM全体の同時常駐を避ける.
@@ -84,9 +85,10 @@
 * `SubscribeGuildBattleUpdates`はHTTP/2 Response streamを使用し, `GuildBattleScoreUpdate`をProtocol Buffers varint長prefix付きで順次受信する.
 * ライブラリ選定資料に記載された`WebSocket`はPublic API通信方式として採用しない.
 * ブラウザ標準の`fetch()`（Rustからは選定済み`web-sys`/`wasm-bindgen-futures`等を使用）をPublic API通信に使用する. 通常のAPIは`fetch()`で送受信し, 通知はResponse Bodyの`ReadableStream`を逐次読み取りProtocol Buffers varint長prefixでフレーム復元する. HTTP/2とTLS 1.3のネゴシエーションはブラウザと接続先が担当し, JavaScriptが直接バージョンを強制しない. ブラウザからのHTTP/2 + TLS 1.3接続成立は配置先で検証する. Rust専用HTTPライブラリの追加は不要とする. HTTP method/pathは未定義のままとする.
+* WebAssemblyはブラウザ内で実行され, Rust/WASMからの通信もブラウザの`fetch()`を介するため, WASMとJavaScriptをGitHub Pagesから取得した後のAPI通信にもOrigin・CORS・Cookieの規則が適用される. `SameSite=Strict` CookieはCross-Site要求へ送信されない. ClientからGameServerへ直接通信せず, Public API Serverへ接続する構成を維持する.
 * GitHub Pages標準の`github.io`ホストと異なるSiteのPublic APIへアクセスする場合, 既存の`SameSite=Strict` RefreshToken Cookieは`credentials: include`でも送信できない. 配布先とAPIのSite構成（同一Siteの独自ドメイン等）は未確定とし, 認証設計を維持できる配置を検証する. Cross-Originの場合はPublic API側の厳密なCORS設定・Credentials許可が必要となる. RefreshToken Cookieの属性は変更しない.
 
-## 情報源
+## 参照資料
 
 * 添付`rust_wasm_png_hca_library_selection(1).md`（2026-10-09）, 第1～7節.
 * `design/system/network.md`「通信暗号化要件」.

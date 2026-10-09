@@ -1,6 +1,6 @@
 # Error設計
 
-## 結論
+## 概要
 
 Errorは「Boundary / Security」「Domain rejection」「Upstream / Infrastructure」を混在させず、Public APIで最終的に既定のResponseへ変換します。
 
@@ -52,7 +52,7 @@ Login後の初期Guild作成等、仕様上必要な後続処理が再試行後�
 - Public APIはその結果を既定Public Responseへ変換します。
 - Public APIはDomain上の可否を代わりに判断しません。
 
-## 情報源
+## 参照資料
 
 - `design/shared/types.md`
 - `design/system/public_api.proto`

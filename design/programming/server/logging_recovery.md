@@ -1,6 +1,6 @@
 # Logging / Replay / Recoveryプログラミング設計
 
-## 結論
+## 概要
 
 System Log、GuildBattle Replay、DB Recoveryは目的と耐欠損性が異なるため、Queue・Worker・保存形式を分離します。GuildBattle Hot Pathは同期I/Oを行わず、Replayだけは欠損禁止としてQueue満杯時にBackpressureを許容します。
 
@@ -179,7 +179,7 @@ CompleteGuildBattleは一般Recovery送信規則と別です。
 
 PlayerID、GuildBattleID、Request ID等を高Cardinality Metric Labelにしません。
 
-## 情報源
+## 参照資料
 
 - `design/system/log.md`
 - `design/server/game_server.md`

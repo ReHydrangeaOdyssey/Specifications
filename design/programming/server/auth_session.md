@@ -1,6 +1,6 @@
 # 認証・Sessionプログラミング設計
 
-## 結論
+## 概要
 
 認証は、Public APIの署名検証とCookie境界、Private APIのCredential照合・Session永続化・Token発行へ分離します。AccessTokenとRefreshTokenは同じLifecycleとして扱わず、それぞれ仕様どおりの失効モデルを実装します。
 
@@ -122,7 +122,7 @@ Role喪失時はDiscord BotからPrivate APIの`RevokeDiscordSessions`を呼び�
 - Client supplied PlayerIDをAccessToken Subjectの代用にしません。
 - RefreshTokenをResponse Bodyへ返しません。
 
-## 情報源
+## 参照資料
 
 - `design/server/session.md`
 - `design/server/public_api.md`

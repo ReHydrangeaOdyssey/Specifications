@@ -1,6 +1,6 @@
 # MasterData Pipeline設計
 
-## 結論
+## 概要
 
 MasterDataは独立PipelineでParse、Normalize、Validate、生成、Cross Checkを実行します。Runtime側で不正データを補正して継続する設計にはしません。
 
@@ -75,7 +75,7 @@ VersionはゲームロジックとMasterDataの組み合わせを一意に識別
 
 編集用原本の形式は仕様で固定されていないため、本設計でもCSV / JSON / Spreadsheet等へ固定しません。
 
-## 情報源
+## 参照資料
 
 - `design/game/master_data.md`
 - `design/game/master_data_pipeline.md`

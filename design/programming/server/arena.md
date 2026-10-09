@@ -1,6 +1,6 @@
 # Arenaプログラミング設計
 
-## 結論
+## 概要
 
 ArenaはGameServerが対戦相手・初期状態・Seedを確定し、Clientが同じVersionの`game-core`で戦闘を再現する構成です。GameServerでの初期状態決定とClient再現の境界を明示し、Server編成を正本として扱います。
 
@@ -97,7 +97,7 @@ ClientとGameServerで以下が同一なら、Arenaの戦闘結果が一致す�
 - PRNG実装
 - 乱数消費順
 
-## 情報源
+## 参照資料
 
 - `design/server/arina.md`
 - `design/game/arina.md`

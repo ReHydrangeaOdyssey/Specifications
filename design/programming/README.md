@@ -1,10 +1,10 @@
 # プログラミング設計
 
-## 結論
+## 概要
 
-現行仕様から実装上の責務・状態・処理順まで確定できる範囲を、`design/programming/`以下へ整理します。
+`design/programming/`はClient, Server, 共有crate, 戦闘Runtimeおよびテストの責務・状態・処理順・依存境界を定義する。
 
-本書群では、ゲーム仕様を追加しません。仕様で明示されていない値・挙動・通信Path・Framework構成は補完せず、実装上必要な境界だけを定義します。ClientのRust/WASM・WebGL 2・Web Audio・OPFSの選定事項は`client/client.md`へ反映し, ライブラリ採用の未検証条件は維持します。Public API通信方式は既存のHTTP/2 over TLS 1.3・Protocol Buffersを正とし, 騎士団戦通知にはHTTP/2 Response streamを使用します。WebSocketは採用しません。
+ゲーム仕様で未定義の値・挙動・通信Path・Framework構成は実装側で追加しない。ClientはRust/WASM・WebGL 2・Web Audio・OPFSを使用する。Public API通信はHTTP/2 over TLS 1.3・Protocol Buffersとし, 騎士団戦通知にはHTTP/2 Response streamを使用する。WebSocketは採用しない。
 
 ## 設計原則
 
@@ -86,7 +86,7 @@ flowchart LR
 | 具体的なRust型名・関数名が仕様にない | 原則として固定しません |
 | 仕様に未定義・固定しないとある | 設計対象外として残します |
 
-## 情報源
+## 参照資料
 
 現行添付資料の`specification/`および`design/`配下を使用しています。特に以下を設計境界の正本として参照しています。
 

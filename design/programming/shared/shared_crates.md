@@ -1,6 +1,6 @@
 # 共有crate設計
 
-## 結論
+## 概要
 
 共有内部crateは仕様に明示された`game-core`、`protocol`、`common-types`、`server-common`、`auth-common`を基本単位とします。
 
@@ -42,7 +42,7 @@ flowchart TD
 - Coordinator: `tokio`, `rustls`, `reqwest`, `prost`, `serde`, `serde_json`, `uuid`, `time`等
 - Kubernetes本番追加: `kube`, `k8s-openapi`
 
-## 情報源
+## 参照資料
 
 - `design/system/rust_dependencies.md`
 - `design/shared/types.md`
