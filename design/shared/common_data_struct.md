@@ -12,4 +12,4 @@
 
 ## タクティクス関連
 
-`TacticsEffect`, `TacticsBattleState`, `TacticsActiveEffectState`, `GuildBattlePlayerRuntimeState`, `TacticsBattleSpecialParameters`, `TacticsBattleSpecialData`, `TacticsHpRecoveryData`は「[型定義](types.md)」を参照する.
+`TacticsBattleState`, `TacticsActiveEffectState`, `GuildBattlePlayerRuntimeState`, `TacticsBattleSpecialParameters`, `TacticsBattleSpecialData`, `TacticsHpRecoveryData`は「[型定義](types.md)」を参照する.

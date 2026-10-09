@@ -618,7 +618,6 @@ message GuildBattleAnnihilationResponse {
   float score = 1; // SortieScore; calculation result without truncation.
   repeated BattleCharacterStatus enemy_characters = 2; // Up to 5 elements, at battle start.
   uint64 seed = 3;
-  reserved 4; // 旧enemy_tactics_id. Battle Tactics snapshotへ集約.
   uint64 next_request_sequence = 5;
   repeated BattleCharacterStatus own_characters = 6; // Selected own characters at battle start, up to 5.
   uint64 enemy_player_id = 7;

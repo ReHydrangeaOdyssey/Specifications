@@ -487,7 +487,7 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 
 ### GuildBattleAnnihilationResponse
 
-GameServerが決定した戦闘開始時点の入力を送信し, ClientはGameServerと同じ`game-core`・専用PRNGで殲滅戦闘を再計算する. `EnemyTacticsID[]`の重複送信は廃止し, 戦闘に実際に関係する継続効果のスナップショットへ置き換える. `Score`はGameServer正本の結果であり, Clientの再計算結果によって更新しない.
+GameServerが決定した戦闘開始時点の入力を送信し, ClientはGameServerと同じ`game-core`・専用PRNGで殲滅戦闘を再計算する. `Score`はGameServer正本の結果であり, Clientの再計算結果によって更新しない.
 
 | 項目 | 型 | 内容 |
 |---|---|---|

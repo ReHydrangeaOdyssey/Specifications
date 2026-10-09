@@ -733,11 +733,6 @@ message HitPoints {
   float current_hp = 2; // 戦闘計算用現在HP. 論理型Float32.
 }
 
-message TacticsEffect {
-  uint32 available_uses = 1; // 当該タクティクスを使用できる残り回数. 論理型Count.
-  uint32 tp_cost = 2; // 当該タクティクスの使用に必要なTP.wire上はuint32, 論理型TP.
-}
-
 message TacticsBattleState {
   uint32 available_uses = 1; // 騎士団戦中に残っているタクティクス使用可能回数. 論理型Count.
   uint32 tp_cost = 2; // タクティクス使用時に消費するTP.wire上はuint32, 論理型TP.

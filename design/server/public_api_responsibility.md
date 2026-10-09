@@ -6,7 +6,7 @@
 
 Public API ServerはInternetと内部Componentの間に置くstatelessなEdge APIとする. Public API Serverは業務状態の正本を保持せず, Database上の状態またはGameServer上のゲーム状態を使用した業務判定を行わない.
 
-新しい公開API Serverは追加しない. 現在のPublic API ServerをEdge APIとして責務縮小する. Account/Guild系の業務処理はPrivate API Server, Arena/騎士団戦の業務処理はGameServerを正本とする.
+Account/Guild系の業務処理はPrivate API Server, Arena/騎士団戦の業務処理はGameServerを正本とする.
 
 ## Public API Serverが担当する責務
 
@@ -85,9 +85,3 @@ PublicApiServer
 ```
 
 `routing`および`upstream`はDomain ruleを持たない. Public API methodごとの処理は上記Moduleを組み合わせる薄いAdapterとする.
-
-## 新しい公開API Serverを追加しない理由
-
-現時点の責務分離には別のInternet-facing Serverを追加する必要がない. Edge責務は同一であり, Account/Guild/Arena/GuildBattleで公開境界を分割してもToken検証, Rate Limit, Request Size Limit, Cookie, TLS等の重複実装が発生するためである.
-
-将来, 負荷特性または障害分離の必要性が発生した場合はIngress配下で複数Public API Deploymentへ分割してよい. その場合も各Deploymentは本書のEdge責務だけを持ち, Domain ruleはPrivate API Server/GameServerへ残す.
