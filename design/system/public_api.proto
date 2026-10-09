@@ -127,6 +127,14 @@ enum TacticsCountConsumeTrigger {
   TACTICS_COUNT_CONSUME_TRIGGER_SORTIE = 3;
 }
 
+// 出撃処理で実際に確定したイベント種別. CBC・キリ番・強襲は独立値とする.
+enum GuildBattleSortieEventType {
+  GUILD_BATTLE_SORTIE_EVENT_ANNIHILATION = 0;
+  GUILD_BATTLE_SORTIE_EVENT_NUMBERED_CASTLE_BREAK = 1;
+  GUILD_BATTLE_SORTIE_EVENT_ASSAULT_CASTLE_BREAK = 2;
+  GUILD_BATTLE_SORTIE_EVENT_CBC = 3;
+}
+
 enum GuildBattleStartTime {
   GUILD_BATTLE_START_1130 = 0;
   GUILD_BATTLE_START_1215 = 1;
@@ -245,6 +253,7 @@ message BattleCharacterStatus {
   SpeedRank speed_rank = 6;
   repeated uint32 ability_id = 7; // AbilityID. Exactly 2 elements.
   uint32 main_skill_id = 8; // SkillID.
+  float max_hp = 9; // 戦闘計算で使用する最大HP.
 }
 
 message TacticsStatEffectResult {
@@ -525,6 +534,7 @@ message ArenaBattleResponse {
   uint32 enemy_formation_id = 4;
   repeated BattleCharacterStatus enemy_characters = 5; // Up to 5 elements.
   uint64 seed = 6;
+  uint64 enemy_player_id = 7; // 戦闘に使用した相手PlayerID.
 }
 
 message ArenaBattleErrorResponse {
@@ -601,14 +611,33 @@ message GuildBattleCastleBreakResponse {
   uint64 score = 1;
   uint64 seed = 2;
   uint64 next_request_sequence = 3;
+  GuildBattleSortieEventType event_type = 4; // NUMBERED_CASTLE_BREAK / ASSAULT_CASTLE_BREAK / CBC.
 }
 
 message GuildBattleAnnihilationResponse {
   uint64 score = 1;
-  repeated BattleCharacterStatus enemy_characters = 2; // Up to 5 elements.
+  repeated BattleCharacterStatus enemy_characters = 2; // Up to 5 elements, at battle start.
   uint64 seed = 3;
-  repeated uint32 enemy_tactics_id = 4;
+  reserved 4; // 旧enemy_tactics_id. Battle Tactics snapshotへ集約.
   uint64 next_request_sequence = 5;
+  repeated BattleCharacterStatus own_characters = 6; // Selected own characters at battle start, up to 5.
+  uint64 enemy_player_id = 7;
+  uint32 enemy_formation_id = 8;
+  repeated TacticsActiveEffectState battle_tactics_effects = 9; // Only effects relevant to this battle, as at battle start.
+}
+
+// 継続中の騎士団戦参加者が開くServer -> Client通知ストリーム.
+message SubscribeGuildBattleUpdatesRequest {
+  string access_token = 1;
+  uint64 player_id = 2;
+  uint64 guild_battle_id = 3;
+}
+
+message GuildBattleScoreUpdate {
+  uint64 guild_battle_id = 1;
+  uint64 ally_score = 2; // Subscriber's guild perspective.
+  uint64 enemy_score = 3;
+  uint32 chain = 4; // Subscriber's guild chain.
 }
 
 message UseTacticsRequest {

@@ -125,6 +125,10 @@ Public APIで保持してよいCacheはRoutingや検証を高速化するため�
 - GuildBattle runtime状態
 - GuildBattle ownerの永続状態
 
+## GuildBattle通知ストリーム
+
+`SubscribeGuildBattleUpdates`は通常の単発Responseと異なり, AccessToken検証・GuildBattle Owner解決後, 所有GameServerから受信する`GuildBattleScoreUpdate`をClientのHTTP/2 Response streamへ中継します。Serverは`GuildBattleID`が一致する購読者にだけ配信し, Clientの所属Guildに対応するAlly/Enemy ScoreとChainを使用します。Public API Podは接続単位のハンドル以外にスコアや購読一覧を正本として永続管理しません。通信断では購読を終了し, ClientはGetGuildBattleStatusで状態を再同期します。
+
 ## Retry
 
 仕様でRetry回数・冪等性が明示されていない内部要求について、Public API共通機構で自動Retryを追加しません。GuildBattle DB更新等のRetryは責務を持つGameServer / Private API側の仕様に従います。

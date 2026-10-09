@@ -2,7 +2,7 @@
 
 ## 結論
 
-Clientは、画面・入力・演出、Public API通信、認証状態、ログイン・サーバー未接続時のゲームプレイ制御、ローカル編成、キャラクター画像の割り当て、Arena戦闘再現、GuildBattle表示状態を担当します。
+Clientは、画面・入力・演出、Public API通信、認証状態、ログイン・サーバー未接続時のゲームプレイ制御、ローカル編成、キャラクター画像の割り当て、ArenaおよびGuildBattle殲滅戦闘再現、GuildBattle表示状態を担当します。
 
 戦闘計算そのものはClient専用実装にせず、GameServerと同じ`game-core`とPRNG仕様を使用します。Serverが正本である状態をClient側で独自に確定しません。
 
@@ -46,6 +46,7 @@ classDiagram
     ClientApplication --> ArenaReplayController
     ClientApplication --> GuildBattleClientState
     ArenaReplayController --> GameCore
+    GuildBattleClientState --> GameCore
 ```
 
 `logical module`は責務名であり、Rustの具体的な`struct`名を固定するものではありません。
@@ -100,6 +101,7 @@ sequenceDiagram
 - Clientローカル編成とServer編成が一致する場合はその状態を使用します。
 - 不一致の場合はServer編成を使用してArena戦闘を開始します。
 - 戦闘計算結果をClientからServerへ正本として返す設計にはしません。
+- `EnemyPlayerID`はランダム/フレンド共通でResponseから取得します。`BattleCharacterStatus.MaxHP`を使用し, 行動順でPlayerIDを使う際もClient側で相手IDを推定しません。
 
 ## GuildBattle
 
@@ -116,6 +118,14 @@ Clientが保持するGuildBattle状態は、画面表示および要求組み立
 - Tactics使用回数および継続効果
 - Item残数
 - Guild Score、Chain、CBC状態
+
+### 殲滅戦闘再現と騎士団情報通知
+
+Arenaと同じ`game-core`・戦闘専用PRNGを使用して, 殲滅戦闘をGameServerと同じ入力で再計算します。`GuildBattleAnnihilationResponse`には戦闘開始時点の`OwnCharacters`/`EnemyCharacters`（最大HP含む）, `EnemyPlayerID`, `EnemyFormationID`, `BattleTacticsEffects`, `Seed`を含めます。自分のPlayerIDはJoin済みの本人PlayerIDを使用します。Own FormationはJoin時に同期済みの構成を使用します。相手の継続効果は, `EnemyTacticsID[]`ではなく`BattleTacticsEffects`のSource/Targetおよび取得済みMasterDataで判定します。
+
+Clientの直近表示HPや継続効果を戦闘入力として補わず, Responseに含む戦闘開始時点の入力を使用します。出撃Responseの`Score`はGameServerの正本であり, Clientが計算した最終HP・勝敗・スコアでGameServerの状態を上書きしません。演出はこの戦闘再現結果を使用します。キャッスルブレイクResponseの`EventType`はキリ番CB, 強襲CB, CBCを区別します。
+
+騎士団戦参加後に`SubscribeGuildBattleUpdates`で通知ストリームを開きます。初回および出撃後に届く`GuildBattleScoreUpdate`の`GuildBattleID`, `AllyScore`, `EnemyScore`, `Chain`を表示状態へ反映します。ここでの`Ally`は受信者の所属騎士団です。要求元の出撃結果Responseとスコア通知は別経路で受信します。通知では`RequestSequence`を加算しません。ストリーム切断・再接続時は`GetGuildBattleStatus`を先に呼び, 現在値とSequenceを正本へ同期してから再購読します。
 
 ### RequestSequence
 

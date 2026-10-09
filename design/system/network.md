@@ -61,7 +61,7 @@ flowchart TD
 
 ### 通信暗号化要件
 
-* ClientとPublic API Server間のPublic API transportはHTTP/2 over TLS 1.3とし, API PayloadはProtocol Buffersを使用する. Public API Payloadのwire schemaは「[public_api.proto](public_api.proto)」を正とする.
+* ClientとPublic API Server間のPublic API transportはHTTP/2 over TLS 1.3とし, API PayloadはProtocol Buffersを使用する. Public API Payloadのwire schemaは「[public_api.proto](public_api.proto)」を正とする. `SubscribeGuildBattleUpdates`のみ長寿命のServer->Client HTTP/2 Response streamとし, 個々の`GuildBattleScoreUpdate`をProtocol Buffers varint長prefixでフレーム化する. そのストリームはPublic API Serverから所有GameServerへmTLSで中継し, 購読者のGuildBattleIDと所属Guildに基づく情報だけを返す.
 * ClientとPublic API Server間の通信はTLS 1.3を必須とする. `LoginID`, `Password`, `AccessToken`, `RefreshToken`, `DiscordAuthorizationToken`を平文transportで送信しない.
 * Public API Serverは接続を可能な限り再利用し, API要求ごとにTLS接続を新規作成する方式とはしない.
 * RefreshTokenは`Secure`, `HttpOnly`, `SameSite=Strict`, `Path=/`, Domain属性なしの`__Host-RefreshToken` CookieだけでClientへ保持させる. Response BodyへRefreshTokenを返さない.

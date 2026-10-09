@@ -831,6 +831,19 @@ enum ItemType {
 }
 ```
 
+### GuildBattleSortieEventType
+
+出撃1回の結果として確定したイベント種別. 出撃開始時チェイン値がキリ番条件を満たしていても, 判定優先順位によりCBCになった場合は`GUILD_BATTLE_SORTIE_EVENT_CBC`を使用する.
+
+```proto
+enum GuildBattleSortieEventType {
+  GUILD_BATTLE_SORTIE_EVENT_ANNIHILATION = 0; // 殲滅.
+  GUILD_BATTLE_SORTIE_EVENT_NUMBERED_CASTLE_BREAK = 1; // キリ番CB.
+  GUILD_BATTLE_SORTIE_EVENT_ASSAULT_CASTLE_BREAK = 2; // 強襲CB.
+  GUILD_BATTLE_SORTIE_EVENT_CBC = 3; // キャッスルブレイクチャンスによるCB.
+}
+```
+
 ### GuildBattleStatus
 
 ```proto

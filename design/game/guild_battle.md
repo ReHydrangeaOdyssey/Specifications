@@ -39,18 +39,22 @@ flowchart TD;
         Attack[殲滅];
 
         StartPlayerAttack --> CheckCBC;        
-        CheckCBC -- Yes --> CB;
+        CheckCBC -- Yes --> CBChance[イベント種別 CBC];
+        CBChance --> CB;
         CheckCBC -- No --> CheckCBCCondition;
-        CheckCBCCondition -- Yes --> CB;
+        CheckCBCCondition -- Yes --> CBChance;
         CheckCBCCondition -- No --> CheckChain;
-        CheckChain -- Yes --> CB;
+        CheckChain -- Yes --> CBNumbered[イベント種別 キリ番CB];
+        CBNumbered --> CB;
         CheckChain -- No --> CheckAssaultDisable;
         CheckAssaultDisable -- Yes --> Attack;
         CheckAssaultDisable -- No --> CheckCB;
-        CheckCB -- Yes --> CB;
+        CheckCB -- Yes --> CBAssault[イベント種別 強襲CB];
+        CBAssault --> CB;
         CheckCB -- No --> Attack;
+        Attack --> SetAnnihilation[イベント種別 殲滅];
         CB --> EndPlayerAttack;
-        Attack --> EndPlayerAttack;
+        SetAnnihilation --> EndPlayerAttack;
     end
 ```
 
@@ -58,6 +62,35 @@ flowchart TD;
 強襲無効Battle Specialは通常の確率による強襲キャッスルブレイク判定の直前だけで評価する. `CheckAssaultDisable=Yes`ではキャッスルブレイクへ進まず殲滅へ進む. `GuildBattleCbcStatus.IsActive=true`, キャッスルブレイクチャンス発生条件成立, キリ番キャッスルブレイクは従来どおり先に判定する.
 
 GameServerは各Playerについて騎士団戦単位の`GuildBattlePlayerRuntimeState`を保持し, 開戦時に`attack_count=0`, `acquired_score=0`で初期化する. 出撃可否・RequestSequence検証を通過して当該出撃の実行が確定した時点で`attack_count`を1増加し, 加算後の値を当該出撃のEXTERLIZE補正へ使用する. 結果スコア確定後, 当該出撃でPlayerが取得したスコアを`acquired_score`へ加算する.
+
+## キャッスルブレイクスコア計算フロー
+
+`GuildBattleSortieEventType`で確定した種別を条件判定に使用する. 出撃開始時チェインが10以上かつ10の倍数でも, CBCで確定した出撃はキリ番CB専用効果を使用しない. 数式・統合順の正本は「[キャッスルブレイクスコア](../../specification/game/guild_battle.md#キャッスルブレイクスコア)」とする.
+
+```mermaid
+flowchart TD
+    Start[出撃種別確定・スコア計算開始] --> Basic[選択キャラクター累計BPから出撃基本スコア算出]
+    Basic --> Enemy[相手平均防御力・城レベル補正・タクティクス防御力補正を算出]
+    Enemy --> Loop{未計算の選択キャラクターがある?}
+    Loop -->|Yes| Ability[キャッスルブレイク専用攻撃力UP・ダメージUP Abilityを評価]
+    Ability --> Attack[Ability・Formation・Tactics補正で攻撃力算出]
+    Attack --> Damage[相手最終防御力・城防御補正を差引き Ability倍率反映]
+    Damage --> Clamp[最終ダメージを0以上へ補正]
+    Clamp --> Individual[打属性出撃補正を適用して個別スコアを加算]
+    Individual --> Loop
+    Loop -->|No| BaseTactics[通常のGuildBattleスコア・CBスコア補正を統合]
+    BaseTactics --> GeneralLimit[通常のスコア上限補正を取得]
+    GeneralLimit --> Numbered{イベント種別がキリ番CB?}
+    Numbered -->|Yes| NumberedTactics[EX_DRIVE・SLASHERのCBスコア補正を統合]
+    NumberedTactics --> NumberedLimit[キリ番CB専用スコア上限補正を統合]
+    Numbered -->|No| Assault{イベント種別が強襲CB?}
+    Assault -->|Yes| AssaultTactics[強襲CB専用スコア補正を統合]
+    Assault -->|No CBC| Score[チェイン補正とタクティクススコア補正を適用]
+    AssaultTactics --> Score
+    NumberedLimit --> Score
+    Score --> Limit[スコアリミットで上限適用]
+    Limit --> End[キャッスルブレイクスコア確定]
+```
 
 ## 遷移
 

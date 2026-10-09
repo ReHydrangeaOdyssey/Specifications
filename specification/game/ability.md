@@ -165,7 +165,8 @@
 * `ABILITY_EFFECT_AVOIDANCE_COUNTER`: 被攻撃時に同一Abilityの発動率判定を行い, 成立した場合は回避処理と反撃処理の両方を実行対象とする.
 * `ABILITY_EFFECT_SURVIVE_AT_ONE_HP`: ダメージ反映によってHP0以下になる直前に発動判定し, 成立した場合は当該ダメージ反映後HPを1とする.
 * `ABILITY_EFFECT_INCAPACITATED_ALLY_COUNT_STAT_CORRECTION`: 現在の戦闘不能味方人数に一致するMasterData entryの攻撃/防御補正を, 攻撃力/防御力算出時に動的に適用する. `BuffDebuffEffectState`へ固定値として取り込まない.
-* `ABILITY_EFFECT_CASTLE_BREAK_DAMAGE_INCREASE`: 騎士団戦のキャッスルブレイク時ダメージへ`correction_value`を倍率として適用する.
+* `ABILITY_EFFECT_CASTLE_BREAK_DAMAGE_INCREASE`: 騎士団戦のキャッスルブレイク時ダメージへ`correction_value`を倍率として適用する. キャッスルブレイクスコア式の`1.0 + アビリティダメージ補正値`には`アビリティダメージ補正値 = correction_value - 1.0`として渡す. 未発動なら補正値0.0とする.
+* `ABILITY_CONDITION_CASTLE_BREAK`の`ABILITY_EFFECT_BUFF`: 発動成立したキャラクター自身の`stat_correction.attack`をキャッスルブレイクの攻撃力計算だけへ反映し, 戦闘中の`BuffDebuffEffectState`に追加しない.
 
 ### ダメージ増加
 

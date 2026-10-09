@@ -13,7 +13,7 @@ HTTP Method、Path、gRPC service定義は現仕様で固定されていない�
 | Account / Session | CreateAccount, Login, RefreshAccessToken, Logout | Private API Server |
 | Guild | CreateGuild, UpdateGuildLeadership, Apply/Approve Join, Invitation, LeaveGuild | Private API Server |
 | Arena | UpdateArenaParty, StartArenaBattle | GameServer |
-| GuildBattle | UpdateGuildBattleParty, Join, Status, Sortie, Tactics, Item, Heal, Revive | 所有GameServer |
+| GuildBattle | UpdateGuildBattleParty, Join, Status, Sortie, ScoreUpdate購読, Tactics, Item, Heal, Revive | 所有GameServer |
 
 Public API Serverは認証・Boundary Validation・Rate Limit・Cookie処理・Routingを担当し、各Domainの成立可否は最終処理Componentが現在状態を用いて再判定します。
 
@@ -67,6 +67,10 @@ sequenceDiagram
 ```
 
 Public API側のOwner解決Cacheを実装する場合でも、Databaseの`GUILD_BATTLE.game_server_instance_id`が正本です。
+
+## GuildBattle通知ストリーム境界
+
+`SubscribeGuildBattleUpdates`は状態参照の認証付き長寿命HTTP/2 Responseストリームです。Public API Serverは認証と所有GameServerへのmTLS中継, 各接続への`GuildBattleScoreUpdate`フレーム転送だけを担当し, スコア・チェインを正本として保持しません。購読中のPlayerが当該GuildBattleIDにJoin済みであることはGameServerが判定します。通知フレームはProtocol Buffers varintサイズprefixで区切ります。HTTP Method/Pathは既存方針どおり未確定です。
 
 ## Payload
 

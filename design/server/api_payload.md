@@ -23,6 +23,7 @@ Public APIで内部`Float32`の現在HPを論理型`HP`（`uint32`）として�
 | CharacterID | `CharacterID` | キャラクターID |
 | Position | `FormationSlotID` | 戦闘時の配置位置. フォーメーション内部番号を使用 |
 | HP | `Float32` | 戦闘計算で使用する現在HP |
+| MaxHP | `Float32` | 戦闘計算で使用する最大HP. 現在HPとは独立して保持する |
 | Attack | `Float32` | 戦闘計算で使用する攻撃力 |
 | Defense | `Float32` | 戦闘計算で使用する防御力 |
 | SpeedRank | `SpeedRank` | 速度ランク |
@@ -382,6 +383,7 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 | EnemyFormationID | `FormationID` | 戦闘開始時点の相手フォーメーションID |
 | EnemyCharacters | `BattleCharacterStatus[]` | 戦闘開始時点の相手キャラクターステータス. 最大5件 |
 | Seed | `Seed` | GameServerとClientが同じ戦闘を実行するために使用するシード値 |
+| EnemyPlayerID | `PlayerID` | 戦闘対象として決定した相手PlayerID. ランダム対戦でも返す |
 
 ### ArenaBattleErrorResponse
 
@@ -481,16 +483,47 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 | Score | `Score` | キャッスルブレイクで取得したpt |
 | Seed | `Seed` | 出撃で使用したシード値 |
 | NextRequestSequence | `RequestSequence` | 要求成功後の次要求シーケンス番号 |
+| EventType | `GuildBattleSortieEventType` | キリ番CB・強襲CB・CBCのいずれか. 「[出撃種別](../../specification/game/guild_battle.md#制約)」の判定結果を使用する |
 
 ### GuildBattleAnnihilationResponse
 
+GameServerが決定した戦闘開始時点の入力を送信し, ClientはGameServerと同じ`game-core`・専用PRNGで殲滅戦闘を再計算する. `EnemyTacticsID[]`の重複送信は廃止し, 戦闘に実際に関係する継続効果のスナップショットへ置き換える. `Score`はGameServer正本の結果であり, Clientの再計算結果によって更新しない.
+
 | 項目 | 型 | 内容 |
 |---|---|---|
-| Score | `Score` | 殲滅で取得したpt |
-| EnemyCharacters | `BattleCharacterStatus[]` | 相手のキャラクターステータス. 最大5件 |
-| Seed | `Seed` | 戦闘で使用したシード値 |
-| EnemyTacticsID | `TacticsID[]` | 相手のタクティクスID. 可変長 |
+| Score | `Score` | 殲滅で取得したpt（GameServerの正本） |
+| OwnCharacters | `BattleCharacterStatus[]` | 出撃で選択した自分側キャラクターの戦闘開始時ステータス. 最大5件. `SelectID`に記載した有効な編成IDの順 |
+| EnemyPlayerID | `PlayerID` | 抽選で確定した相手プレイヤーID. 行動順抽選のPlayerID順に使用 |
+| EnemyFormationID | `FormationID` | 対戦相手の戦闘開始時フォーメーションID |
+| EnemyCharacters | `BattleCharacterStatus[]` | 戦闘開始時の相手キャラクターステータス. 最大5件 |
+| BattleTacticsEffects | `TacticsActiveEffectState[]` | 当該戦闘に影響する自分・相手双方の継続タクティクス効果だけを, 戦闘開始時点で確定した状態で返す. `source_player_id` / `source_guild_id` / `target`を保持し対象判定に使用 |
+| Seed | `Seed` | 戦闘で使用したシード値. GameServerとClientは同じ専用PRNGを使用 |
 | NextRequestSequence | `RequestSequence` | 要求成功後の次要求シーケンス番号 |
+
+`OwnCharacters`と`EnemyCharacters`のHP・最大HP・攻撃・防御は戦闘開始時点の確定値とし, `BattleTacticsEffects`から戦闘中に適用する効果を二重計上しない. 編成そのもの（Follower・Skill・Ability）は前者のAbilityID/MainSkillIDとJoin時同期した自分側編成, および取得済みMasterDataを用いる. 戦闘が開始するまでに他の出撃・回復・Tactics操作で状態が変化する可能性があるため, Clientが最後に表示したHPや継続効果の状態を戦闘初期値として推定しない. 結果の最終HP・行動履歴は送らない.
+
+### SubscribeGuildBattleUpdatesRequest
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| AccessToken | `AccessToken` | 通知ストリーム開始時の認証に使用 |
+| PlayerID | `PlayerID` | ストリーム購読者のPlayerID |
+| GuildBattleID | `GuildBattleID` | 購読する騎士団戦ID |
+
+`RequestSequence`は持たず, 購読によるGameServerの要求シーケンス加算も行わない. Join済みかつ当該騎士団戦に参加する本人の接続だけを許可する.
+
+### GuildBattleScoreUpdate
+
+`SubscribeGuildBattleUpdates`のServer -> Clientストリームに流すメッセージ. 接続開始時の現在値と, 出撃処理後に両騎士団の参加者へ送る更新値に同じPayloadを使用する.
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| GuildBattleID | `GuildBattleID` | 配信対象の騎士団戦ID |
+| AllyScore | `Score` | 受信Playerが所属する騎士団の現在スコア |
+| EnemyScore | `Score` | 対戦相手騎士団の現在スコア |
+| Chain | `Count` | 受信Playerが所属する騎士団の現在チェイン値 |
+
+騎士団の所属によって`AllyScore`・`EnemyScore`・`Chain`をそれぞれ変えて生成する. 個々のPlayerのHP・BP・TP・戦闘履歴・Tactics全一覧は通知に含めない.
 
 ### UseTacticsRequest
 

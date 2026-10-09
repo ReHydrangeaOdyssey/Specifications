@@ -140,13 +140,23 @@ flowchart TD
     K -->|Annihilation| T[相手Player / Character抽選・戦闘]
     CB --> RS[RequestSequence + 1]
     T --> RS
-    RS --> B[出撃完了Battle Special評価]
+    RS --> RESP[出撃結果Responseを要求元へ送信]
+    RESP --> B[出撃完了Battle Special評価]
     B --> SC[acquired_scoreへ今回Score加算]
     SC --> CH[Chain処理]
     CH --> RP[Replay Event]
+    RP --> N[購読中の当該騎士団戦全参加者へScore/Chain更新通知]
 ```
 
+`RequestSequence`加算後の出撃結果Responseは要求元Clientへ先に返します。その後BP/TP回復、`acquired_score`加算、両騎士団Score/Chain更新、Replay Event追加までを同じ出撃処理として直列実行し、確定した所属別の`GuildBattleScoreUpdate`を通知ストリームへ送ります。購読自体は状態変更要求ではなくRequestSequenceを消費しません。配信失敗でGameServerのスコアを巻き戻しません。
+
+`GuildBattleAnnihilationResponse`の`OwnCharacters`、`EnemyCharacters`、`EnemyPlayerID`、`EnemyFormationID`、`BattleTacticsEffects`、`Seed`は, 対象の戦闘開始時点で確定した入力です。Clientの直前表示状態から再構築するのではなく、この入力で同じ`game-core`を実行します。`BattleTacticsEffects`には両陣営の戦闘に影響する継続効果のみを含め, 無関係な効果・履歴・最終戦闘結果は送信しません。
+
 出撃種別判定の具体順序、相手抽選順、Damage等はゲーム仕様と`design/server/guild_battle.md`を正とし、本Runtime設計で再定義しません。
+
+## スコア・チェイン通知購読
+
+`SubscribeGuildBattleUpdates`は`GuildBattleID`に対するJoin済みPlayerの認証済み通知ストリームを登録します。ゲーム状態の正本を複製せず、GameServerから送るメッセージは`GuildBattleScoreUpdate`の4フィールドのみです。初回は現行スコア・チェインを配信し、以降は出撃後処理の確定後に両Guildの全購読者へそれぞれの所属側値を配信します。Clientの接続切断時に購読を解除し、再開時には`GetGuildBattleStatus`で再同期します。複数Public API Server経由で接続したClientにも所有GameServerから各ストリームで配信します。
 
 ## Tactics
 

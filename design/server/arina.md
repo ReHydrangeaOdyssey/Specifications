@@ -64,8 +64,8 @@ sequenceDiagram
                 PrivateAPIServer-->>GameServer: GetArenaBattleData
                 GameServer->>GameServer: 同じSeedから戦闘専用PRNGを新規生成
                 GameServer->>GameServer: 自分側・相手側双方のFormationID・Charactersを初期状態として戦闘実行
-                GameServer-->>PublicAPIServer: ArenaBattleResponse(OwnPartyMatched, OwnFormationID, OwnCharacters, EnemyFormationID, EnemyCharacters, Seed)
-                PublicAPIServer-->>Client: ArenaBattleResponse(OwnPartyMatched, OwnFormationID, OwnCharacters, EnemyFormationID, EnemyCharacters, Seed)
+                GameServer-->>PublicAPIServer: ArenaBattleResponse(OwnPartyMatched, OwnFormationID, OwnCharacters, EnemyFormationID, EnemyCharacters, Seed, EnemyPlayerID)
+                PublicAPIServer-->>Client: ArenaBattleResponse(OwnPartyMatched, OwnFormationID, OwnCharacters, EnemyFormationID, EnemyCharacters, Seed, EnemyPlayerID)
                 Client->>Client: OwnPartyMatched=falseならServer保存自分側編成でローカル編成を上書き
                 Client->>Client: 同じSeedから戦闘専用PRNGを新規生成
                 Client->>Client: EnemyFormationID・EnemyCharactersを使用してGameServerと同一の戦闘ロジックで戦闘を再現
@@ -100,8 +100,8 @@ sequenceDiagram
             else 対戦可能
                 GameServer->>GameServer: 同じSeedから戦闘専用PRNGを新規生成
                 GameServer->>GameServer: 自分側・相手側双方のFormationID・Charactersを初期状態として戦闘実行
-                GameServer-->>PublicAPIServer: ArenaBattleResponse(OwnPartyMatched, OwnFormationID, OwnCharacters, EnemyFormationID, EnemyCharacters, Seed)
-                PublicAPIServer-->>Client: ArenaBattleResponse(OwnPartyMatched, OwnFormationID, OwnCharacters, EnemyFormationID, EnemyCharacters, Seed)
+                GameServer-->>PublicAPIServer: ArenaBattleResponse(OwnPartyMatched, OwnFormationID, OwnCharacters, EnemyFormationID, EnemyCharacters, Seed, EnemyPlayerID)
+                PublicAPIServer-->>Client: ArenaBattleResponse(OwnPartyMatched, OwnFormationID, OwnCharacters, EnemyFormationID, EnemyCharacters, Seed, EnemyPlayerID)
                 Client->>Client: OwnPartyMatched=falseならServer保存自分側編成でローカル編成を上書き
                 Client->>Client: 同じSeedから戦闘専用PRNGを新規生成
                 Client->>Client: EnemyFormationID・EnemyCharactersを使用してGameServerと同一の戦闘ロジックで戦闘を再現

@@ -185,10 +185,12 @@
 
 #### 制約
 
-* プレイヤーの「[出撃](guild_battle.md#出撃)」時に発生するイベントは「[殲滅](guild_battle.md#殲滅)」と「強襲キャッスルブレイク」の2つのみである.
-  - どちらが選ばれるかはランダムでプレイヤーが選択することはできない.
-  - 「キャッスルブレイク確率」をもとに抽選される.
-    - 抽選には「[疑似乱数](../../design/game/pseudorandom.md)」の「[確率計算](../../design/game/pseudorandom.md#確率計算)」を使用する.
+* プレイヤーの出撃結果は`GuildBattleSortieEventType`で区別する.
+  - `GUILD_BATTLE_SORTIE_EVENT_ANNIHILATION`: 殲滅.
+  - `GUILD_BATTLE_SORTIE_EVENT_NUMBERED_CASTLE_BREAK`: 出撃開始時のチェインが10以上かつ10の倍数で成立したキリ番キャッスルブレイク（キリ番CB）.
+  - `GUILD_BATTLE_SORTIE_EVENT_ASSAULT_CASTLE_BREAK`: 強襲キャッスルブレイク（強襲CB）. 通常の強襲判定はキャッスルブレイク確率に従い疑似乱数で抽選され, プレイヤーは選択できない.
+  - `GUILD_BATTLE_SORTIE_EVENT_CBC`: キャッスルブレイクチャンス中, または同チャンス発生条件成立により発生したキャッスルブレイク（CBC）.
+* 出撃種別の判定順は「[出撃フロー](../../design/game/guild_battle.md#騎士団戦)」を正とし, CBC, キリ番CB, 強襲CBの各結果を混同しない. 出撃開始時チェインがキリ番条件を満たしていてもCBCが先に成立した場合はイベント種別をCBCとする.
 * 現在の「[チェイン](guild_battle.md#チェイン)」数が10以上かつ10の倍数であれば必ず「[キャッスルブレイク](guild_battle.md#キャッスルブレイク)」が発生する.
   - キャッスルブレイク判定には出撃開始時点のチェイン値を使用する.
 
@@ -204,6 +206,8 @@
 * 現在BPの減少.
   - 複数キャラクターを選択した場合は各キャラクターに設定されたBPを合算した値が消費される.
 
+
+出撃結果を出撃要求元Clientへ応答した後も, GameServerは同一出撃の完了時効果（BP/TP回復, 獲得スコア集計, チェイン更新）を順に実行する. これらが完了した時点の両騎士団スコアと所属騎士団別チェイン値は, `SubscribeGuildBattleUpdates`で購読する当該騎士団戦の全接続中参加者へ通知する. 通知は出撃Responseと独立した`GuildBattleScoreUpdate`とし, 要求元Clientも購読中なら同じ通知を受ける. 通知が届かなかったClientは`GetGuildBattleStatus`で正本に同期する.
 
 ### TP獲得
 
@@ -315,12 +319,14 @@ EXTERLIZE補正 = attack_count * 適用対象となる`TACTICS_BATTLE_SPECIAL_EX
 最終防御力 = 相手平均防御力 * (1.0 + タクティクス防御力補正)
 
 for キャラクター in 「出撃」時の選択キャラクター {
+    アビリティ攻撃力補正値 = キャッスルブレイク時に発動成立した当該キャラクターの`ABILITY_EFFECT_BUFF`（`ABILITY_CONDITION_CASTLE_BREAK`）の`stat_correction.attack`
     タクティクス攻撃力補正 = `TACTICS_EFFECT_ATTACK_CORRECTION`の効果値と, 適用対象となる`TACTICS_EFFECT_BATTLE_SPECIAL.parameters.attack`を「[タクティクス](tactics.md#効果値の統合規則)」に従って系列統合した値
     フォーメーション攻撃力補正 = Databaseの`FORMATION_POSITION`に定義された該当補正系列のフォーメーション補正値合計
-    攻撃力 = キャラクターの攻撃力 * (1.0 + フォーメーション攻撃力補正) * (1.0 + タクティクス攻撃力補正)
+    攻撃力 = キャラクターの攻撃力 * (1.0 + アビリティ攻撃力補正値) * (1.0 + フォーメーション攻撃力補正) * (1.0 + タクティクス攻撃力補正)
 
     出撃補正 = キャラクターは「打」属性 ? 0.375 : 0.0
-    最終ダメージ = 攻撃力 - (最終防御力 + 相手城防御補正)
+    アビリティダメージ補正値 = キャッスルブレイク時に発動成立した当該キャラクターの`ABILITY_EFFECT_CASTLE_BREAK_DAMAGE_INCREASE`の`correction_value` - 1.0. 未発動時は0.0
+    最終ダメージ = (攻撃力 - (最終防御力 + 相手城防御補正)) * (1.0 + アビリティダメージ補正値)
     最終ダメージ = max(最終ダメージ, 0)
 
     個別スコア = 最終ダメージ * (1.0 + 出撃補正)
@@ -328,9 +334,9 @@ for キャラクター in 「出撃」時の選択キャラクター {
     累計スコア += 個別スコア
 }
 
-タクティクススコア補正 = `TACTICS_EFFECT_SCORE_CORRECTION`, 適用対象となる`TACTICS_EFFECT_BATTLE_SPECIAL.parameters.guild_battle_score`, `parameters.castle_break_score`を「[タクティクス](tactics.md#効果値の統合規則)」に従って系列統合した値
+タクティクススコア補正 = `TACTICS_EFFECT_SCORE_CORRECTION`, 適用対象となる`TACTICS_EFFECT_BATTLE_SPECIAL.parameters.guild_battle_score`, `parameters.castle_break_score`を「[タクティクス](tactics.md#効果値の統合規則)」に従って系列統合した値. ただし`EX_DRIVE`および`SLASHER`の`parameters.castle_break_score`は`GuildBattleSortieEventType == GUILD_BATTLE_SORTIE_EVENT_NUMBERED_CASTLE_BREAK`の場合に限って統合対象とする
 
-タクティクススコアリミット補正 = `TACTICS_EFFECT_SCORE_LIMIT_CORRECTION`系列の有効な効果値を加算した値. 出撃開始時チェインが10以上かつ10の倍数のキリ番キャッスルブレイクでは, 適用対象となる`TACTICS_EFFECT_BATTLE_SPECIAL.parameters.castle_break_score_limit`も「[タクティクス](tactics.md#効果値の統合規則)」に従って統合する
+タクティクススコアリミット補正 = `TACTICS_EFFECT_SCORE_LIMIT_CORRECTION`系列の有効な効果値を加算した値. `GuildBattleSortieEventType == GUILD_BATTLE_SORTIE_EVENT_NUMBERED_CASTLE_BREAK`の場合は, 適用対象となる`TACTICS_EFFECT_BATTLE_SPECIAL.parameters.castle_break_score_limit`も「[タクティクス](tactics.md#効果値の統合規則)」に従って統合する
 スコアリミット = 99,999 + タクティクススコアリミット補正
 
 キャッスルブレイクスコア = 累計スコア * (1.0 + チェイン補正) * (1.0 + タクティクススコア補正)
@@ -342,6 +348,10 @@ for キャラクター in 「出撃」時の選択キャラクター {
 
 出撃処理の結果が確定した後, 出撃完了時を発動タイミングとするBattle SpecialのBP/TP回復条件を評価する. 条件を満たす有効効果について`bp_recovery`または`tp_recovery`を加算し, BPは最大BP, TPはその時点の最大TPへクランプする.
 
+
+キャッスルブレイク専用アビリティは`ABILITY_CONDITION_CASTLE_BREAK`の発動条件・発動確率に従い, 出撃時の選択キャラクターごとに評価する. `ABILITY_EFFECT_BUFF`の攻撃力補正は当該キャッスルブレイクの攻撃力計算だけに適用し, 継続する戦闘バフ状態へ追加しない. `ABILITY_EFFECT_CASTLE_BREAK_DAMAGE_INCREASE`の`correction_value`は倍率値であるため, 上記の`(1.0 + アビリティダメージ補正値)`形式と両立するよう`correction_value - 1.0`を補正値とする（`correction_value=2.0`なら2倍）.
+
+キャッスルブレイクスコアの処理順は「[キャッスルブレイクスコア計算フロー](../../design/game/guild_battle.md#キャッスルブレイクスコア計算フロー)」を参照する.
 
 ### キャッスルブレイク確率
 

@@ -373,7 +373,7 @@ GuildNameがBoundary Validationを満たさない場合は`ApiErrorResponse(API_
 - `Mode=friend`で指定した`OpponentID`は存在するがArenaParty未登録の場合は`ARENA_BATTLE_ERROR_ARENA_PARTY_NOT_REGISTERED`を返す.
 - 対戦相手抽選後, 戦闘開始前に同じSeedから戦闘専用の新しいPRNGを生成する. 対戦相手抽選で進んだPRNG状態は引き継がない.
 - GameServerが自分側と相手側双方のFormationID・キャラクター初期状態を用いて戦闘を実行し, その計算結果を正本とする.
-- 成功レスポンスでは戦闘結果そのものは返さず, Clientが同一戦闘を再現するための自分側編成一致結果・Server保存自分側編成・`EnemyFormationID`・相手キャラクター初期状態・Seedを返す. Clientは`OwnPartyMatched=false`の場合, Server保存自分側編成でローカル編成を上書きしてその編成を戦闘再現に使用する.
+- 成功レスポンスでは戦闘結果そのものは返さず, Clientが同一戦闘を再現するための自分側編成一致結果・Server保存自分側編成・`EnemyPlayerID`・`EnemyFormationID`・相手キャラクター初期状態（最大HP含む）・Seedを返す. Clientは`OwnPartyMatched=false`の場合, Server保存自分側編成でローカル編成を上書きしてその編成を戦闘再現に使用する.
 - Clientも戦闘開始前に同じSeedから戦闘専用の新しいPRNGを生成する.
 
 #### 要求データ
@@ -395,11 +395,11 @@ GuildNameがBoundary Validationを満たさない場合は`ApiErrorResponse(API_
 
 - 参加前の初期値は`0`とする.
 - 初回の`JoinGuildBattle`成功時に限り, 騎士団戦本体PRNGを1回消費して`next_bounded(1,000,000,000) + 1`を求め, プレイヤー固有の初期RequestSequenceとして割り当てる. 他プレイヤーとの重複は許可する. すでにJoin済みのPlayerが再実行した場合はPRNGを消費せず, 現在保持しているRequestSequenceを返す.
-- 参加後の騎士団戦PublicAPI要求は, 再接続用の`GetGuildBattleStatus`を除き`GuildBattleID`, `PlayerID`, `RequestSequence`を含む.
+- 参加後の騎士団戦の状態変更要求は`GuildBattleID`, `PlayerID`, `RequestSequence`を含む. 状態参照専用`GetGuildBattleStatus`および通知購読`SubscribeGuildBattleUpdates`は`RequestSequence`を要求しない.
 - `GetGuildBattleStatus`はAccessToken・PlayerID・GuildBattleIDで本人性と参加状態を検証し, 現在のRequestSequenceを含む状態一式を返す. この要求ではRequestSequenceを加算しない.
 - 要求RequestSequenceがGameServer保持値と一致する場合のみ処理する.
 - 一致しない場合は`ApiErrorResponse(API_ERROR_INVALID_GUILD_BATTLE_SEQUENCE)`を返す.
-- `GetGuildBattleStatus`を除く要求が成功するたびにGameServer保持RequestSequenceを`1`加算し, 成功レスポンスの`NextRequestSequence`としてClientへ返す.
+- `GetGuildBattleStatus`と`SubscribeGuildBattleUpdates`を除く状態変更要求が成功するたびにGameServer保持RequestSequenceを`1`加算し, 成功レスポンスの`NextRequestSequence`としてClientへ返す.
 - 失敗した要求ではRequestSequenceを加算しない.
 
 
@@ -479,6 +479,28 @@ GuildNameがBoundary Validationを満たさない場合は`ApiErrorResponse(API_
 
 [API Payload](api_payload.md)の「GetGuildBattleStatusResponse」を参照する.
 
+### 騎士団戦スコア・チェイン通知購読
+
+#### メソッド名
+
+`SubscribeGuildBattleUpdates`
+
+#### 処理内容
+
+- Clientは`JoinGuildBattle`成立後, `SubscribeGuildBattleUpdatesRequest`を送信し, HTTP/2＋TLS 1.3上で通知用の長寿命Response streamを開く. PayloadはProtocol Buffersで, 各`GuildBattleScoreUpdate`メッセージを長さprefix付き（Protocol Buffers varint長＋シリアライズ済みPayload）で順次送る. gRPC Service/HTTP Method/Pathは本書では追加確定しない.
+- Public API ServerはAccessTokenを検証し, GameServerへ`AuthenticatedContext`と要求GuildBattleIDを中継する. GameServerは現在所属GuildIDとJoin済み状態および騎士団戦参加対象の一致を再検証する. 他の騎士団戦や未参加Playerの状態は配信しない.
+- 初回配信は購読成立時点のスコア・チェインのスナップショットとする. 出撃処理の`GuildBattleCastleBreakResponse`または`GuildBattleAnnihilationResponse`を要求元へ送信した後, GameServerがBP/TP回復・`acquired_score`加算・チェイン処理を反映し, 反映後に同一GuildBattleIDの接続中全参加者へ更新を配信する. 配信時点の所属GuildIDに基づき`AllyScore`/`EnemyScore`/`Chain`の方向を切り替える.
+- Public API Serverは通知内容の正本を保持せず, 所有GameServerから購読ストリームへ届く通知を接続元Clientへ中継するだけとする. 接続単位のストリーム管理はGame状態の正本ではない.
+- 通知はClientの`RequestSequence`を変更しない. 通信切断中の通知蓄積・再送を行わず, 再接続時は`GetGuildBattleStatus`で正本を取得してから再購読する. 通知の取りこぼしは最新状態の取得により解消する.
+
+#### 要求データ
+
+[API Payload](api_payload.md)の「SubscribeGuildBattleUpdatesRequest」を参照する.
+
+#### 通知データ
+
+[API Payload](api_payload.md)の「GuildBattleScoreUpdate」を参照する.
+
 ### 出撃要求
 
 #### メソッド名
@@ -490,8 +512,8 @@ GuildNameがBoundary Validationを満たさない場合は`ApiErrorResponse(API_
 - 出撃可否をチェックする.
 - 騎士団戦全体の`Sequence`を加算する.
 - 出撃内容を抽選する.
-- キャッスルブレイク処理または戦闘処理を行う.
-- チェイン処理を行う.
+- キャッスルブレイク処理または戦闘処理を行い, 出撃結果Responseを要求元Clientへ送る.
+- 出撃完了後のBP/TP回復・スコア反映・チェイン処理を行い, `SubscribeGuildBattleUpdates`の接続中全参加者へ更新済み騎士団スコアと各所属騎士団のチェインを配信する. 通知は別のResponseとして扱い, 出撃応答を待っているClient以外へも送る.
 
 #### 要求データ
 

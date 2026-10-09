@@ -243,15 +243,17 @@ Database上の状態遷移は「[騎士団戦永続ライフサイクル](guild_
 
 #### 騎士団戦中
 
+出撃結果Responseは出撃要求元のClientへ返す. その後に行う騎士団全体のスコア・チェインの更新は, Responseとは別に`GuildBattleScoreUpdate`で両騎士団の接続中全参加者へ通知する. GameServerのRuntimeは出撃要求を受信順で直列処理し, 当該出撃の後処理と通知対象状態の確定まで同一出撃の処理とする. 通知はゲーム状態の正本ではなく, 再接続時は`GetGuildBattleStatus`で同期する.
+
 ```mermaid
 sequenceDiagram
     actor User
     participant Client
     participant PublicAPIServer as Public API Server
     participant GameServer
-    participant PrivateAPIServer as Private API Server
-    participant Database
+    participant Subscribers as 両騎士団の購読中Client
 
+    Note over Client,Subscribers: 参加後, SubscribeGuildBattleUpdatesで通知ストリームを開始済み
     loop 30分経過するまで
         User ->> Client: 出撃ボタン押下
         Client ->> PublicAPIServer: GuildBattleSortie(AccessToken, PlayerID, GuildBattleID, RequestSequence, SelectID[5])
@@ -264,24 +266,54 @@ sequenceDiagram
         GameServer ->> GameServer: CBC → CBC発生条件 → キリ番CB → 強襲無効 → 強襲CBの順で出撃種別を判定
 
         alt キャッスルブレイク
-            GameServer ->> GameServer: 相手Player/Character抽選を行わずキャッスルブレイク処理
-            GameServer->>GameServer: 成功した要求のRequestSequenceを1加算
-            GameServer -->> PublicAPIServer: GuildBattleCastleBreakResponse(NextRequestSequence)
-            PublicAPIServer -->> Client: GuildBattleCastleBreakResponse(NextRequestSequence)
+            GameServer ->> GameServer: 相手抽選なしでCBスコア計算・イベント種別確定
+            GameServer ->> GameServer: 成功した要求のRequestSequenceを1加算
+            GameServer -->> PublicAPIServer: GuildBattleCastleBreakResponse(EventType, Score, Seed, NextRequestSequence)
+            PublicAPIServer -->> Client: GuildBattleCastleBreakResponse
         else 殲滅
-            GameServer ->> GameServer: 生存相手PlayerID候補をPlayerID昇順で構築して被弾重み付き抽選
-            GameServer ->> GameServer: 選択PlayerのHP1以上Character候補を編成ID昇順で構築して抽選
+            GameServer ->> GameServer: 生存相手PlayerID候補を昇順で構築し被弾重み付き抽選
+            GameServer ->> GameServer: HP1以上の相手Character候補から抽選
+            GameServer ->> GameServer: 戦闘開始時点のOwn/EnemyCharacters, 有効BattleTacticsEffectsを確定
             GameServer ->> GameServer: 戦闘処理
-            GameServer->>GameServer: 成功した要求のRequestSequenceを1加算
-            GameServer ->> PublicAPIServer: GuildBattleAnnihilationResponse(NextRequestSequence)
-            PublicAPIServer ->> Client: GuildBattleAnnihilationResponse(NextRequestSequence)
+            GameServer ->> GameServer: 成功した要求のRequestSequenceを1加算
+            GameServer -->> PublicAPIServer: GuildBattleAnnihilationResponse(EnemyPlayerID, EnemyFormationID, OwnCharacters, EnemyCharacters, BattleTacticsEffects, Seed, Score, NextRequestSequence)
+            PublicAPIServer -->> Client: GuildBattleAnnihilationResponse
+            Client ->> Client: 同一初期状態・Seedからgame-coreで戦闘を再現
         end
 
-        GameServer ->> GameServer: 出撃完了条件を満たすBattle SpecialのBP/TP回復を評価・反映
+        GameServer ->> GameServer: 出撃完了Battle SpecialのBP/TP回復を反映
         GameServer ->> GameServer: GuildBattlePlayerRuntimeState.acquired_score += 今回取得スコア
-        GameServer ->> GameServer: チェイン処理
-
+        GameServer ->> GameServer: 両騎士団のScore・Chain処理
         GameServer ->> GameServer: 出撃成立Replay EventをReplayQueueへ追加
+        GameServer -->> PublicAPIServer: GuildBattleScoreUpdate(GuildBattleID, 所属別AllyScore, EnemyScore, Chain)
+        PublicAPIServer -->> Subscribers: 接続中の両騎士団参加者へ所属別更新を配信
+        Note over Client,Subscribers: 要求元Clientも購読中なら同じ更新を受信する
+    end
+```
+
+#### 騎士団戦通知ストリーム
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant PublicAPIServer as Public API Server
+    participant GameServer
+
+    Client ->> PublicAPIServer: SubscribeGuildBattleUpdates(AccessToken, PlayerID, GuildBattleID)
+    PublicAPIServer ->> PublicAPIServer: AccessTokenを検証
+    PublicAPIServer ->> GameServer: SubscribeGuildBattleUpdates(PlayerID, GuildBattleID, AuthenticatedContext)
+    GameServer ->> GameServer: 所有Battle・Join済みPlayer・所属GuildIDを確認
+    alt 購読可能
+        GameServer -->> PublicAPIServer: 通知ストリーム開始・現在値GuildBattleScoreUpdate
+        PublicAPIServer -->> Client: GuildBattleScoreUpdate(AllyScore, EnemyScore, Chain)
+        loop 出撃後の騎士団Score/Chain更新
+            GameServer -->> PublicAPIServer: GuildBattleScoreUpdate(所属GuildIDに応じた値)
+            PublicAPIServer -->> Client: GuildBattleScoreUpdate
+        end
+        Note over Client,GameServer: 切断後はGetGuildBattleStatusで正本へ同期して再購読
+    else 購読不可
+        GameServer -->> PublicAPIServer: ApiErrorResponse
+        PublicAPIServer -->> Client: ApiErrorResponse
     end
 ```
 

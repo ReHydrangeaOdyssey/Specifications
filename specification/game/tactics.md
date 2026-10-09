@@ -172,6 +172,7 @@
 `ERASE`は`TacticsActiveEffectState.erase_consumed=false`で開始し, 敵から受ける最初の通常攻撃ダメージを0にした時点で`erase_consumed=true`へ更新する. `erase_consumed=true`の間は以後の通常攻撃ダメージを0にしない.
 
 Battle Specialの効果対象は通常タクティクスと同じ`TacticsTarget`だけで表現し, Battle Special専用の別Target Enumは使用しない. `TACTICS_TARGET_CASTLE_BREAK`はキャッスルブレイク処理を対象とする.
+`EX_DRIVE`および`SLASHER`の`castle_break_score`は`GuildBattleSortieEventType == GUILD_BATTLE_SORTIE_EVENT_NUMBERED_CASTLE_BREAK`の場合だけ適用する. `CASTLE_BREAK` Triggerが成立しても強襲CBまたはCBCであれば適用しない. `ENDER_BREAK`の`castle_break_score_limit`も同じキリ番CBイベント種別に限り適用する.
 
 ### 使用条件
 
