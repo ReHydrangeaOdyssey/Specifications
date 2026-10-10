@@ -92,7 +92,7 @@ workspace/
 - Private APIのDatabase transactionは`persistence`境界で開始し、Account/Guild/GuildBattleのApplication処理がtransaction unitを決定します。
 - GameServerの`guild_battle`からReplay/Eventを生成しても、Serialize・ファイルI/O・DB送信は`replay` Worker側へ渡します。
 - Coordinatorの`matching`と`assignment`を分離し、GameServer容量選択と対戦ペア生成を混在させません。
-- Protocol Buffers schemaは既存`public_api.proto`と`guild_battle_replay.proto`を正本とし、別のwire schemaを設計内で増やしません。
+- 既存`public_api.proto`と`guild_battle_replay.proto`は各対象のwire schemaの正本とします。Private APIを含むComponent間通信PayloadにもProtocol Buffersを使用しますが, 未定義のfield number・wire schemaやファイル配置は推測して追加しません。
 
 ## 制約
 

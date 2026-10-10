@@ -3,7 +3,7 @@
 ## 共通
 
 各項目の型は「[型定義](../shared/types.md)」を参照する.
-Public APIのProtocol Buffers field numberおよびwire schemaは「[public_api.proto](../system/public_api.proto)」を正とする. 本書は各Payloadの意味・固定長・利用条件を正とし, `.proto`と不一致がある場合は意味・制約を本書で確認した上でfield number/wire型を`.proto`へ合わせる.
+Public APIとPrivate APIの通信PayloadはProtocol Buffersを使用する. Public APIのProtocol Buffers field numberおよびwire schemaは「[public_api.proto](../system/public_api.proto)」を正とする. Private APIの各Payloadは本書の論理項目に従うが, field numberとwire schemaは未確定である. 本書は各Payloadの意味・固定長・利用条件を正とし, `.proto`と不一致がある場合は意味・制約を本書で確認した上でfield number/wire型を`.proto`へ合わせる.
 
 Public APIで内部`Float32`の現在HPを論理型`HP`（`uint32`）として返す場合は, 小数点以下を切り捨ててから変換する. HPはゲーム処理側で0以上へクランプした値を使用する.
 

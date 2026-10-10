@@ -16,6 +16,7 @@
 - GPU負荷80%, メモリ2GB, FPS30, WASMサイズ500MBの測定方法・範囲・評価端末・測定時間, 本番Release最適化設定の最終値
 - `FileSystemSyncAccessHandle`の非同期API比較計測を経た最終採否
 - Public APIのHTTP Method / HTTP Path, `public_api.proto`へのgRPC Service追加の採否
+- Private APIおよびその他Component間APIの未定義HTTP Method / HTTP Path, Protocol Buffers field number・wire schema・正本ファイル（各通信PayloadへのProtocol Buffers採用は確定済み）
 - Discord Botの本番配置先
 - GuildBattleCoordinatorが内部APIを受信する場合のServer構成
 - 推奨初期値として記載された運用値の最終運用値
@@ -42,8 +43,8 @@
 - WebGL 2の独自スプライトバッチ描画とブラウザ`createImageBitmap()`によるPNGデコードを使用する.
 - `wasm-bindgen`, `web-sys`, `js-sys`, `wasm-bindgen-futures`をブラウザ接続に用いる. `cridecoder`はHCAデコードの採用候補とし, 実機検証まで最終確定とはしない.
 - Web Audio APIでPCM再生し, 長い音声は`AudioWorklet`と`MessagePort`によってPCMチャンクを供給する.
-- PNG/HCA本体とキャラクター割当情報はOPFSへ保存し, 選択ディレクトリを再帰探索したファイル名のSHA-256ハッシュ対応辞書に基づき自動配置する. 辞書はファイル名SHA-256から内容SHA-256・対応配置先パスへの二段構造とし, ファイル名は拡張子を含むUTF-8で英字大小文字を区別してハッシュ化する. 同名ファイルはファイル内容のSHA-256で配置先を判定し, それ以上の衝突処理は設けない. Clientの自動削除は行わず, キャッシュクリアはOPFS内`cache`フォルダだけを対象とする. PNG/HCA本体はGameServerから配信しない. アセット追加はタイトルのボタンから専用シーンへ遷移する.
-- ClientとPublic API Server間はHTTP/2 over TLS 1.3 + Protocol Buffersを正とし, `SubscribeGuildBattleUpdates`はHTTP/2 Response streamを使用する. ブラウザ標準Fetch API/ReadableStreamを選定済みcrateから使用する. WebSocketはPublic API通信方式に採用しない.
+- PNG/HCA本体とキャラクター割当情報はOPFSへ保存し, 選択ディレクトリを再帰探索したファイル名のSHA-256ハッシュ対応辞書に基づき自動配置する. 辞書はファイル名SHA-256から内容SHA-256・対応配置先パスへの二段構造とし, ファイル名は拡張子を含むUTF-8で英字大小文字を区別してハッシュ化する. 二段目の候補が1件の場合は内容SHA-256の計算を省略して対応パスを採用し, 複数候補の場合は内容SHA-256で配置先を判定する. それ以上の衝突処理は設けない. Clientの自動削除は行わず, キャッシュクリアはOPFS内`cache`フォルダだけを対象とする. PNG/HCA本体はGameServerから配信しない. アセット追加はタイトルのボタンから専用シーンへ遷移する.
+- 本システムのComponent間API通信PayloadはPublic API・Private APIを含めProtocol Buffersを使用する. ClientとPublic API Server間はHTTP/2 over TLS 1.3 + Protocol Buffersを正とし, `SubscribeGuildBattleUpdates`はHTTP/2 Response streamを使用する. ブラウザ標準Fetch API/ReadableStreamを選定済みcrateから使用する. WebSocketはPublic API通信方式に採用しない.
 - ログイン・Server未接続時はタイトルからホームへの遷移だけ許可し, 復帰後は通常の全機能を利用可能にする.
 - UI Frameworkは採用しない. HCAは22,050Hz・非暗号化・一部ループ・SE最大同時5.
 - 性能閾値はGPU負荷80%以下, メモリ2GB以下, FPS30以上, WASMサイズ500MB以下.

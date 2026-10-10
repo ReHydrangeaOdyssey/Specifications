@@ -4,7 +4,7 @@
 
 外部通信はPublic API Serverを唯一のClient向け境界とし、内部処理は責務の正本Componentへ中継します。Private API、GameServer、GuildBattleCoordinator間はPrivate Networkだけを信頼せずmTLSでService Identityを検証します。
 
-HTTP Method、Path、gRPC service定義は現仕様で固定されていないため、本設計でも定義しません。
+HTTP Method、Path、gRPC service定義は現仕様で固定されていないため、本設計でも定義しません。Public APIとPrivate APIを含むComponent間の通信PayloadはProtocol Buffersで表現します。Private APIなど未定義のwire schema・field numberは推定しません。
 
 ## Public APIのRouting
 

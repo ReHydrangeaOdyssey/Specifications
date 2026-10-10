@@ -22,7 +22,7 @@
 * GuildおよびGuild加入・招待・役職変更.
 * GuildBattle.
 * 疑似乱数.
-* Public API / Private APIの主要状態遷移.
+* Public API / Private APIの主要状態遷移. Private APIのRequest/ResponseをProtocol Buffersで送受信することを確認する. 未定義のwire schema・HTTP Method/Pathに対する具体的な期待値は設定しない.
 * Databaseの制約および冪等性.
 * GuildBattle Replay.
 * ProcessedMasterDataのValidation.
@@ -165,7 +165,7 @@ GuildBattle Replayは「[リプレイProtocol Buffers定義](../system/guild_bat
 * ログイン不可またはServer未接続の場合はタイトルからホーム画面への移動のみ可能で, その他の機能を利用できない.
 * 必要な認証とServer接続が復帰すると, 接続状態と同じすべての機能を使用可能に戻す.
 * タイトル画面にキャッシュクリアボタンとアセット追加ボタンがある.
-* 「アセットの追加」ボタンから専用シーンへ遷移し, PNG/HCAをOPFSへ取り込める. 選択ディレクトリ配下を再帰的に探索し, ファイル名のSHA-256ハッシュ値に対応するServer配布辞書に基づき画像が自動配置され, OPFSへ割当情報を保存・復元する. 同名ファイルはファイル内容のSHA-256によって配置先を区別する. それ以上のハッシュ衝突処理は検証対象としない.
+* 「アセットの追加」ボタンから専用シーンへ遷移し, PNG/HCAをOPFSへ取り込める. 選択ディレクトリ配下を再帰的に探索し, ファイル名のSHA-256ハッシュ値に対応するServer配布辞書に基づき画像が自動配置され, OPFSへ割当情報を保存・復元する. 二段辞書の内容ハッシュ候補が1件の場合はファイル内容のSHA-256計算を省略しその配置先パスを採用する. 複数候補の場合はファイル内容のSHA-256によって配置先を区別する. それ以上のハッシュ衝突処理は検証対象としない.
 * キャッシュクリアがOPFSの`cache`フォルダだけを対象とし, その他のアセット・割当情報が維持される.
 
 Clientの選定済み実装方式については, `design/programming/test/test_design.md`の「ブラウザ実装・アセット・音声の検証」を参照し, iPhone Safari/PWA, Android Chrome/PWA, WebGL 2, PNG, OPFS, HCA/音声を検証する. PNG/HCAファイル本体のOPFS保存は定義済みである一方, HCAデコーダーの最終採用には実機検証を要する. ClientとPublic API Server間のHTTP/2 over TLS 1.3・Protocol Buffersおよび騎士団戦通知のHTTP/2 Response streamを通信仕様として確認し, WebSocketをPublic API通信方式として使用しない.
@@ -214,7 +214,7 @@ HCA 22,050Hz・非暗号化・一部ループ・SE同時最大5, 性能閾値GPU
 * ダメージ乱数を指定位置で1回消費する.
 * 戦闘が終了条件を満たさない場合は待機カウント更新後に行動待機キューから次のキャラクターをPOPし, ターン処理を継続する.
 * 回避, 回避無効化, 追撃, 反撃, 反撃無効化の分岐順を維持する.
-* 暗闇による通常攻撃失敗時の追撃分岐を仕様どおり処理する.
+* 暗闇による通常攻撃失敗時は追撃候補選定・発動率判定に進まない.
 
 ### Skill
 
@@ -238,18 +238,20 @@ HCA 22,050Hz・非暗号化・一部ループ・SE同時最大5, 性能閾値GPU
 * 同一AbilityEffectIDの重複装備を拒否する.
 * `EVERY_N_TURNS`を`AbilityTurnTiming`の4タイミングそれぞれで評価する.
 * 状態異常攻撃Abilityを保持しない場合は状態異常攻撃・回避判定を実行しない. 対象状態異常に対応する回避Abilityが存在しない場合は回避率判定を実行しない.
-* 状態異常回避判定を状態異常付与率判定より先に行う. 状態異常回避Abilityが同一ターンに発動済みの場合, 再度発動率判定せず状態異常攻撃の発動率判定へ進む.
+* 状態異常攻撃の発動率判定に成功した後でのみ, 対応する状態異常回避Abilityの発動済み判定・発動率判定を行う. 状態異常攻撃が不成立なら状態異常回避Abilityの発動率判定を行わず, 発動回数も消費しない. 状態異常回避Abilityが既に発動済みの場合は再度判定せず状態異常を付与する.
 * `ABILITY_EFFECT_AVOIDANCE_DISABLE`および`ABILITY_EFFECT_COUNTER_DISABLE`が同一ターンに発動済みの場合, 当該Abilityの発動率を再判定しない.
-* 暗闇で攻撃失敗となった場合も`ABILITY_EFFECT_PURSUIT`のAbilityID単位のターン内発動済み判定を通す.
+* 暗闇で攻撃失敗となった場合は追撃Abilityの発動済み判定を行わず, 反撃側の判定へ進む.
 * `ABILITY_EFFECT_COUNTER`の発動率判定がNoの場合, 発動済みの場合, および`ABILITY_EFFECT_COUNTER_DISABLE`が発動した場合は, 追撃用の相手HP処理を再実行せず相手HP確認へ進む.
 * `ABILITY_EFFECT_AVOIDANCE_COUNTER`のターン内発動済み判定・発動率判定は通常攻撃成立後, 相手HP処理より前に行い, 発動した場合は通常攻撃ダメージを与えず味方HP処理へ進む.
 * 味方HP処理後は2回目の相手HP処理を行わず, 相手HP確認へ進む. 追撃が成立した場合のみ追撃用の相手HP処理を行う.
-* 追撃候補は行動キャラクターを除いた追撃Ability保持者とし, 複数候補ならフォーメーション内部番号順に並べて1キャラクターを抽選する. 選択したAbilityIDの発動済み判定・発動率判定を実施する.
+* 追撃候補は行動キャラクターを除いた追撃Ability保持者とし, 複数候補ならフォーメーション内部番号順に並べて1キャラクターを抽選する. 選択したAbilityIDの発動済み判定・発動率判定を実施する. 元の通常攻撃対象のHPが0になった場合も成立した追撃をその対象へ実行する.
 * 回避無効化・反撃無効化・状態異常攻撃・状態異常回避・COVER・DRAW_AGGROの発動成立時に, 対応AbilityIDの発動処理を通過する.
 * AbilityによるBUFF / DEBUFFをSkillと同じ`BuffDebuffEffectState`へ反映する.
 * `ABILITY_EFFECT_DAMAGE_INCREASE`は通常攻撃だけへ適用し, `correction_value`乗算後に通常攻撃最大ダメージ上限99,999を適用する.
-* `ABILITY_EFFECT_COVER`は攻撃対象リスト内に`condition_value`%以下の現在HP割合である味方が含まれる条件を確認し, 候補をフォーメーション内部番号順で抽選し, 発動したターンの対象リスト内のすべての味方に代わって, 元対象の計算値を使用したダメージを対象数分だけかばうキャラクターへ反映する. 同一ターンの再発動判定を行わない.
+* `ABILITY_EFFECT_COVER`は攻撃対象リスト内に`condition_value`%以下の現在HP割合である味方が含まれる条件を確認し, 候補をフォーメーション内部番号順で抽選し, 発動したターンの対象リスト内のすべての味方に代わって, 元対象の計算値を使用したダメージを対象数分だけかばうキャラクターへ反映する. 同一ターンの再発動判定を行わない. COVER発動中は回避（状態異常回避・回避＆カウンターを含む）・反撃・ELYSION回避を行わず, かばうキャラクターに状態異常と追撃を反映する.
 * `ABILITY_EFFECT_DRAW_AGGRO`は攻撃対象リスト取得前に候補をフォーメーション内部番号順へ並べ, 1キャラクターだけを抽選してその候補だけ発動率判定する. 不成立時に再抽選しない.
+* 対象優先Abilityの2系統が同時に発動条件を満たした場合, Abilityスロット番号が小さい方だけを発動判定・適用する.
+* 同一ターン内に複数の反撃が成立しない. 複数対象攻撃で異なるキャラクターが反撃Abilityを保持する場合も, `ABILITY_EFFECT_COUNTER`と`ABILITY_EFFECT_AVOIDANCE_COUNTER`を合わせて成立回数を1回以下にする.
 * `ABILITY_EFFECT_FIXED_DAMAGE_INCREASE`は`SKILL_DAMAGE_VALUE_TYPE_FIXED`の攻撃スキルだけへ加算し, RATE型へ適用しない. 固定ダメージは加算後も250以上99,999以下へクランプする.
 * Ability MasterDataは`AbilityEffectID × AbilityConditionID × AbilityTarget`許可表に一致し, 表外の組み合わせをPipelineが拒否することを確認する. 戦闘不能味方人数連動補正は0～4人のMasterData entryを現在人数に応じて動的参照する.
 * `ABILITY_EFFECT_HEAL`の算出回復量が`最大HP * (1 + アビリティの回復割合)`になり, 回復量自体を最大HPで上限クランプした後に`AbilityTarget`へ適用されることを確認する. `EVERY_N_TURNS`では`turn_timing`, `INCAPACITATED`では戦闘不能確定時に発動し, 回復後HPも最大HPを超えないことを確認する.
