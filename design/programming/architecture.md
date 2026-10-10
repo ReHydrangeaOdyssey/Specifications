@@ -36,7 +36,7 @@
 
 Clientの実装環境はRust/WASMとし, ブラウザAPIへのアクセスには`wasm-bindgen` / `web-sys` / `js-sys` / `wasm-bindgen-futures`を使用します。画像/音声ファイルをOPFSから読み, WebGL 2およびWeb Audioへ渡します。サーバー正本の戦闘結果は従来どおり`game-core`による再現とGameServerの結果を区別します。
 
-ClientとPublic API Server間の通信方式は`design/system/network.md`を正とし, HTTP/2 over TLS 1.3とProtocol Buffersを使用します。騎士団戦通知はHTTP/2 Response streamで行います。ライブラリ選定資料のWebSocketはPublic API通信方式として採用しません。ブラウザ標準`fetch()`と`ReadableStream`を選定済み`web-sys`等から使用します。HTTP/2/TLS 1.3は実接続によるネゴシエーションを確認し, GitHub Pages配布OriginとAPI Originは既存の`SameSite=Strict` Cookieを維持できる構成とする必要があります。
+ClientとPublic API Server間の通信方式は`design/system/network.md`を正とし, HTTP/2 over TLS 1.3とProtocol Buffersを使用します。騎士団戦通知はHTTP/2 Response streamで行います。Public API通信にWebSocketは使用しません。ブラウザ標準`fetch()`と`ReadableStream`を選定済み`web-sys`等から使用します。HTTP/2/TLS 1.3は実接続によるネゴシエーションを確認し, GitHub Pages配布OriginとAPI Originは既存の`SameSite=Strict` Cookieを維持できる構成とする必要があります。
 
 ## Data Path / Control Path
 

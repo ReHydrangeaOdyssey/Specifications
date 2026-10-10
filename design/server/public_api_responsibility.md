@@ -1,7 +1,5 @@
 # Public API責務境界
 
-本書はPublic API Serverの責務境界を定義する. Clientから見えるPublic APIのメソッド名, Request/Response Payload, Error Code, Rate Limit, Cookie属性, Token形式およびゲーム仕様は変更しない.
-
 ## 概要
 
 Public API ServerはInternetと内部Componentの間に置くstatelessなEdge APIとする. Public API Serverは業務状態の正本を保持せず, Database上の状態またはGameServer上のゲーム状態を使用した業務判定を行わない.

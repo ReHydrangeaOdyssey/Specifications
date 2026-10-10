@@ -56,7 +56,7 @@ classDiagram
 - ClientはRust/WASM（`wasm32-unknown-unknown`）を対象とし, iPhone Safari/PWAおよびAndroid Chrome/PWA上で動作させます。初期プロトタイプはLAN内ローカルWebサーバーからIPアドレス直指定で配信し, 正式公開先はVercel／GitHub Pagesのどちらか未決定です。最小対応ブラウザはiOS Safari 16.3, Android Chrome 120です。対応OSの最小バージョンは未確定です。
 - ブラウザとの接続には`wasm-bindgen`, `web-sys`, `js-sys`, `wasm-bindgen-futures`を使用します。Browser APIのPromiseは`wasm-bindgen-futures`を用いてRustの`Future`と連携させます。
 - 描画基盤として汎用2Dエンジンを追加せず, WebGL 2を`web-sys`経由で使用する独自スプライトバッチレンダラーとします。UI Frameworkも使用しません。
-- Rust側の共有`game-core`および既存のProtocol Buffers生成型`protocol`の責務は維持します。既存の`prost`とこれらの内部crateは, 選定資料の「5クレート」に含まれないため削除しません。
+- 戦闘計算は`game-core`、Protocol Buffers生成型は`protocol`、符号化・復号は`prost`を使用する。
 - ClientとPublic API Server間の通信方式はHTTP/2 over TLS 1.3, API PayloadはProtocol Buffersとします。`SubscribeGuildBattleUpdates`はHTTP/2 Response streamを使用し, `GuildBattleScoreUpdate`をProtocol Buffers varint長prefix付きで受信します。WebSocketはPublic API通信方式として採用しません。ブラウザ標準の`fetch()`およびResponse Bodyの`ReadableStream`を使用し, `web-sys`等を経由してRust/WASMと接続します。HTTP/2/TLS 1.3はブラウザとServerのネゴシエーションに依存し, 実接続で検証します。
 
 ### 描画パイプライン
@@ -73,7 +73,7 @@ OPFSのPNG → File / Blob → createImageBitmap() → WebGL 2 texImage2D()
 
 ### HCAデコード・音声パイプライン
 
-- HCAデコード候補は`cridecoder`（選定資料に記載された`0.3.6`）です。`default-features = false`を指定し, 不要なPythonバインディングを有効化しません。
+- HCAデコード候補は`cridecoder`（`0.3.6`）とする。`default-features = false`を指定し, 不要なPythonバインディングを有効化しません。
 - HCAからPCMへ変換した音声をWeb Audio APIへ渡します。短いSE/ボイスでは必要に応じて全体を`AudioBuffer`へデコードして再利用します。
 - 長いBGM/ボイスはOPFSから必要な圧縮ブロックを読み, 小容量PCMバッファへ逐次デコードします。`AudioWorkletNode`へ`MessagePort`経由でPCMチャンクを供給し, `AudioWorkletProcessor`の小容量キューから再生します。
 - `AudioWorkletProcessor.process()`内でHCAデコードや大容量のメモリ確保を行いません。制御側または専用Workerが先読みし, 音声出力側と役割を分離します。
@@ -94,7 +94,7 @@ OPFSのPNG → File / Blob → createImageBitmap() → WebGL 2 texImage2D()
 - Client用ブラウザ連携の選定crateは`wasm-bindgen`, `web-sys`, `js-sys`, `wasm-bindgen-futures`および採用検証を要する`cridecoder`です。`web-sys`は使用API単位でfeaturesを指定します。
 - 描画用の`image`, `png`, `pix`, `wgpu`, `glow`, 汎用2Dゲームエンジン, オーディオ出力専用Rustライブラリは採用しません。
 - `Cargo.lock`を保存して依存を固定し, `cargo tree --target wasm32-unknown-unknown`で推移的依存を確認します。`cargo build --target wasm32-unknown-unknown --release --locked`でビルドを検証します。
-- 選定資料にある`opt-level = 3`, `lto = "fat"`, `codegen-units = 1`, `panic = "abort"`, `strip = "symbols"`は計測用のRelease設定案です。`opt-level = "z"`との圧縮後WASMサイズ・HCAデコード時間・初回ロード時間の比較を行い, 本番設定の最終値は検証後に定めます。
+- Release設定候補は`opt-level = 3`, `lto = "fat"`, `codegen-units = 1`, `panic = "abort"`, `strip = "symbols"`とする。`opt-level = "z"`との圧縮後WASMサイズ・HCAデコード時間・初回ロード時間の比較を行い, 本番設定の最終値は検証後に定めます。
 - 実機では40キャラクターと代表的エフェクトの描画, iOS長時間動作, 最大同時SE5, BGM逐次再生, HCAループ・再生遅延・欠音, 依存ライセンスを検証します。目標閾値はGPU負荷80%以下, 実行時メモリ2GB以下, FPS30以上, WASMサイズ500MB以下です。測定方法・対象機種・メモリの対象範囲・WASM圧縮前後は未確定で, 実測結果は未記録です。
 
 ## ログイン・サーバー未接続時
@@ -216,7 +216,7 @@ Seedが`0`かどうかだけでランダム要素の有無を判定しません�
 - Refresh/LogoutなどCookieを必要とするCross-Origin要求は`credentials: include`とし, Server側は既存のOrigin検証, 許可Origin限定のCORS, `Access-Control-Allow-Credentials`を適用します。ただし`SameSite=Strict`はCross-Siteでは送信不可です。
 - GitHub Pages標準`github.io`と別SiteのPublic APIを組み合わせた構成は既存Cookie規則と両立しません。同一Siteとなる配布用独自ドメイン等の配置案は検討対象で, 採用するドメイン名は未確定です。`__Host-RefreshToken`のHost-only/HttpOnly/Secure/Strict制約を緩和しません。
 - 一般的なBrowser File Picker/`<input type="file">`から取り込み, OPFSへ保存できますが, OPFSはOSのファイル管理UIへ通常のディレクトリとして公開されません。元ファイルの削除を伴う移動やディレクトリ一括選択は端末別の対応を確認する必要があります。
-- `cridecoder`の最終採否は`wasm32-unknown-unknown`ビルド, iPhone Safariで22,050Hzの非暗号化HCA・ループ再生, 5同時SE, 長時間再生時の欠音・メモリ, および依存ライセンス監査を検証して決定します。現時点の検証結果はありません。
+- `cridecoder`の採否は`wasm32-unknown-unknown`ビルド、iPhone Safariでの22,050Hz非暗号化HCA・ループ再生・SE5音同時再生・長時間再生時の欠音・メモリ、および依存ライセンス検証の結果で決定します。
 
 ### 外部情報源
 
@@ -253,5 +253,5 @@ Seedが`0`かどうかだけでランダム要素の有無を判定しません�
 - `design/shared/common_data_struct.md`
 - `design/test/test_policy.md`
 - 添付`rust_wasm_png_hca_library_selection(1).md`（2026-10-09）, 第1～7節.
-- `design/system/network.md`（既存のPublic API通信方式）.
-- `design/system/rust_dependencies.md`（Client依存の整理）.
+- `design/system/network.md`.
+- `design/system/rust_dependencies.md`.

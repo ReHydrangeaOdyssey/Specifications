@@ -172,15 +172,15 @@ GuildBattle Replayは「[リプレイProtocol Buffers定義](../system/guild_bat
 
 * LAN内のローカル静的WebサーバーのIPアドレスを試験端末から直接指定し, HTML・JS・WASM・試験用PNGを取得してClientを起動できる.
 * タイトルで`proto_type_title.png`を表示でき, 仮ホームへ遷移した後は`proto_type_home.png`を表示できる.
-* 複数のテスト用ボタンがタッチ・マウスの入力に反応する. ボタンの具体的な反応内容は確定するまで固定しない.
+* 複数のテスト用ボタンがタッチ・マウスの入力に反応する. 
 * 初期プロトタイプの操作は本番用のServer未接続時制限とは分けて検証する. GameServer・Public API Serverへの通信は行わない.
 * 正式公開先（Vercel／GitHub Pages）での公開試験と, HTTPSの安全なコンテキストを要するOPFS・PWA等の検証は, 本初期試験の合否に含めない.
 
 Clientの選定済み実装方式については, `design/programming/test/test_design.md`の「ブラウザ実装・アセット・音声の検証」を参照し, iPhone Safari/PWA, Android Chrome/PWA, WebGL 2, PNG, OPFS, HCA/音声を検証する. PNG/HCAファイル本体のOPFS保存は定義済みである一方, HCAデコーダーの最終採用には実機検証を要する. ClientとPublic API Server間のHTTP/2 over TLS 1.3・Protocol Buffersおよび騎士団戦通知のHTTP/2 Response streamを通信仕様として確認し, WebSocketをPublic API通信方式として使用しない.
 
-HCA 22,050Hz・非暗号化・一部ループ・SE同時最大5, 性能閾値GPU80%以下・メモリ2GB以下・FPS30以上・WASM 500MB以下の検証計画を作成する. 実機と測定方法に関する未確定事項は勝手に補わない.
+HCA 22,050Hz・非暗号化・一部ループ・SE同時最大5, 性能閾値GPU80%以下・メモリ2GB以下・FPS30以上・WASM 500MB以下の検証計画を作成する. 
 
-### 今回確定した施設・配布ルールのテスト対象
+### 騎士団施設・配布のテスト対象
 
 * 騎士団戦中の施設補正量：武器庫レベル×10, 食糧庫レベル×20, 鍛冶屋レベル×10. 計算順序/適用位置の検証は未確定事項として除外する.
 * 酒場の回復量：`floor(酒場レベル / 3)`およびJST 0:00の使用回数リセット. 回数集計主体や最大BP適用は未定義であり仮定しない.

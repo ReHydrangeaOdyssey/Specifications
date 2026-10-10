@@ -2,9 +2,9 @@
 
 ## 概要
 
-Clientは静的Webアプリケーションとし、ブラウザ上でRust/WebAssemblyを実行し、主描画には既定のWebGL 2を使用する。初期プロトタイプはLAN内のローカルWebサーバーから配布し、試験端末がサーバーのIPアドレスを直接指定してアクセスする。GameServerおよびPublic API Serverと通信せず、タイトル画面の表示、仮ホーム画面への遷移、テスト用ボタンの入力反応、画面サイズ変更・基本描画を検証する。正式な公開先はVercelまたはGitHub Pagesのいずれかであり、現時点では確定しない。
+ClientはRust/WebAssemblyをブラウザ上で実行する静的Webアプリケーションとする。描画にはWebGL 2を使用する。
 
-対象ブラウザは`design/client/client.md`で確定済みのiOS Safari 16.3以降およびAndroid Chrome 120以降とする。これらの最小バージョンでの機能動作は実機試験で確認する。
+対象ブラウザはiOS Safari 16.3以降、Android Chrome 120以降とする。
 
 ## 画面方向と可変レイアウト
 
@@ -30,16 +30,16 @@ Clientは静的Webアプリケーションとし、ブラウザ上でRust/WebAss
 - OPFSは同一Origin内のアプリ専用保存域とし、HTTPSの安全な文脈で利用する。保存可能容量はブラウザに依存し、空き容量照会値は近似値として扱う。ブラウザの容量超過・データ消去・非永続化の可能性をUI上で取り扱う。
 - ユーザーの元ファイルを自動削除しない。アセット追加の端末側ファイル選択UIはブラウザ互換性を確認したうえで決定し、既存の再帰探索要件を満たすことを検証する。
 
-## 初期プロトタイプの配布と正式公開
+## 配布とプロトタイプ
 
 - 公開対象はHTML、ES Module JavaScript、WASM、CSS、Manifestおよび試験に必要な静的アセットとし、GameServer・API Serverの処理や秘密鍵を配布しない。
-- 初期プロトタイプの配布はLAN内のローカル静的Webサーバーを使用し、試験端末のブラウザから当該サーバーのIPアドレスを直接指定してアクセスする。ローカルWebサーバーは静的成果物の配信を担当し、GameServerやPublic API Serverの代わりとしてゲーム処理・認証を行わない。具体的なIPアドレス・ポート・サーバーソフトウェアは未指定とする。
-- 正式公開先はVercelとGitHub Pagesを候補とし、採用先は未決定とする。GitHub Pagesを採用した場合のGitHub ActionsによるReleaseビルド・検証・HTTPS静的配布の設計は維持する。配信ルートが変わっても静的資源を取得できるように相対Pathを使用する。
+- 初期プロトタイプの配布はLAN内のローカル静的Webサーバーを使用し、試験端末のブラウザから当該サーバーのIPアドレスを直接指定してアクセスする。ローカルWebサーバーではゲーム処理・認証を実行しない。
+- 正式公開先はVercelとGitHub Pagesから選択する。GitHub Pages採用時はGitHub ActionsでReleaseビルド・検証・HTTPS静的配布を実行する。静的資源は相対Pathで参照する。
 - 初期試作ではJavaScriptのES Moduleと`wasm-bindgen --target web`による生成物をブラウザから読み込む。WASMロード処理の成功後に描画初期化する。
 - 初期試作では自動Service Worker登録とオフラインキャッシュを導入しない。PWA用Manifestは配布できる構成とし、初期のインストール検証では`display: standalone`・`orientation: landscape`を希望値とする。`start_url`と`scope`はPages公開ルート内の相対URLで指定する。これらの指定によってすべてのブラウザで画面方向や表示モードが強制されるとは扱わない。
 - PWAインストールの操作案内はiOS Safariでは共有メニューの「ホーム画面に追加」、Android Chromeではメニューの「アプリをインストール」または「ホーム画面に追加」とする。実際の項目名称・表示可否は端末やブラウザバージョンによって変わるため実機で検証する。アプリ名・アイコン素材は正式名称の確定後に指定する。
-- 初期プロトタイプでは試験用PNG`proto_type_title.png`をタイトル画面に、`proto_type_home.png`を仮ホーム画面に表示する。画像の内容は試験用でよく、正式なゲーム画像としない。タイトル画面から仮ホーム画面への遷移と、複数のテスト用ボタンに対する入力反応を端末から確認する。ボタンの個数・配置・ラベル・各操作の具体的な反応内容は未指定とする。
-- 現行のServer非接続時のゲームプレイ制限は完成版の規則として維持する。試験用の画面遷移・表示・入力は**プロトタイプ専用のビルド設定でのみ有効化**し、本番用の認証・状態管理と混同しない。試作のローカル表示・仮データはGameServer正本を代替しない。
+- 初期プロトタイプでは試験用PNG`proto_type_title.png`をタイトル画面に、`proto_type_home.png`を仮ホーム画面に表示する。タイトル画面から仮ホーム画面への遷移と、複数のテスト用ボタンに対する入力反応を端末から確認する。
+- 試験用の画面遷移・表示・入力はプロトタイプ専用ビルドでのみ有効にする。本番ビルドではGameServerをゲーム状態の正本とする。
 - 公開する試験データは再配布可能なものだけを含め、Token、個人データ、秘密鍵を同梱しない。
 
 ## 検証条件
@@ -49,11 +49,10 @@ Clientは静的Webアプリケーションとし、ブラウザ上でRust/WebAss
 - 対象ブラウザの最小バージョンで動作確認を行う。機能を追加する場合は、追加した機能ごとに試験を増やす。
 - 初期のLAN接続による起動・画面・入力試験と、HTTPS等の安全なコンテキストを要するOPFS・PWA機能の検証は区別する。LAN内IPアドレスへの接続結果だけでOPFS・PWAの動作を合格としない。WASM・WebGL 2・OPFS・Web Audioの対応有無と実際の動作は対象機能ごとに端末で確認し、数値性能要件を測定なしに合格としない。
 
-## 制約・未確定事項
+## 制約
 
-- Clientのソースリポジトリは`https://github.com/ReHydrangeaOdyssey/Client.git`、純粋なゲームロジックは`https://github.com/ReHydrangeaOdyssey/GameLogic.git`、Serverは`https://github.com/ReHydrangeaOdyssey/Server.git`とする。これらのURLはソース管理先であり、初期プロトタイプの静的配信URLを示さない。
+- Clientのソースリポジトリは`https://github.com/ReHydrangeaOdyssey/Client.git`、純粋なゲームロジックは`https://github.com/ReHydrangeaOdyssey/GameLogic.git`、Serverは`https://github.com/ReHydrangeaOdyssey/Server.git`とする。
 - 初期ローカルWebサーバーのIPアドレス・ポート、正式公開先（Vercel／GitHub Pages）・公開URL・独自ドメイン・APIとのSite/Origin構成は未確定とする。Public APIを使う段階では既存の`SameSite=Strict` Cookie要件を優先する。
-- `proto_type_title.png`と`proto_type_home.png`の画像内容・配備先、テスト用ボタンの個数・配置・動作の詳細、プロトタイプ専用ビルド設定の具体値は未確定とする。完成版のUIデザイン、ゲーム画像、サーバー正本の代替となる試験データ、アセット辞書配布形式、アセットの取り込み操作も本書だけでは確定しない。
 - 最小対応OSバージョン、実測による描画解像度上限、音声・保存容量の実機検証結果は別途確定する。
 
 ## 参照資料

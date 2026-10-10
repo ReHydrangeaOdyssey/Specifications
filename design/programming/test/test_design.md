@@ -81,13 +81,13 @@ IEEE-754 32bit浮動小数点として、仕様に記載された演算順を変
 
 - LAN内のローカルWebサーバーへ複数の実機からIPアドレスを直接指定して接続し, JS/WASM/PNGの静的資源を取得できることを確認します。
 - タイトルで`proto_type_title.png`が表示され, 仮ホームへの画面遷移後に`proto_type_home.png`が表示されることを確認します。
-- 複数のテスト用ボタンへのタッチ/マウス入力の反応を確認します。個数・配置・反応内容の期待値は未指定のため追加しません。
+- 複数のテスト用ボタンへのタッチ/マウス入力の反応を確認します。
 - GameServer・Public API Serverへ通信しないプロトタイプ専用ビルドとして検証し, 完成版の未接続時制限を変更しません。
 - 正式公開先のVercel／GitHub Pagesの配布確認, OPFS・PWA等の安全なコンテキストを必要とする機能は別の検証段階とします。
 
 ### ブラウザ実装・アセット・音声の検証
 
-以下は添付ライブラリ選定資料が採用条件または確認対象として挙げた項目です。**試験済みという意味ではなく**, 実機実施と結果記録が必要です。
+対象端末で以下を検証し、結果を記録します。
 
 - `wasm32-unknown-unknown`を対象に依存を解決し, `Cargo.lock`固定後に`cargo tree --target wasm32-unknown-unknown`および`cargo build --target wasm32-unknown-unknown --release --locked`を確認します。
 - iPhone Safari/PWAおよびAndroid Chrome/PWAで, ユーザー選択PNG/HCAのOPFSへのコピーを検証します。OPFSのセマンティックバージョン別配置と新バージョン検証後の切替, 取り込み中断からの回復を確認します。フォルダ選択と元ファイルの削除を伴う移動はブラウザごとに実現可否を確認します。
@@ -99,9 +99,9 @@ IEEE-754 32bit浮動小数点として、仕様に記載された演算順を変
 - GPUテクスチャ, デコード済みPCM, WASMヒープ, ブラウザ一時メモリを分けて観測します。iOS端末で長時間の騎士団戦を行い, 強制再読み込みの有無を確認します。
 - `opt-level = 3`と`opt-level = "z"`で圧縮後WASMサイズ, HCAデコード時間, 初回ロード時間を比較し, Client依存とライセンスを監査します。WASMサイズ上限500MBは指定済みですが, 圧縮前後・計測方法・実測結果は未確定/未記録です。
 
-ClientとPublic API Server間はHTTP/2 over TLS 1.3で通信し, API PayloadはProtocol Buffersであることを確認します。`SubscribeGuildBattleUpdates`ではHTTP/2 Response stream上の`GuildBattleScoreUpdate`をProtocol Buffers varint長prefix付きで受信できることを確認します。Public APIの通信方式としてWebSocketは使用しません。ブラウザ標準`fetch()`/`ReadableStream`と既存crateによる通信を検証し, HTTP/2/TLS 1.3のネゴシエーション結果を確認します。GitHub Pages配布Origin・API Origin・`SameSite=Strict` RefreshToken・CORS/Credentialsの整合性も確認します。HTTP Method・Pathは未確定のため補完しません。
+ClientとPublic API Server間はHTTP/2 over TLS 1.3で通信し, API PayloadはProtocol Buffersであることを確認します。`SubscribeGuildBattleUpdates`ではHTTP/2 Response stream上の`GuildBattleScoreUpdate`をProtocol Buffers varint長prefix付きで受信できることを確認します。Public APIの通信方式としてWebSocketは使用しません。ブラウザ標準`fetch()`/`ReadableStream`と既存crateによる通信を検証し, HTTP/2/TLS 1.3のネゴシエーション結果を確認します。GitHub Pages配布Origin・API Origin・`SameSite=Strict` RefreshToken・CORS/Credentialsの整合性も確認します。
 
-Server配布辞書のハッシュ方式・API, 酒場の回数集計主体, 配布Job等の未確定事項は仕様を待ちます。確定済みのオフライン制限・PNG/HCAと割当情報のOPFS保存・キャッシュクリア範囲についてはテストで確認します。
+PNG/HCAのOPFS保存・割当情報の復元・キャッシュクリアの範囲を検証します。
 
 ## 結合テスト
 

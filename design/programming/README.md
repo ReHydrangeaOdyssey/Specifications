@@ -29,7 +29,8 @@ design/programming/
 ├── implementation_rules.md
 ├── undecided.md
 ├── client/
-│   └── client.md
+│   ├── client.md
+│   └── web_delivery.md
 ├── game/
 │   ├── game_core.md
 │   ├── battle_runtime.md
@@ -77,18 +78,9 @@ flowchart LR
     Core --> Game
 ```
 
-## 設計の確定度
-
-| 区分 | 扱い |
-|---|---|
-| 仕様に型名・API名・状態名が明示されている | その名称を使用します |
-| 仕様の責務から実装境界を分ける必要がある | 「論理Module」「論理Service」として記載します |
-| 具体的なRust型名・関数名が仕様にない | 原則として固定しません |
-| 仕様に未定義・固定しないとある | 設計対象外として残します |
-
 ## 参照資料
 
-現行添付資料の`specification/`および`design/`配下を使用しています。特に以下を設計境界の正本として参照しています。
+次の文書を参照する。
 
 - `design/server/public_api_responsibility.md`
 - `design/server/private_api.md`
@@ -111,4 +103,3 @@ flowchart LR
 - `design/system/rust_dependencies.md`
 - `design/test/test_policy.md`
 - `specification/game/`配下
-- 添付`rust_wasm_png_hca_library_selection(1).md`（2026-10-09）, 第1～7節（Client選定の追加根拠）.

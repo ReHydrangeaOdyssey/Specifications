@@ -4,7 +4,7 @@
 
 * Clientの実装方式はRustをWebAssembly（WASM）へコンパイルするWeb Clientとする.
 * 対象環境はiPhoneのSafari / PWAおよびAndroidのChrome / PWAとする. 初期プロトタイプはLAN内ローカルWebサーバーからIPアドレス直指定で配信し, 正式公開先はVercelまたはGitHub Pagesのいずれかから未決定とする. 対象ブラウザの最小バージョンはiOS Safari 16.3, Android Chrome 120とする. 対応OSの最小バージョンは未確定とする. PWAインストール手順の詳細は未確定とする.
-* 対象は2Dゲームとし, 最大20対20のリアルタイム騎士団戦での表示を想定する. 「最大20対20」は性能検証の対象条件であり, この選定資料によって新たなゲームルールを定義するものではない.
+* 対象は2Dゲームとし, 最大20対20のリアルタイム騎士団戦での表示を想定する. 最大20対20を描画性能試験の条件とする.
 * 主描画方式はWebGL 2とし, `web-sys`を介した独自のスプライトバッチレンダラーを使用する. 汎用2DエンジンとCanvas 2Dを主レンダラーとしては使用しない. 別途UI Frameworkも使用しない.
 * PNGのデコードにはブラウザの`createImageBitmap()`を使用し, `ImageBitmap`からWebGL 2テクスチャへアップロードして描画する. PNGの全画素RGBAを描画のためにWASMメモリへ複製することは前提としない.
 * 描画順を維持しながらスプライト描画をバッチ化する. 同一テクスチャの共有, 可視範囲に応じた段階ロード, 不要なテクスチャと`ImageBitmap`の解放を実施する. テクスチャアトラス・インスタンシングをどの範囲に適用するかは実測で判断する.
@@ -64,7 +64,6 @@
 騎士団戦参加中は`SubscribeGuildBattleUpdates`の通知ストリームで, 所属騎士団に応じたチェイン値・チェイン残り時間（ミリ秒）と両騎士団のスコアを受信する. チェインの時間経過リセットだけによる通知はないため, 残り時間をClient側で表示用に減算する. 30:00到達で通知購読を終了し, 30:00までにキューへ入った当該Playerの要求が残っている場合のみその処理完了後に終了する. 出撃結果レスポンスを返した後のGameServer処理で変更された状態を接続中の全参加者へ通知し, 再接続時は`GetGuildBattleStatus`の現在値を正本とする.
 
 
-
 ## 編成のローカル保持とServer照合
 
 * ClientはArena編成と騎士団戦編成の静的構成をローカルへ保存する.
@@ -83,7 +82,7 @@
 
 * ClientとPublic API Server間の通信方式は「[ネットワーク](../system/network.md)」に従い, HTTP/2 over TLS 1.3とし, API PayloadにはProtocol Buffersを使用する.
 * `SubscribeGuildBattleUpdates`はHTTP/2 Response streamを使用し, `GuildBattleScoreUpdate`をProtocol Buffers varint長prefix付きで順次受信する.
-* ライブラリ選定資料に記載された`WebSocket`はPublic API通信方式として採用しない.
+* Public API通信には`WebSocket`を使用しない.
 * ブラウザ標準の`fetch()`（Rustからは選定済み`web-sys`/`wasm-bindgen-futures`等を使用）をPublic API通信に使用する. 通常のAPIは`fetch()`で送受信し, 通知はResponse Bodyの`ReadableStream`を逐次読み取りProtocol Buffers varint長prefixでフレーム復元する. HTTP/2とTLS 1.3のネゴシエーションはブラウザと接続先が担当し, JavaScriptが直接バージョンを強制しない. ブラウザからのHTTP/2 + TLS 1.3接続成立は配置先で検証する. Rust専用HTTPライブラリの追加は不要とする. HTTP method/pathは未定義のままとする.
 * WebAssemblyはブラウザ内で実行され, Rust/WASMからの通信もブラウザの`fetch()`を介するため, WASMとJavaScriptを静的配布先から取得した後のAPI通信にもOrigin・CORS・Cookieの規則が適用される. `SameSite=Strict` CookieはCross-Site要求へ送信されない. ClientからGameServerへ直接通信せず, Public API Serverへ接続する構成を維持する.
 * GitHub Pages標準の`github.io`ホストと異なるSiteのPublic APIへアクセスする場合, 既存の`SameSite=Strict` RefreshToken Cookieは`credentials: include`でも送信できない. 配布先とAPIのSite構成（同一Siteの独自ドメイン等）は未確定とし, 認証設計を維持できる配置を検証する. Cross-Originの場合はPublic API側の厳密なCORS設定・Credentials許可が必要となる. RefreshToken Cookieの属性は変更しない.
@@ -94,5 +93,4 @@
 * `design/system/network.md`「通信暗号化要件」.
 * `design/game/master_data.md`.
 
-* 2026-10-09のユーザー確定事項（オフライン, アセット追加, OPFS, HCA音源条件, 性能閾値, 通信方式）および2026-10-10のプロトタイプ配布先・試験範囲の指定.
-* MDN Fetch API / OPFS / Cookie, WebKit OPFS, GitHub Pages公式ドキュメント（ブラウザ制約の根拠は`design/programming/client/client.md`を参照）.
+* `design/programming/client/client.md`（ブラウザAPIの制約と出典）.

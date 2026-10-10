@@ -78,16 +78,16 @@
 - Clientの実装方式はRust/WASM（`wasm32-unknown-unknown`）であり, iPhone Safari/PWAおよびAndroid Chrome/PWAを対象とする. `reqwest`をNative Client向け推奨としてClient依存一覧に残さない.
 - PNGはブラウザの`createImageBitmap()`, 描画はWebGL 2, PCM音声再生はWeb Audio API, OPFSファイル保存はブラウザAPIを使用し, これらのために追加の専用crateは採用しない.
 - 汎用2Dエンジン, `image`, `png`, `pix`, `wgpu`, `glow`はClient描画用として採用しない. UI Frameworkも採用しない.
-- `cridecoder`はHCA以外のCRI形式も含むため推移的依存が発生する. 選定資料の「直接依存5クレート」は**新たに選定されたブラウザ連携/デコード用crateの数**であり, 既存`prost`や内部crateを含むClient全体の依存総数ではない.
-- ClientとPublic API Server間の通信方式は「[ネットワーク](network.md)」を正とし, HTTP/2 over TLS 1.3とProtocol Buffersを使用する. `SubscribeGuildBattleUpdates`はHTTP/2 Response streamで受信する. 選定資料の対戦通信`WebSocket`は採用しない. この方式をブラウザで扱うには既存`web-sys`からFetch APIと`ReadableStream`を使用し, `prost`でProtocol Buffersを処理する. HTTP/2とTLS 1.3はBrowser/Serverの交渉結果に依存するため実接続を検証する. ClientへHTTP専用crateは追加しない.
+- `cridecoder`にはHCA以外のCRI形式に関する推移的依存も含まれる.
+- ClientとPublic API Server間の通信方式は「[ネットワーク](network.md)」を正とし, HTTP/2 over TLS 1.3とProtocol Buffersを使用する. `SubscribeGuildBattleUpdates`はHTTP/2 Response streamで受信する. `WebSocket`は採用しない. この方式をブラウザで扱うには既存`web-sys`からFetch APIと`ReadableStream`を使用し, `prost`でProtocol Buffersを処理する. HTTP/2とTLS 1.3はBrowser/Serverの交渉結果に依存するため実接続を検証する. ClientへHTTP専用crateは追加しない.
 - `Cargo.lock`によるバージョン固定と`cargo tree --target wasm32-unknown-unknown`による依存確認を行う. `cargo build --target wasm32-unknown-unknown --release --locked`の結果および端末上の動作は現時点では未検証とする.
-- `web-sys`のfeature一覧とRelease設定例は選定資料にあるが, ビルド確認済みの確定`Cargo.toml`ではない. `opt-level = 3`と`opt-level = "z"`を比較し, 最終Release設定を検証で決定する.
+- `web-sys`のfeature一覧とRelease設定はビルドで検証する. `opt-level = 3`と`opt-level = "z"`を比較し, 最終Release設定を検証で決定する.
 
-### 選定資料に記載されたClient依存バージョン・Browser API features
+### Client依存バージョン・Browser API features候補
 
-下記は添付選定資料の**設計用たたき台**に記載された範囲です。検証済みのCargo設定ではありません。Cargoのバージョン条件は範囲指定であり, 実際の解決バージョンは`Cargo.lock`で固定します。
+依存条件は下表とし、実際の解決バージョンを`Cargo.lock`で固定する。
 
-| crate | 選定資料のCargoバージョン条件 | 備考 |
+| crate | Cargoバージョン条件 | 備考 |
 |---|---|---|
 | `wasm-bindgen` | `0.2` | ブラウザ連携 |
 | `web-sys` | `0.3` | `default-features = false` |
@@ -95,10 +95,10 @@
 | `wasm-bindgen-futures` | `0.4` | PromiseとFuture |
 | `cridecoder` | `0.3.6` | `default-features = false`・採用確定には実機検証が必要 |
 
-- `web-sys`で選定資料に記載されたfeaturesのうち, 採用しない`WebSocket`を除いた候補は`Window`, `Document`, `Element`, `Navigator`, `HtmlCanvasElement`, `WebGl2RenderingContext`, `WebGlProgram`, `WebGlShader`, `WebGlBuffer`, `WebGlTexture`, `WebGlVertexArrayObject`, `Blob`, `File`, `ImageBitmap`, `AudioContext`, `BaseAudioContext`, `AudioBuffer`, `AudioBufferSourceNode`, `AudioNode`, `AudioDestinationNode`, `AudioWorklet`, `AudioWorkletNode`, `MessagePort`, `Event`, `EventTarget`, `StorageManager`, `FileSystemDirectoryHandle`, `FileSystemFileHandle`, `MessageEvent`, `Performance`です。
-- これらはビルド検証前の**feature候補一覧**です。実際に呼び出すブラウザAPIに応じて追加・削除が必要です。追加するfeaturesとしてFetch APIの`Request`, `RequestInit`, `Response`, `Headers`, `ReadableStream`, `ReadableStreamDefaultReader`等が候補になります。正確なfeature名とコンパイル可否は`web-sys`の実際のバージョンで検証します。
-- 選定資料のRelease設定案は`opt-level = 3`, `lto = "fat"`, `codegen-units = 1`, `panic = "abort"`, `strip = "symbols"`です。圧縮後のWASMサイズ, HCAデコード時間, 初回ロード時間を`opt-level = "z"`とも比較してから最終決定します。
-- `prost`と内部`protocol`/`game-core`は既存仕様からの依存であり, 上の選定資料のCargoたたき台に未記載でも除外しません。
+- `web-sys`のfeature候補は`Window`, `Document`, `Element`, `Navigator`, `HtmlCanvasElement`, `WebGl2RenderingContext`, `WebGlProgram`, `WebGlShader`, `WebGlBuffer`, `WebGlTexture`, `WebGlVertexArrayObject`, `Blob`, `File`, `ImageBitmap`, `AudioContext`, `BaseAudioContext`, `AudioBuffer`, `AudioBufferSourceNode`, `AudioNode`, `AudioDestinationNode`, `AudioWorklet`, `AudioWorkletNode`, `MessagePort`, `Event`, `EventTarget`, `StorageManager`, `FileSystemDirectoryHandle`, `FileSystemFileHandle`, `MessageEvent`, `Performance`です。
+- feature一覧は使用するブラウザAPIに応じて追加・削除する。追加するfeaturesとしてFetch APIの`Request`, `RequestInit`, `Response`, `Headers`, `ReadableStream`, `ReadableStreamDefaultReader`等が候補になります。正確なfeature名とコンパイル可否は`web-sys`の実際のバージョンで検証します。
+- Release設定候補は`opt-level = 3`, `lto = "fat"`, `codegen-units = 1`, `panic = "abort"`, `strip = "symbols"`です。圧縮後のWASMサイズ, HCAデコード時間, 初回ロード時間を`opt-level = "z"`とも比較してから最終決定します。
+- `prost`および内部crate`protocol`、`game-core`をClientの依存に含める。
 
 ## 共通内部crate
 

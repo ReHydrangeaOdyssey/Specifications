@@ -2,7 +2,7 @@
 
 ## 概要
 
-本書は`design/client/web_application.md`のブラウザ実行仕様を実装へ接続する。既存のRust/WASM、WebGL 2、OPFS、Web Audio、Server非接続時のゲームプレイ規則を変更しない。
+Rust/WASM製Web Clientの静的配布とプロトタイプ実装を定義する。
 
 ## 静的ファイルの構成
 
@@ -16,9 +16,9 @@
 1. Rustの依存を`Cargo.lock`で固定し、`wasm32-unknown-unknown`ターゲットへReleaseビルドする。
 2. Rust crateの`wasm-bindgen`と対応するCLIのバージョンを揃え、`--target web`形式のJavaScript glueとWASMを生成する。
 3. HTML、JS、WASM、CSS、およびその段階で利用するManifest・静的ファイルを1つの公開ディレクトリへ収集する。GitHub Pagesを採用する場合は`.nojekyll`も配置する。
-4. 初期プロトタイプではこの静的ファイル群をLAN内のローカルWebサーバーから配信し、試験端末から当該サーバーのIPアドレスを直接指定してアクセスする。ホストの具体的なIPアドレス・ポートとWebサーバー実装は未指定とする。
+4. 初期プロトタイプではこの静的ファイル群をLAN内のローカルWebサーバーから配信し、試験端末から当該サーバーのIPアドレスを直接指定してアクセスする。
 5. HTML・JavaScript・WASM・PNGの取得、WebGL 2初期化、タイトル表示、仮ホームへの遷移、テスト用ボタンの入力反応、再読み込みを確認する。
-6. 正式公開先をGitHub Pagesに決定した場合は、GitHub Actions上のビルド・静的参照検証、Pages向けArtifact Upload、`actions/deploy-pages`によるHTTPS配信を使用する。Vercelを選択した場合のデプロイ設定は未定義とする。
+6. 正式公開先をGitHub Pagesに決定した場合は、GitHub Actions上のビルド・静的参照検証、Pages向けArtifact Upload、`actions/deploy-pages`によるHTTPS配信を使用する。
 
 ## リポジトリ
 
@@ -26,7 +26,7 @@
 - 純粋なゲームロジック：`https://github.com/ReHydrangeaOdyssey/GameLogic.git`
 - Server：`https://github.com/ReHydrangeaOdyssey/Server.git`
 
-これらのソース管理先はユーザー指定のものとし、静的ファイルのローカル配信先とは区別する。初期プロトタイプからServerへは接続しない。
+プロトタイプからGameServerおよびPublic API Serverへ接続しない。
 
 ## 描画・入力
 
@@ -47,9 +47,9 @@
 ## プロトタイプと完成版の分離
 
 - 初期プロトタイプ専用ビルドではGameServer・Public API Serverへの通信を行わず、LAN内の静的配信によるWASM・WebGL 2・横画面可変表示・入力・再読込を確認する。認証、MasterData、戦闘結果の正本処理を仮の実装で置き換えない。
-- プロトタイプのタイトルには`proto_type_title.png`を表示し、タイトルから遷移する仮ホームには`proto_type_home.png`を表示する。PNGの具体的な画像内容は任意の試験用とし、ゲーム固有の正式UI・アセットとは扱わない。
-- 複数のテスト用ボタンを配置し、タッチ・マウスによる入力への反応を確認する。ボタンの個数・ラベル・配置先と各反応の詳細は未指定とする。
-- 初期プロトタイプに含めるゲーム画面はタイトルと仮ホームの表示・遷移に限定する。ほかのScene・本番MasterData・戦闘再現・OPFSアセット取り込み・HCA音声は、追加範囲が別途確定するまでこの初期試験の合否条件に含めない。完成版の未接続時制限を取り除かない。
+- プロトタイプのタイトルには`proto_type_title.png`を表示し、タイトルから遷移する仮ホームには`proto_type_home.png`を表示する。
+- 複数のテスト用ボタンを配置し、タッチ・マウスによる入力への反応を確認する。
+- 初期プロトタイプに含めるゲーム画面はタイトルと仮ホームの表示・遷移に限定する。ほかのScene・戦闘再現・OPFSアセット取り込み・HCA音声は初期試験の対象外とする。
 - 本番用ビルドにはプロトタイプ専用の状態変更・仮データ・試験用操作を含めない。両ビルドをコンパイル時の設定で区別し、デプロイ成果物の区分を明確にする。
 - 初期プロトタイプではService Workerを登録しない。今後オフラインキャッシュを採用する場合は、更新時の旧WASM/JS混在を防ぐキャッシュバージョン規則を先に追加する。
 
@@ -72,7 +72,6 @@
 ## 試験環境の制約
 
 - IPアドレス直指定のLAN内配信は静的ファイルの取得・描画・入力を検証するためのものとする。OPFSやPWA等、安全なコンテキストに依存する機能は、LAN内でのHTTPアクセス結果のみを合格根拠にしない。
-- 試験用PNG2件はファイル名だけが確定しており、実データの作成・格納Pathは未指定とする。
 
 ## 参照資料
 
