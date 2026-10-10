@@ -33,10 +33,11 @@ flowchart TD;
     CheckAnnihilation -- No --> CheckTurnLimit;
     CheckTurnLimit -- Yes --> Judgment;
     CheckTurnLimit -- No --> UpdateWaitCount;
+    UpdateWaitCount --> PopQueue;
     Judgment --> End
 ```
 
-戦闘開始直後は待機カウント更新を行わず, 全キャラクターの待機カウント0の状態から仕様書の初回規則に従って攻撃順を確定する. `UpdateWaitCount`は初回攻撃順確定後のターン進行でのみ使用する.
+戦闘開始直後は待機カウント更新を行わず, 全キャラクターの待機カウント0の状態から仕様書の初回規則に従って攻撃順を確定する. `UpdateWaitCount`は初回攻撃順確定後のターン進行でのみ使用し, 終了条件が成立しない場合は`PopQueue`へ戻り次のキャラクター行動へ進む.
 `状態異常更新`で毒ダメージによりHPが0になった場合は, 戦闘不能時アビリティを発動せず, そのままターン終了時処理へ進む.
 同一キャラクターで同一タイミングに複数アビリティの発動条件が成立した場合は, Abilityスロット番号の小さい順に判定・処理する. 複数キャラクターで同一タイミングに成立した場合は, 戦闘計算上の速度が速い順, 同一速度ならフォーメーション内部値が小さい順, 速度・内部値とも同一ならPlayerIDの小さい順で抽選対象リストを作成して疑似乱数の抽選順で処理する.
 戦闘開始時に`SkillBattleState.activation_count=0`とし, 各`AbilityBattleState.activation_count=0`, `activated_this_turn=false`で初期化する. ターン開始時にすべての`AbilityBattleState.activated_this_turn`をfalseへ戻す. スキル発動時は`SkillBattleState.activation_count`を1増加し, Ability発動時は対応するAbilityIDの`AbilityBattleState.activation_count`を1増加して`activated_this_turn=true`とする. 最大発動回数判定は各マスターデータの`max_activation_count`と戦闘中状態の`activation_count`を比較して行う.
@@ -136,7 +137,9 @@ flowchart TD;
     RandomDamage[ダメージ = ダメージ * 乱数];
     Min[ダメージ = max ダメージ, 250];
     Fixed[ダメージ = SkillMasterData.correction_value];
-    FixedIncrease[AbilityMasterData.effect_data.correction.correction_value（ABILITY_EFFECT_FIXED_DAMAGE_INCREASE）を加算し250以上99999以下へクランプ];
+    CheckFixedIncrease{ABILITY_EFFECT_FIXED_DAMAGE_INCREASE 発動?};
+    FixedIncrease[AbilityMasterData.effect_data.correction.correction_value（ABILITY_EFFECT_FIXED_DAMAGE_INCREASE）を加算];
+    FixedClamp[ダメージ = clamp ダメージ, 250, 99999];
     Apply[HP反映時に小数点以下を切り捨てて減算し, HPを0未満にしない];
     End[スキルダメージ計算終了];
 
@@ -145,7 +148,10 @@ flowchart TD;
     Mode -- Yes --> GuildAttack --> GuildDefense --> Correction;
     Mode -- No --> ArenaAttack --> ArenaDefense --> Correction;
     Correction --> Base --> Random --> RandomDamage --> Min --> Apply --> End;
-    DamageType -- SKILL_DAMAGE_VALUE_TYPE_FIXED --> Fixed --> FixedIncrease --> Apply;
+    DamageType -- SKILL_DAMAGE_VALUE_TYPE_FIXED --> Fixed --> CheckFixedIncrease;
+    CheckFixedIncrease -- Yes --> FixedIncrease --> FixedClamp;
+    CheckFixedIncrease -- No --> FixedClamp;
+    FixedClamp --> Apply;
 ```
 
 ### ダメージ乱数の消費規則
@@ -167,7 +173,7 @@ flowchart TD;
     CheckDrawAggro{ABILITY_EFFECT_DRAW_AGGRO 発動?};
     ChangeAttackOrigin[攻撃範囲の起点をABILITY_EFFECT_DRAW_AGGRO発動キャラクターへ変更];
     GetAttackRange[攻撃対象リストの取得];
-    CheckCoverCandidate{ABILITY_EFFECT_COVER候補が存在する?};
+    CheckCoverCandidate{ABILITY_EFFECT_COVER発動条件を満たす候補が存在する?};
     SelectCover[候補をフォーメーション内部番号順に並べて1キャラクターを抽選];
     CheckCoverRate{選択したAbilityMasterData.activation_rate > 乱数?};
     SetCover[取得済み攻撃対象リストに対するABILITY_EFFECT_COVER発動状態を保持];
@@ -176,7 +182,7 @@ flowchart TD;
     CalculateEnemyHP[[相手HP処理]];
     CalculateCoverHP[[元の攻撃対象の値でダメージ算出しABILITY_EFFECT_COVER発動キャラクターへHP反映]];
     CalculateFriendHP[[味方HP処理]];
-    CalculateEnemyHP2[[相手HP処理]];
+    CalculateEnemyHP2[[追撃による相手HP処理]];
     DrawAggroAbility[ABILITY_EFFECT_DRAW_AGGRO発動];
     CoverAbility[ABILITY_EFFECT_COVER発動];
 
@@ -239,12 +245,14 @@ flowchart TD;
     CheckActivatedAvoidanceCounter{ABILITY_EFFECT_AVOIDANCE_COUNTERは発動済み?};
     CheckAvoidanceCounter{AbilityMasterData.activation_rate（ABILITY_EFFECT_AVOIDANCE_COUNTER） > 乱数?};
     AvoidanceCounterAbility[ABILITY_EFFECT_AVOIDANCE_COUNTER発動];
-    CheckActivatedAvoidanceCounter -- Yes --> CheckActivatedStatusAbnormality;
+    CheckActivatedAvoidanceCounter -- Yes --> CheckStatusAbnormalityAttackCandidate;
     CheckActivatedAvoidanceCounter -- No --> CheckAvoidanceCounter;
     CheckAvoidanceCounter -- Yes --> AvoidanceCounterAbility --> CalculateFriendHP;
-    CheckAvoidanceCounter -- No --> CheckActivatedStatusAbnormality;
+    CheckAvoidanceCounter -- No --> CheckStatusAbnormalityAttackCandidate;
 
+    CheckStatusAbnormalityAttackCandidate{ABILITY_EFFECT_STATUS_ABNORMALITY_ATTACKを保持?};
     CheckActivatedStatusAbnormality{ABILITY_EFFECT_STATUS_ABNORMALITY_ATTACKは発動済み?};
+    CheckStatusAbnormalityAvoidanceCandidate{対象StatusAbnormalityIDに対応するABILITY_EFFECT_AVOIDANCEを保持?};
     CheckActivatedStatusAbnormalityAvoidance{対象StatusAbnormalityIDに対応するABILITY_EFFECT_AVOIDANCEは発動済み?};
     CheckStatusAbnormalityAvoidance{対象StatusAbnormalityIDに対応するAbilityMasterData.activation_rate（ABILITY_EFFECT_AVOIDANCE） > 乱数?};
     CheckStatusAbnormality{AbilityMasterData.activation_rate（ABILITY_EFFECT_STATUS_ABNORMALITY_ATTACK） > 乱数?};
@@ -252,8 +260,12 @@ flowchart TD;
     StatusAbnormalityAvoidanceAbility[ABILITY_EFFECT_AVOIDANCE発動];
     StatusAbnormalityAttackAbility[ABILITY_EFFECT_STATUS_ABNORMALITY_ATTACK発動]; 
 
+    CheckStatusAbnormalityAttackCandidate -- No --> Attack;
+    CheckStatusAbnormalityAttackCandidate -- Yes --> CheckActivatedStatusAbnormality;
     CheckActivatedStatusAbnormality -- Yes --> Attack;
-    CheckActivatedStatusAbnormality -- No --> CheckActivatedStatusAbnormalityAvoidance;
+    CheckActivatedStatusAbnormality -- No --> CheckStatusAbnormalityAvoidanceCandidate;
+    CheckStatusAbnormalityAvoidanceCandidate -- No --> CheckStatusAbnormality;
+    CheckStatusAbnormalityAvoidanceCandidate -- Yes --> CheckActivatedStatusAbnormalityAvoidance;
     CheckActivatedStatusAbnormalityAvoidance -- Yes --> CheckStatusAbnormality;
     CheckActivatedStatusAbnormalityAvoidance -- No --> CheckStatusAbnormalityAvoidance;
     CheckStatusAbnormalityAvoidance -- Yes --> StatusAbnormalityAvoidanceAbility --> Attack;
@@ -286,13 +298,13 @@ flowchart TD;
     CheckCounterDisable{AbilityMasterData.activation_rate（ABILITY_EFFECT_COUNTER_DISABLE） > 乱数?};
     CounterDisableAbility[ABILITY_EFFECT_COUNTER_DISABLE発動];
 
-    CheckActivatedCounter -- Yes --> CalculateEnemyHP2;
+    CheckActivatedCounter -- Yes --> CheckEmptyHP;
     CheckActivatedCounter -- No --> CheckCounter;
     CheckCounter -- Yes --> CheckActivatedCounterDisable;
     CheckCounter -- No --> CheckEmptyHP;
     CheckActivatedCounterDisable -- Yes --> CounterAbility;
     CheckActivatedCounterDisable -- No --> CheckCounterDisable;
-    CheckCounterDisable -- Yes --> CounterDisableAbility --> CalculateEnemyHP2;
+    CheckCounterDisable -- Yes --> CounterDisableAbility --> CheckEmptyHP;
     CheckCounterDisable -- No --> CounterAbility;
 
     CheckEmptyHP{相手のHP > 0?};
@@ -312,7 +324,7 @@ flowchart TD;
 ```
 
 
-`ABILITY_EFFECT_COVER`の候補抽選は取得済み攻撃対象リスト単位で1回だけ行う. 発動したターンはそのリストに含まれるすべての味方への攻撃を引き受け, 再発動しない. ダメージ計算上の攻撃対象はリスト内の元キャラクターとし, HP減算先だけをかばうキャラクターへ変更する. リストに複数対象がある場合は各対象について個別にダメージを算出し, その回数だけかばうキャラクターへ反映する.
+`ABILITY_EFFECT_COVER`の候補は, 取得済み攻撃対象リストに現在HPが最大HPの`AbilityMasterData.activation_condition.condition_value`%以下である味方が含まれる場合に, 当該発動条件を満たすアビリティ保持キャラクターから抽出する. `ABILITY_EFFECT_COVER`の候補抽選は取得済み攻撃対象リスト単位で1回だけ行う. 発動したターンはそのリストに含まれるすべての味方への攻撃を引き受け, 再発動しない. ダメージ計算上の攻撃対象はリスト内の元キャラクターとし, HP減算先だけをかばうキャラクターへ変更する. リストに複数対象がある場合は各対象について個別にダメージを算出し, その回数だけかばうキャラクターへ反映する.
 `ABILITY_EFFECT_DRAW_AGGRO`が複数候補の場合はフォーメーション内部番号の小さい順に候補を並べて1キャラクターだけを抽選し, 選ばれた候補だけ発動率判定を行う. 成功時は対象リスト取得前に起点だけを変更し, 失敗時に別候補を再抽選しない. 1ターン1キャラクター行動における1回の対象リスト取得前に実施する.
 `TACTICS_BATTLE_SPECIAL_ELYSION`の回避効果は通常攻撃にだけ適用し, `ABILITY_EFFECT_AVOIDANCE`処理の後に独立した「`TACTICS_BATTLE_SPECIAL_ELYSION`の回避効果中?」判定を行う. 効果中の場合は当該通常攻撃を回避したものとして反撃判定へ進む.
 
@@ -321,4 +333,4 @@ flowchart TD;
 
 戦闘フロー内の回避率, 回避＆カウンター率, 状態異常回避率, 回避無効化率, 状態異常付与率, 追撃率, 反撃率, 反撃無効化率は, 対応するアビリティの`AbilityMasterData.activation_rate`を使用する.
 
-状態異常回避判定は, 付与しようとしている`StatusAbnormalityID`と一致する`ABILITY_EFFECT_AVOIDANCE`だけを対象とする. 発動率判定の前に当該AbilityIDのターン内発動済み状態を確認し, 発動済みの場合は状態異常回避を再発動せず, 状態異常攻撃の発動率判定へ進む. 未発動の場合は当該Abilityの`activation_rate`で判定する. `ABILITY_EFFECT_AVOIDANCE_DISABLE`および`ABILITY_EFFECT_COUNTER_DISABLE`も発動率判定前に対応AbilityIDのターン内発動済み状態を確認する.
+状態異常攻撃Abilityを保持しない場合は状態異常攻撃・回避判定を行わず通常攻撃へ進む. 状態異常回避判定は, 付与しようとしている`StatusAbnormalityID`と一致する`ABILITY_EFFECT_AVOIDANCE`だけを対象とする. 一致する状態異常回避Abilityが存在しない場合は, 状態異常回避の発動率判定を行わず状態異常攻撃の発動率判定へ進む. 発動率判定の前に当該AbilityIDのターン内発動済み状態を確認し, 発動済みの場合は状態異常回避を再発動せず, 状態異常攻撃の発動率判定へ進む. 未発動の場合は当該Abilityの`activation_rate`で判定する. `ABILITY_EFFECT_AVOIDANCE_DISABLE`および`ABILITY_EFFECT_COUNTER_DISABLE`も発動率判定前に対応AbilityIDのターン内発動済み状態を確認する.

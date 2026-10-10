@@ -212,6 +212,7 @@ HCA 22,050Hz・非暗号化・一部ループ・SE同時最大5, 性能閾値GPU
 * 最小ダメージ250を適用する.
 * 通常攻撃の最大ダメージ上限を仕様どおり適用する.
 * ダメージ乱数を指定位置で1回消費する.
+* 戦闘が終了条件を満たさない場合は待機カウント更新後に行動待機キューから次のキャラクターをPOPし, ターン処理を継続する.
 * 回避, 回避無効化, 追撃, 反撃, 反撃無効化の分岐順を維持する.
 * 暗闇による通常攻撃失敗時の追撃分岐を仕様どおり処理する.
 
@@ -221,7 +222,7 @@ HCA 22,050Hz・非暗号化・一部ループ・SE同時最大5, 性能閾値GPU
 
 * Skill発動成功時は通常攻撃ダメージフローへ入らずSkill用処理へ分岐する.
 * 攻撃SkillはSkillダメージ計算フローを使用する.
-* `SKILL_DAMAGE_VALUE_TYPE_RATE`には最大99,999の上限を適用せず, `SKILL_DAMAGE_VALUE_TYPE_FIXED`はABILITY加算後も250以上99,999以下へクランプする.
+* `SKILL_DAMAGE_VALUE_TYPE_RATE`には最大99,999の上限を適用せず, `SKILL_DAMAGE_VALUE_TYPE_FIXED`では`ABILITY_EFFECT_FIXED_DAMAGE_INCREASE`発動時だけ固定値を加算し, 未発動時には加算せず, いずれも250以上99,999以下へクランプする.
 * 回復Skillは`can_heal_incapacitated=true`ではHP0だけ, `false`ではHP1以上だけを対象候補とし, この絞り込みをTargetRange・単体優先条件より先に行うことを確認する.
 * 対象ごと, HITごとにダメージ乱数を個別取得する.
 * ランダム攻撃では候補リストをFormation内部番号順で固定し, 各HITで対象を削除しない.
@@ -236,17 +237,18 @@ HCA 22,050Hz・非暗号化・一部ループ・SE同時最大5, 性能閾値GPU
 * AbilityID単位でターン内発動済み状態を保持する.
 * 同一AbilityEffectIDの重複装備を拒否する.
 * `EVERY_N_TURNS`を`AbilityTurnTiming`の4タイミングそれぞれで評価する.
+* 状態異常攻撃Abilityを保持しない場合は状態異常攻撃・回避判定を実行しない. 対象状態異常に対応する回避Abilityが存在しない場合は回避率判定を実行しない.
 * 状態異常回避判定を状態異常付与率判定より先に行う. 状態異常回避Abilityが同一ターンに発動済みの場合, 再度発動率判定せず状態異常攻撃の発動率判定へ進む.
 * `ABILITY_EFFECT_AVOIDANCE_DISABLE`および`ABILITY_EFFECT_COUNTER_DISABLE`が同一ターンに発動済みの場合, 当該Abilityの発動率を再判定しない.
 * 暗闇で攻撃失敗となった場合も`ABILITY_EFFECT_PURSUIT`のAbilityID単位のターン内発動済み判定を通す.
-* `ABILITY_EFFECT_COUNTER`の発動率判定がNoの場合, 2回目の相手HP処理ではなく相手HP確認へ進む.
+* `ABILITY_EFFECT_COUNTER`の発動率判定がNoの場合, 発動済みの場合, および`ABILITY_EFFECT_COUNTER_DISABLE`が発動した場合は, 追撃用の相手HP処理を再実行せず相手HP確認へ進む.
 * `ABILITY_EFFECT_AVOIDANCE_COUNTER`のターン内発動済み判定・発動率判定は通常攻撃成立後, 相手HP処理より前に行い, 発動した場合は通常攻撃ダメージを与えず味方HP処理へ進む.
-* 味方HP処理後は2回目の相手HP処理を行わず, 相手HP確認へ進む.
+* 味方HP処理後は2回目の相手HP処理を行わず, 相手HP確認へ進む. 追撃が成立した場合のみ追撃用の相手HP処理を行う.
 * 追撃候補は行動キャラクターを除いた追撃Ability保持者とし, 複数候補ならフォーメーション内部番号順に並べて1キャラクターを抽選する. 選択したAbilityIDの発動済み判定・発動率判定を実施する.
 * 回避無効化・反撃無効化・状態異常攻撃・状態異常回避・COVER・DRAW_AGGROの発動成立時に, 対応AbilityIDの発動処理を通過する.
 * AbilityによるBUFF / DEBUFFをSkillと同じ`BuffDebuffEffectState`へ反映する.
 * `ABILITY_EFFECT_DAMAGE_INCREASE`は通常攻撃だけへ適用し, `correction_value`乗算後に通常攻撃最大ダメージ上限99,999を適用する.
-* `ABILITY_EFFECT_COVER`は攻撃対象リスト取得後に候補をフォーメーション内部番号順で抽選し, 発動したターンの対象リスト内のすべての味方に代わって, 元対象の計算値を使用したダメージを対象数分だけかばうキャラクターへ反映する. 同一ターンの再発動判定を行わない.
+* `ABILITY_EFFECT_COVER`は攻撃対象リスト内に`condition_value`%以下の現在HP割合である味方が含まれる条件を確認し, 候補をフォーメーション内部番号順で抽選し, 発動したターンの対象リスト内のすべての味方に代わって, 元対象の計算値を使用したダメージを対象数分だけかばうキャラクターへ反映する. 同一ターンの再発動判定を行わない.
 * `ABILITY_EFFECT_DRAW_AGGRO`は攻撃対象リスト取得前に候補をフォーメーション内部番号順へ並べ, 1キャラクターだけを抽選してその候補だけ発動率判定する. 不成立時に再抽選しない.
 * `ABILITY_EFFECT_FIXED_DAMAGE_INCREASE`は`SKILL_DAMAGE_VALUE_TYPE_FIXED`の攻撃スキルだけへ加算し, RATE型へ適用しない. 固定ダメージは加算後も250以上99,999以下へクランプする.
 * Ability MasterDataは`AbilityEffectID × AbilityConditionID × AbilityTarget`許可表に一致し, 表外の組み合わせをPipelineが拒否することを確認する. 戦闘不能味方人数連動補正は0～4人のMasterData entryを現在人数に応じて動的参照する.
@@ -316,7 +318,7 @@ HCA 22,050Hz・非暗号化・一部ループ・SE同時最大5, 性能閾値GPU
 
 * キリ番条件を満たす場合でもCBCが先に成立すればイベント種別はCBCとなる. キリ番CB・強襲CB・CBC・殲滅のEnumの区別を確認する.
 * `EX_DRIVE`・`SLASHER`のキリ番CB専用スコア効果と`ENDER_BREAK`のキリ番上限補正は`GUILD_BATTLE_SORTIE_EVENT_NUMBERED_CASTLE_BREAK`だけに適用する. 強襲CBとCBCでは適用しない.
-* CBスコアは出撃基本値, 防御, 各キャラクターの攻撃力/ダメージAbility, フォーメーション, Tactics, チェイン補正, スコア上限を仕様で定義された順番で算出する. 未確定の`TACTICS_EFFECT_CASTLE_DEFENSE_CORRECTION`の数値期待値は固定しない.
+* CBスコアは出撃基本値, 防御, 各キャラクターの攻撃力/ダメージAbility, フォーメーション, Tactics, チェイン補正, スコア上限を仕様で定義された順番で算出する. `TACTICS_EFFECT_CASTLE_DEFENSE_CORRECTION`の参照値は`TACTICS_EFFECT_BATTLE_SPECIAL.parameters.castle_level`とし, 二重計上せず仕様の統合規則に従う. マスターデータの実データに依存する具体値は実データ未提示のため固定しない.
 * 殲滅Responseの`OwnCharacters`・`EnemyCharacters`・`EnemyPlayerID`・`EnemyFormationID`・`BattleTacticsEffects`・`Seed`をClient/Server双方へ同一入力として与え, 戦闘過程と結果を一致させる. 最大HP使用時にも一致し, 前回表示状態への依存がない.
 * 1出撃のResponse送信はBattle Special回復, acquired_score/Score/Chain加算, Replay Event, ScoreUpdate通知より前に行う. その後処理は次のキュー要求の前に直列完了し, 他の一般状態変更操作のReplay→Response順序とは区別する.
 * `SubscribeGuildBattleUpdates`の購読直後に初回スナップショットを1件送り, 以降は両騎士団の全購読Playerへ所属基準で`AllyScore`・`EnemyScore`・`Chain`・`ChainRemainingMilliseconds`を配信する. 未参加・他対戦への配信はしない.
