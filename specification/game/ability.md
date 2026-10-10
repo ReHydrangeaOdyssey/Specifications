@@ -65,7 +65,7 @@
 
 ## AbilityEffectID × AbilityConditionID × AbilityTarget
 
-以下を許可組み合わせの正本とする. 表にない`AbilityEffectID × AbilityConditionID × AbilityTarget`はマスターデータ不正とする. `ALLY_SINGLE` / `ALLY_ALL`の両方を許可する行はマスターデータでどちらか一方を明示する.
+以下を許可組み合わせの正本とする. 表にない`AbilityEffectID × AbilityConditionID × AbilityTarget`はマスターデータ不正とする. `ABILITY_CONDITION_INCAPACITATED`と`ABILITY_EFFECT_COUNTER`の組み合わせは許可しない. `ALLY_SINGLE` / `ALLY_ALL`の両方を許可する行はマスターデータでどちらか一方を明示する.
 
 | 効果説明 | AbilityEffectID | AbilityConditionID | AbilityTarget | 追加規則 |
 |---|---|---|---|---|
@@ -96,7 +96,6 @@
 | 敵の攻撃を回避 | `ABILITY_EFFECT_AVOIDANCE` | `ABILITY_CONDITION_ATTACKED` | `ABILITY_TARGET_SELF` | `avoidance_type=ABILITY_AVOIDANCE_TYPE_NORMAL_ATTACK`, `status`未設定 |
 | 敵の攻撃をカウンター | `ABILITY_EFFECT_COUNTER` | `ABILITY_CONDITION_ATTACKED` | `ABILITY_TARGET_SELF` | 反撃処理を使用 |
 | 敵の攻撃を回避＆カウンター | `ABILITY_EFFECT_AVOIDANCE_COUNTER` | `ABILITY_CONDITION_ATTACKED` | `ABILITY_TARGET_SELF` | 通常攻撃のHP減算前に発動判定し, 成立時は攻撃を回避して反撃する |
-| 戦闘不能時にカウンター | `ABILITY_EFFECT_COUNTER` | `ABILITY_CONDITION_INCAPACITATED` | `ABILITY_TARGET_SELF` | 戦闘不能確定時に反撃 |
 | ピンチの味方をかばう | `ABILITY_EFFECT_COVER` | `ABILITY_CONDITION_ALLY_HP_AT_OR_BELOW_THRESHOLD_ATTACKED` | `ABILITY_TARGET_ALLY_SINGLE` | `condition_value`を対象味方のHP割合閾値として使用 |
 | ダメージを1人で引き受ける | `ABILITY_EFFECT_DRAW_AGGRO` | `ABILITY_CONDITION_ENEMY_NORMAL_ATTACK_TARGETING` | `ABILITY_TARGET_SELF` | 対象リスト取得前のひきつけ処理を使用 |
 | 戦闘不能時にHP1で耐える | `ABILITY_EFFECT_SURVIVE_AT_ONE_HP` | `ABILITY_CONDITION_LETHAL_DAMAGE` | `ABILITY_TARGET_SELF` | 発動時は当該ダメージ反映後HPを1とする |
@@ -147,7 +146,7 @@
 ## 発動回数
 
 基本的に1戦闘につき1度のみだが, アビリティによって変わる.
-最大発動回数はアビリティのマスターデータに保持する. 戦闘中の累計発動回数およびターン内発動済み状態は`AbilityBattleState`としてAbilityID単位で保持する.
+最大発動回数はアビリティのマスターデータに保持する. 戦闘中の累計発動回数およびターン内発動済み状態は`AbilityBattleState`としてAbilityID単位で保持する. 通常戦闘では`AbilityBattleState.activation_count`が`AbilityMasterData.max_activation_count`に達したAbilityIDを, 候補の抽選および発動率判定の乱数を消費する前に除外する.
 
 `ABILITY_CONDITION_CASTLE_BREAK`は通常戦闘のターン内発動状態とは独立して扱う. キャッスルブレイク1回につき, 選択された各キャラクターの効果種別ごとに最大1度だけ発動判定する. `ABILITY_EFFECT_BUFF`（攻撃力補正）と`ABILITY_EFFECT_CASTLE_BREAK_DAMAGE_INCREASE`（ダメージ補正）は別の効果種別であり, 両方の発動条件が成立した場合はそれぞれ個別に発動する. 一方の発動成立は他方の判定を抑止しない. 判定回数は次のキャッスルブレイクへ引き継がない. 通常戦闘の`AbilityBattleState.activation_count`と`activated_this_turn`をキャッスルブレイク専用判定の共有カウンタとして使用しない.
 
@@ -172,6 +171,8 @@
 * `ABILITY_EFFECT_INCAPACITATED_ALLY_COUNT_STAT_CORRECTION`: 現在の戦闘不能味方人数に一致するMasterData entryの攻撃/防御補正を, 攻撃力/防御力算出時に動的に適用する. `BuffDebuffEffectState`へ固定値として取り込まない.
 * `ABILITY_EFFECT_CASTLE_BREAK_DAMAGE_INCREASE`: 騎士団戦のキャッスルブレイク時ダメージへ`correction_value`を倍率として適用する. キャッスルブレイクスコア式の`1.0 + アビリティダメージ補正値`には`アビリティダメージ補正値 = correction_value - 1.0`として渡す. 未発動なら補正値0.0とする.
 * `ABILITY_CONDITION_CASTLE_BREAK`の`ABILITY_EFFECT_BUFF`: 発動成立したキャラクター自身の`stat_correction.attack`をキャッスルブレイクの攻撃力計算だけへ反映し, 戦闘中の`BuffDebuffEffectState`に追加しない.
+
+対象優先Abilityで条件に一致する候補が複数存在する場合は, フォーメーション内部番号の小さい順に並べ, 戦闘の疑似乱数で1キャラクターを抽選する.
 
 ### ダメージ増加
 

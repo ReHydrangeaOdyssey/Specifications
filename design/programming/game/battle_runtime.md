@@ -54,7 +54,11 @@ classDiagram
 flowchart TD
     Start[戦闘開始] --> BattleStartAbility[Battle Start Ability]
     BattleStartAbility --> Determine[初回行動順確定]
-    Determine --> TurnStart[ターン開始]
+    Determine --> FilterQueue[行動不能キャラクターを攻撃待機キューから除外]
+    FilterQueue --> CheckQueue{攻撃待機キューに行動可能キャラクターがいる?}
+    CheckQueue -->|No| UpdateWaitCount[待機カウント更新]
+    UpdateWaitCount --> RefillQueue[2回目以降の規則でキュー更新] --> FilterQueue
+    CheckQueue -->|Yes| PopQueue[攻撃待機キューからPOP] --> TurnStart[ターン開始]
     TurnStart --> ResetAbility[activated_this_turn=false]
     ResetAbility --> TurnStartAbility[TURN_START Ability]
     TurnStartAbility --> Before[BEFORE_ACTION Ability]
@@ -63,13 +67,14 @@ flowchart TD
     After --> Status[状態異常更新]
     Status --> TurnEndEffect[ターン終了効果]
     TurnEndEffect --> EndAbility[TURN_END Ability]
-    EndAbility --> Wait[待機時間更新]
-    Wait --> Judge{終了?}
-    Judge -->|No| TurnStart
+    EndAbility --> Wait[行動後の待機カウント増加]
+    Wait --> TurnEnd[ターン終了] --> IncrementTurn[ターン数を1増やす]
+    IncrementTurn --> Judge{終了?}
+    Judge -->|No| UpdateWaitCount
     Judge -->|Yes| End[戦闘終了]
 ```
 
-初回だけ待機カウント更新前の全Character待機カウント0から行動順を確定します。
+初回だけ待機カウント更新前の全Character待機カウント0から行動順を確定します。`Wait`は行動直後の待機カウント増加を表し, `UpdateWaitCount`は次の行動を選ぶための待機カウント更新を表します。昏睡等の行動不能キャラクターは攻撃待機キューから取り出す前に除外し, キューが空になれば`UpdateWaitCount`へ進みます。ターン数はターン終了時に加算します。
 
 ## Ability評価順
 
@@ -91,7 +96,7 @@ Character Actionは以下の大分類で実装境界を分けます。
 8. Counter
 9. Incapacitated Ability
 
-Skill発動時は通常攻撃側のAvoidance、Counter、Cover、Draw Aggro、Pursuit処理へ入りません。
+Skill発動時は通常攻撃側のAvoidance、Counter、Cover、Draw Aggro、Pursuit処理へ入りません。戦闘不能時Abilityでは反撃を実行しません。Abilityの戦闘中累計発動回数が`AbilityMasterData.max_activation_count`に達した場合, 当該AbilityIDを候補抽選および発動率判定の乱数消費より前に除外します。
 
 ## Damage処理
 

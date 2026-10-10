@@ -17,7 +17,10 @@ flowchart TD;
     CheckTurnLimit{指定ターン経過?};
     CheckAnnihilation{どちらか全滅している?};
     DetermineOrder[攻撃順の確定];
-    PopQueue[行動待機キューからPOP];
+    CheckQueueActable{攻撃待機キューに行動可能キャラクターがいる?};
+    RemoveIncapacitated[攻撃待機キューの行動不能キャラクターを取り除く];
+    RefillQueue[2回目以降の規則で攻撃待機キューを更新];
+    PopQueue[攻撃待機キューからPOP];
     CharacterAttack[[キャラクター行動]];
     Ability[ABILITY_CONDITION_BATTLE_STARTを評価・発動];
     AddWaitCount[攻撃したキャラクターの待機時間を増加];
@@ -26,25 +29,27 @@ flowchart TD;
     UpdateStatusAbnormality[[状態異常更新]];
     UpdateTurnEndEffect[[ターン終了時処理]];
 
-    Start --> Ability --> DetermineOrder --> PopQueue --> NextTurn
-    NextTurn --> TurnStart --> TurnStartAbility --> BeforeActionAbility --> CharacterAttack --> AfterActionAbility --> UpdateStatusAbnormality --> UpdateTurnEndEffect --> TurnEndAbility --> AddWaitCount --> TurnEnd
-    TurnEnd --> CheckAnnihilation
+    Start --> Ability --> DetermineOrder --> RemoveIncapacitated --> CheckQueueActable
+    CheckQueueActable -- Yes --> PopQueue --> TurnStart
+    CheckQueueActable -- No --> UpdateWaitCount
+    TurnStart --> TurnStartAbility --> BeforeActionAbility --> CharacterAttack --> AfterActionAbility --> UpdateStatusAbnormality --> UpdateTurnEndEffect --> TurnEndAbility --> AddWaitCount --> TurnEnd --> NextTurn
+    NextTurn --> CheckAnnihilation
     CheckAnnihilation -- Yes --> Judgment;
     CheckAnnihilation -- No --> CheckTurnLimit;
     CheckTurnLimit -- Yes --> Judgment;
     CheckTurnLimit -- No --> UpdateWaitCount;
-    UpdateWaitCount --> PopQueue;
+    UpdateWaitCount --> RefillQueue --> RemoveIncapacitated;
     Judgment --> End
 ```
 
-戦闘開始直後は待機カウント更新を行わず, 全キャラクターの待機カウント0の状態から仕様書の初回規則に従って攻撃順を確定する. `UpdateWaitCount`は初回攻撃順確定後のターン進行でのみ使用し, 終了条件が成立しない場合は`PopQueue`へ戻り次のキャラクター行動へ進む.
+戦闘開始直後は待機カウント更新を行わず, 全キャラクターの待機カウント0の状態から仕様書の初回規則に従って攻撃順を確定する. `UpdateWaitCount`は初回攻撃順確定後に使用する. 攻撃待機キューから行動キャラクターを取り出す前に行動不能キャラクターを除き, キューが空となった場合は待機カウントを再更新して2回目以降の規則でキューを更新する. ターン数は`TurnEnd`の後に加算する.
 `状態異常更新`で毒ダメージによりHPが0になった場合は, 戦闘不能時アビリティを発動せず, そのままターン終了時処理へ進む.
 同一キャラクターで同一タイミングに複数アビリティの発動条件が成立した場合は, Abilityスロット番号の小さい順に判定・処理する. 複数キャラクターで同一タイミングに成立した場合は, 戦闘計算上の速度が速い順, 同一速度ならフォーメーション内部値が小さい順, 速度・内部値とも同一ならPlayerIDの小さい順で抽選対象リストを作成して疑似乱数の抽選順で処理する.
-戦闘開始時に`SkillBattleState.activation_count=0`とし, 各`AbilityBattleState.activation_count=0`, `activated_this_turn=false`で初期化する. ターン開始時にすべての`AbilityBattleState.activated_this_turn`をfalseへ戻す. スキル発動時は`SkillBattleState.activation_count`を1増加し, Ability発動時は対応するAbilityIDの`AbilityBattleState.activation_count`を1増加して`activated_this_turn=true`とする. 最大発動回数判定は各マスターデータの`max_activation_count`と戦闘中状態の`activation_count`を比較して行う.
+戦闘開始時に`SkillBattleState.activation_count=0`とし, 各`AbilityBattleState.activation_count=0`, `activated_this_turn=false`で初期化する. ターン開始時にすべての`AbilityBattleState.activated_this_turn`をfalseへ戻す. スキル発動時は`SkillBattleState.activation_count`を1増加し, Ability発動時は対応するAbilityIDの`AbilityBattleState.activation_count`を1増加して`activated_this_turn=true`とする. Ability発動候補は`AbilityBattleState.activation_count < AbilityMasterData.max_activation_count`を満たすAbilityIDに限定する. 上限に達したAbilityIDは候補抽選および発動率判定の乱数を消費する前に除外する.
 戦闘フロー内の各「発動済み?」判定は, 対応するAbilityIDの`AbilityBattleState.activated_this_turn`を参照する. 発動済み状態はAbilityEffectID単位では共有しない. 状態異常回避判定では, `avoidance_type=ABILITY_AVOIDANCE_TYPE_STATUS_ABNORMALITY`かつ付与対象の`StatusAbnormalityID`に対応する`ABILITY_EFFECT_AVOIDANCE`のAbilityIDについて発動済みか判定する.
 通常の行動順決定で敵味方の速度・フォーメーション内部値が同一となる場合も, PlayerIDの小さい順で抽選対象リストを作成する.
 戦闘中キャラクターは`BuffDebuffState`, `BuffDebuffEffectState`, `StatusAbnormalityState[]`を保持する. スキル・アビリティによるバフ・デバフ付与時は`BuffDebuffEffectState`の実値を更新し, その有無から`BuffDebuffState`を更新する. 状態異常付与・更新時は`StatusAbnormalityState[]`を更新する. フォーメーションおよびタクティクス補正はこれらのバフ・デバフ状態へ影響しない.
-`STATUS_ABNORMALITY_BLINDNESS`の攻撃成功判定に失敗した場合は, `ABILITY_EFFECT_PURSUIT`の候補選定・発動済み判定・発動率判定を実行せず反撃側の判定へ進む.
+`STATUS_ABNORMALITY_BLINDNESS`の攻撃成功判定に失敗した場合は, `ABILITY_EFFECT_PURSUIT`の候補選定・発動済み判定・発動率判定を実行せず反撃側の判定へ進む. 攻撃失敗時も反撃の発動を許可する.
 `ABILITY_CONDITION_EVERY_N_TURNS`は`AbilityActivationConditionData.turn_timing`の`AbilityTurnTiming`に従い, `ABILITY_TURN_TIMING_TURN_START`はターン開始直後, `ABILITY_TURN_TIMING_BEFORE_ACTION`は行動キャラクターの行動直前, `ABILITY_TURN_TIMING_AFTER_ACTION`は当該行動完了直後, `ABILITY_TURN_TIMING_TURN_END`は状態異常更新・ターン終了時効果処理後かつターン終了直前に評価する. 現在ターン数が`condition_value`の倍数の場合に条件成立とする.
 
 ### TacticsBattleSpecialType適用
@@ -213,7 +218,7 @@ flowchart TD;
     SelectTargetPriority[Abilityスロット順で先頭の対象優先Abilityを選択];
     CheckTargetPriorityRate{選択したAbilityMasterData.activation_rate > 乱数?};
     TargetPriorityAbility[対象優先Ability発動];
-    ApplyTargetPriority[優先対象を攻撃範囲の起点へ適用];
+    ApplyTargetPriority[優先候補をフォーメーション内部番号の小さい順に並べて抽選し攻撃範囲の起点へ適用];
     SelectTargetPriority --> CheckTargetPriorityRate;
     CheckTargetPriorityRate -- Yes --> TargetPriorityAbility --> ApplyTargetPriority --> GetAttackRange;
     CheckTargetPriorityRate -- No --> GetAttackRange;
@@ -229,7 +234,7 @@ flowchart TD;
     CheckCoverIncapacitated{ABILITY_EFFECT_COVER発動キャラクターのHPが0?};
     CheckCoverIncapacitated -- No --> CheckAttackerHP;
     CheckCoverIncapacitated -- Yes --> CoverIncapacitatedAbility;
-    CoverIncapacitatedAbility[ABILITY_EFFECT_COVER発動キャラクターのABILITY_CONDITION_INCAPACITATEDを評価・発動];
+    CoverIncapacitatedAbility[ABILITY_EFFECT_COVER発動キャラクターのABILITY_CONDITION_INCAPACITATEDを評価・発動（反撃を除く）];
     CoverIncapacitatedAbility --> CheckAttackerHP;
     CheckEmptyList -- No --> PopAttackRange;
 
@@ -364,7 +369,7 @@ flowchart TD;
     CheckCounterDisable -- No --> CounterAbility;
 
     CheckEmptyHP{相手のHP > 0?};
-    KilledAbility[ABILITY_CONDITION_INCAPACITATEDを評価・発動];
+    KilledAbility[ABILITY_CONDITION_INCAPACITATEDを評価・発動（反撃を除く）];
     CounterAbility --> CalculateFriendHP
     CalculateEnemyHP2 --> CheckEmptyHP
     CalculateCoverPursuitHP --> CheckEmptyHP
@@ -377,7 +382,7 @@ flowchart TD;
     KilledAbility --> CheckEmptyList
 
     CheckAttackerHP{攻撃者のHP > 0?};
-    KilledAttackerAbility[ABILITY_CONDITION_INCAPACITATEDを評価・発動];
+    KilledAttackerAbility[ABILITY_CONDITION_INCAPACITATEDを評価・発動（反撃を除く）];
     CheckAttackerHP -- Yes --> End
     CheckAttackerHP -- No --> KilledAttackerAbility
     KilledAttackerAbility --> End
@@ -386,10 +391,10 @@ flowchart TD;
 
 `ABILITY_EFFECT_COVER`の候補は, 取得済み攻撃対象リストに現在HPが最大HPの`AbilityMasterData.activation_condition.condition_value`%以下である味方が含まれる場合に, 当該発動条件を満たすアビリティ保持キャラクターから抽出する. `ABILITY_EFFECT_COVER`の候補抽選は取得済み攻撃対象リスト単位で1回だけ行う. 発動したターンはそのリストに含まれるすべての味方への攻撃を引き受け, 再発動しない. ダメージ計算上の攻撃対象はリスト内の元キャラクターとし, HP減算先だけをかばうキャラクターへ変更する. リストに複数対象がある場合は各対象について個別にダメージを算出し, その回数だけかばうキャラクターへ反映する.
 `ABILITY_EFFECT_DRAW_AGGRO`が複数候補の場合はフォーメーション内部番号の小さい順に候補を並べて1キャラクターだけを抽選し, 選ばれた候補だけ発動率判定を行う. 成功時は対象リスト取得前に起点だけを変更し, 失敗時に別候補を再抽選しない. 1ターン1キャラクター行動における1回の対象リスト取得前に実施する.
-`ABILITY_EFFECT_DRAW_AGGRO`が発動しなかった場合は, 対象リスト取得前に`ABILITY_EFFECT_TARGET_HP_LOW_PRIORITY` / `ABILITY_EFFECT_TARGET_DEFENSE_DOWN_PRIORITY`の発動条件を評価する. 同時に成立した場合はAbilityスロット番号の小さい方のみ発動判定・適用し, 成立時にその優先対象を攻撃起点として使用する.
+`ABILITY_EFFECT_DRAW_AGGRO`が発動しなかった場合は, 対象リスト取得前に`ABILITY_EFFECT_TARGET_HP_LOW_PRIORITY` / `ABILITY_EFFECT_TARGET_DEFENSE_DOWN_PRIORITY`の発動条件を評価する. 同時に成立した場合はAbilityスロット番号の小さい方のみ発動判定・適用する. 優先候補が複数存在する場合はフォーメーション内部番号の小さい順に並べ, 疑似乱数で1キャラクターを抽選して攻撃起点とする.
 `TACTICS_BATTLE_SPECIAL_ELYSION`の回避効果は通常攻撃にだけ適用し, `ABILITY_EFFECT_AVOIDANCE`処理の後に独立した「`TACTICS_BATTLE_SPECIAL_ELYSION`の回避効果中?」判定を行う. 効果中の場合は当該通常攻撃を回避したものとして反撃判定へ進む.
 
-1ターン内に成立した反撃を記録し, 同じターンでは`ABILITY_EFFECT_COUNTER`と`ABILITY_EFFECT_AVOIDANCE_COUNTER`による追加の反撃を成立させない.
+1ターン内に成立した反撃を記録し, 同じターンでは`ABILITY_EFFECT_COUNTER`と`ABILITY_EFFECT_AVOIDANCE_COUNTER`による追加の反撃を成立させない. `ABILITY_CONDITION_INCAPACITATED`で`ABILITY_EFFECT_COUNTER`を発動しない.
 `ABILITY_EFFECT_COVER`の発動対象では通常攻撃回避（`TACTICS_BATTLE_SPECIAL_ELYSION`の回避効果を含む）, `ABILITY_EFFECT_AVOIDANCE_COUNTER`, 状態異常回避, 反撃を発動しない. 状態異常はかばうキャラクターへ反映し, 追撃もかばうキャラクターが受ける.
 `ABILITY_EFFECT_COVER`発動者が攻撃対象リスト処理の途中でHP0になっても, その行動ターン中は存在するものとしてCOVERを継続する. 対象リストが空となった際にCOVER発動者のHP0を判定し, HP0の場合は当該発動者の`ABILITY_CONDITION_INCAPACITATED`を評価・発動する. 反撃によって行動キャラクターがHP0となった場合も現在の攻撃対象リストの処理を打ち切らず, 行動後に戦闘不能として存在しない扱いへ移行する.
 `ABILITY_EFFECT_AVOIDANCE_COUNTER`は通常攻撃が成立する場合にHP減算より先に発動判定する. 発動した場合は通常攻撃のHP減算を行わず, 反撃として味方HP処理へ進む.
