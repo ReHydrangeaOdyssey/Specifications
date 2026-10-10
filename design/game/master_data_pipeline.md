@@ -192,9 +192,8 @@ Characterが参照するSkill / Ability / Tacticsの存在確認は4系統をす
 
 追加Validationは以下とする.
 
-* `ABILITY_EFFECT_AVOIDANCE`で攻撃回避を表す場合は`status`未設定を許可する.
-* `ABILITY_EFFECT_AVOIDANCE`で状態異常回避を表す場合は`status`を設定する.
-* `ABILITY_EFFECT_STATUS_ABNORMALITY_ATTACK`では`status`必須とする.
+* `ABILITY_EFFECT_AVOIDANCE`では`status_abnormality.avoidance_type`を必須とする. `ABILITY_AVOIDANCE_TYPE_NORMAL_ATTACK`では`status`未設定を必須とし, `ABILITY_AVOIDANCE_TYPE_STATUS_ABNORMALITY`では`status`に有効な`StatusAbnormalityID`を必須とする.
+* `ABILITY_EFFECT_STATUS_ABNORMALITY_ATTACK`では`status`必須, `avoidance_type`未設定とする.
 * `ABILITY_CONDITION_EVERY_N_TURNS`では`condition_value`と`turn_timing`を使用する.
 * `ABILITY_CONDITION_HP_AT_OR_BELOW_THRESHOLD`, `ABILITY_CONDITION_ALLY_HP_AT_OR_BELOW_THRESHOLD_ATTACKED`, `ABILITY_CONDITION_TARGET_HP_AT_OR_BELOW_THRESHOLD_NORMAL_ATTACK`では`condition_value`を最大HP割合の整数Percentとして扱い, 1～100だけを許可する.
 * `ABILITY_EFFECT_DAMAGE_INCREASE × ABILITY_CONDITION_SINGLE_TARGET_NORMAL_ATTACK`は`correction.correction_value=2.0`を必須とする.

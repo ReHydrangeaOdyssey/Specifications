@@ -93,7 +93,7 @@
 | 攻撃回避を無効化し攻撃 | `ABILITY_EFFECT_AVOIDANCE_DISABLE` | `ABILITY_CONDITION_NORMAL_ATTACK` | `ABILITY_TARGET_NONE` | 通常攻撃時に適用 |
 | カウンターを無効化し攻撃 | `ABILITY_EFFECT_COUNTER_DISABLE` | `ABILITY_CONDITION_NORMAL_ATTACK` | `ABILITY_TARGET_NONE` | 通常攻撃時に適用 |
 | 固定ダメージスキルの攻撃力UP | `ABILITY_EFFECT_FIXED_DAMAGE_INCREASE` | `ABILITY_CONDITION_SKILL_ATTACK` | `ABILITY_TARGET_NONE` | FIXED型攻撃スキルだけへ固定値加算 |
-| 敵の攻撃を回避 | `ABILITY_EFFECT_AVOIDANCE` | `ABILITY_CONDITION_ATTACKED` | `ABILITY_TARGET_SELF` | `status`未設定 |
+| 敵の攻撃を回避 | `ABILITY_EFFECT_AVOIDANCE` | `ABILITY_CONDITION_ATTACKED` | `ABILITY_TARGET_SELF` | `avoidance_type=ABILITY_AVOIDANCE_TYPE_NORMAL_ATTACK`, `status`未設定 |
 | 敵の攻撃をカウンター | `ABILITY_EFFECT_COUNTER` | `ABILITY_CONDITION_ATTACKED` | `ABILITY_TARGET_SELF` | 反撃処理を使用 |
 | 敵の攻撃を回避＆カウンター | `ABILITY_EFFECT_AVOIDANCE_COUNTER` | `ABILITY_CONDITION_ATTACKED` | `ABILITY_TARGET_SELF` | 通常攻撃のHP減算前に発動判定し, 成立時は攻撃を回避して反撃する |
 | 戦闘不能時にカウンター | `ABILITY_EFFECT_COUNTER` | `ABILITY_CONDITION_INCAPACITATED` | `ABILITY_TARGET_SELF` | 戦闘不能確定時に反撃 |
@@ -104,9 +104,10 @@
 | 攻撃しつつ敵を毒状態にする | `ABILITY_EFFECT_STATUS_ABNORMALITY_ATTACK` | `ABILITY_CONDITION_NORMAL_ATTACK` | `ABILITY_TARGET_NONE` | `status=STATUS_ABNORMALITY_POISON` |
 | 攻撃しつつ敵を範囲不可状態にする | `ABILITY_EFFECT_STATUS_ABNORMALITY_ATTACK` | `ABILITY_CONDITION_NORMAL_ATTACK` | `ABILITY_TARGET_NONE` | `status=STATUS_ABNORMALITY_RANGE_ATTACK_DISABLED` |
 | 攻撃しつつ敵を暗闇状態にする | `ABILITY_EFFECT_STATUS_ABNORMALITY_ATTACK` | `ABILITY_CONDITION_NORMAL_ATTACK` | `ABILITY_TARGET_NONE` | `status=STATUS_ABNORMALITY_BLINDNESS` |
-| 沈黙状態になるのを回避 | `ABILITY_EFFECT_AVOIDANCE` | `ABILITY_CONDITION_STATUS_ABNORMALITY_APPLICATION` | `ABILITY_TARGET_SELF` | `status=STATUS_ABNORMALITY_SILENCE` |
-| 範囲不可状態になるのを回避 | `ABILITY_EFFECT_AVOIDANCE` | `ABILITY_CONDITION_STATUS_ABNORMALITY_APPLICATION` | `ABILITY_TARGET_SELF` | `status=STATUS_ABNORMALITY_RANGE_ATTACK_DISABLED` |
-| 暗闇状態になるのを回避 | `ABILITY_EFFECT_AVOIDANCE` | `ABILITY_CONDITION_STATUS_ABNORMALITY_APPLICATION` | `ABILITY_TARGET_SELF` | `status=STATUS_ABNORMALITY_BLINDNESS` |
+| 攻撃しつつ敵を沈黙状態にする | `ABILITY_EFFECT_STATUS_ABNORMALITY_ATTACK` | `ABILITY_CONDITION_NORMAL_ATTACK` | `ABILITY_TARGET_NONE` | `status=STATUS_ABNORMALITY_SILENCE` |
+| 沈黙状態になるのを回避 | `ABILITY_EFFECT_AVOIDANCE` | `ABILITY_CONDITION_STATUS_ABNORMALITY_APPLICATION` | `ABILITY_TARGET_SELF` | `avoidance_type=ABILITY_AVOIDANCE_TYPE_STATUS_ABNORMALITY`, `status=STATUS_ABNORMALITY_SILENCE` |
+| 範囲不可状態になるのを回避 | `ABILITY_EFFECT_AVOIDANCE` | `ABILITY_CONDITION_STATUS_ABNORMALITY_APPLICATION` | `ABILITY_TARGET_SELF` | `avoidance_type=ABILITY_AVOIDANCE_TYPE_STATUS_ABNORMALITY`, `status=STATUS_ABNORMALITY_RANGE_ATTACK_DISABLED` |
+| 暗闇状態になるのを回避 | `ABILITY_EFFECT_AVOIDANCE` | `ABILITY_CONDITION_STATUS_ABNORMALITY_APPLICATION` | `ABILITY_TARGET_SELF` | `avoidance_type=ABILITY_AVOIDANCE_TYPE_STATUS_ABNORMALITY`, `status=STATUS_ABNORMALITY_BLINDNESS` |
 | 戦闘不能時に味方のHPを回復 | `ABILITY_EFFECT_HEAL` | `ABILITY_CONDITION_INCAPACITATED` | `ABILITY_TARGET_ALLY_SINGLE`または`ABILITY_TARGET_ALLY_ALL` | 対象方式はMasterDataで明示 |
 | 一定時間ごとに自分のHPを回復する | `ABILITY_EFFECT_HEAL` | `ABILITY_CONDITION_EVERY_N_TURNS` | `ABILITY_TARGET_SELF` | `condition_value`と`turn_timing`を使用 |
 | 【騎士戦】CB時に自分の攻撃力をUP | `ABILITY_EFFECT_BUFF` | `ABILITY_CONDITION_CASTLE_BREAK` | `ABILITY_TARGET_SELF` | `stat_correction.attack`を使用 |
@@ -153,7 +154,7 @@
 
 ## 効果
 
-効果種別は`AbilityEffectID`に従う. 効果固有値は「[マスターデータ](../../design/game/master_data.md)」の`AbilityMasterData.effect_data`共有体から取得する. `AbilityEffectID`と共有体フィールドの対応は「[マスターデータ](../../design/game/master_data.md)」を正とする. `ABILITY_EFFECT_AVOIDANCE`は`status_abnormality.status`が未設定の場合に攻撃回避, 設定されている場合に指定状態異常の回避を表す. `ABILITY_EFFECT_STATUS_ABNORMALITY_ATTACK`では`status_abnormality.status`を必須とし, 付与する状態異常を表す.
+効果種別は`AbilityEffectID`に従う. 効果固有値は「[マスターデータ](../../design/game/master_data.md)」の`AbilityMasterData.effect_data`共有体から取得する. `AbilityEffectID`と共有体フィールドの対応は「[マスターデータ](../../design/game/master_data.md)」を正とする. `ABILITY_EFFECT_AVOIDANCE`は`status_abnormality.avoidance_type`で通常攻撃回避・状態異常回避を区別する. `ABILITY_AVOIDANCE_TYPE_NORMAL_ATTACK`では`status`を設定せず, `ABILITY_AVOIDANCE_TYPE_STATUS_ABNORMALITY`では`status`に対象状態異常IDを必須で設定する. `ABILITY_EFFECT_STATUS_ABNORMALITY_ATTACK`では`status_abnormality.status`を必須とし, `avoidance_type`を設定せずに付与する状態異常を表す.
 
 `ABILITY_EFFECT_COUNTER`, `ABILITY_EFFECT_AVOIDANCE_DISABLE`, `ABILITY_EFFECT_COUNTER_DISABLE`, `ABILITY_EFFECT_COVER`, `ABILITY_EFFECT_DRAW_AGGRO`, `ABILITY_EFFECT_PURSUIT`, `ABILITY_EFFECT_DEFENSE_IGNORE`, `ABILITY_EFFECT_TARGET_HP_LOW_PRIORITY`, `ABILITY_EFFECT_TARGET_DEFENSE_DOWN_PRIORITY`, `ABILITY_EFFECT_DRAW_AGGRO_IGNORE`, `ABILITY_EFFECT_AVOIDANCE_COUNTER`, `ABILITY_EFFECT_SURVIVE_AT_ONE_HP`は効果固有の数値パラメータを使用しない. 加工済みマスターデータでは`effect_data.no_parameter`を設定する.
 
@@ -207,6 +208,7 @@
 `ABILITY_EFFECT_COVER`は攻撃対象リスト取得後に1回判定する. 発動したターンは, 相手の攻撃対象リストに含まれるすべての味方への攻撃を引き受ける. `AbilityMasterData.activation_rate`による発動条件を満たした場合, 取得済み攻撃対象リスト内の各キャラクターには当該攻撃のダメージを反映せず, `ABILITY_EFFECT_COVER`を発動したキャラクターへ代わりにダメージを反映する. 同一ターンの再発動判定は行わない.
 
 * ダメージ計算に使用する攻撃対象側の値は, かばう前に攻撃対象リストへ含まれていた各キャラクターの値を使用する.
+* COVER発動キャラクターが攻撃対象リストの処理途中でHP0になっても, 当該行動ターンの処理が終了するまでは存在するものとして扱い, 残りの攻撃と状態異常・追撃も引き受ける. 行動の対象リスト処理終了後にCOVER発動キャラクターのHP0時Abilityを評価する.
 * 攻撃対象リストの要素数と同じ回数だけ個別にダメージ計算し, その各ダメージをかばうキャラクターへ反映する.
 * `ABILITY_EFFECT_COVER`を保持する候補キャラクターが複数いる場合は, フォーメーション内部番号の小さい順に候補リストを作成し, 「[疑似乱数](../../design/game/pseudorandom.md)」の「抽選」で1キャラクターだけを選ぶ. 発動確率判定は選ばれた1キャラクターについて行う.
 

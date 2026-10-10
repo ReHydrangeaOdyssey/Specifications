@@ -228,7 +228,7 @@
 
 ## アビリティ効果との関係
 
-スキル発動時は`ABILITY_EFFECT_AVOIDANCE`, `ABILITY_EFFECT_AVOIDANCE_COUNTER`, `ABILITY_EFFECT_COUNTER`, `ABILITY_EFFECT_COVER`, `ABILITY_EFFECT_DRAW_AGGRO`, `ABILITY_EFFECT_PURSUIT`を無視する. これらの回避, 回避＆反撃, 反撃, かばう, ひきつけ, 追撃処理は通常攻撃にだけ適用する. `ABILITY_EFFECT_AVOIDANCE`は`status_abnormality.status`の設定有無を問わず無視するため, 状態異常Skillに対して状態異常回避Abilityも発動しない.
+スキル発動時は`ABILITY_EFFECT_AVOIDANCE`, `ABILITY_EFFECT_AVOIDANCE_COUNTER`, `ABILITY_EFFECT_COUNTER`, `ABILITY_EFFECT_COVER`, `ABILITY_EFFECT_DRAW_AGGRO`, `ABILITY_EFFECT_PURSUIT`を無視する. これらの回避, 回避＆反撃, 反撃, かばう, ひきつけ, 追撃処理は通常攻撃にだけ適用する. `ABILITY_EFFECT_AVOIDANCE`は`status_abnormality.avoidance_type`の分類を問わず無視するため, 状態異常Skillに対して状態異常回避Abilityも発動しない.
 `ABILITY_EFFECT_FIXED_DAMAGE_INCREASE`は固定ダメージスキル専用の加算効果として例外的にスキルダメージへ適用する.
 
 ## 成功率

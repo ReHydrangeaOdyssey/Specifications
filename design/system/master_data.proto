@@ -1,15 +1,10 @@
-# マスターデータ
-
-本書では元データの完全な構造は定義せず, ゲームで使用するために加工済みのマスターデータ構造のみを定義する.
-加工済みマスターデータの正規表現はProtocol Buffersとし, 各フィールドの論理型・列挙型は「[型定義](../shared/types.md)」を参照する.
-この定義の実際のProtocol Buffersファイルは`design/system/master_data.proto`とし, 共通型には`design/system/game_types.proto`を使用する. ファイルと本書のfield number・型を一致させる.
-本リポジトリにはマスターデータの実データを配置しない. 実データが存在しないこと自体は未定義仕様として扱わない.
-画像やUVデータはClientが保持し, Serverでは保管しない.
-
-## 加工済みマスターデータ構造
-
-```proto
 syntax = "proto3";
+
+package game.model;
+
+import "game_types.proto";
+
+// 加工済みマスターデータの定義: design/game/master_data.md
 
 message ProcessedMasterData {
   repeated CharacterMasterData characters = 1; // 加工済みキャラクターマスターデータ一覧.
@@ -131,36 +126,6 @@ message AbilityMasterData {
   }
 }
 
-```
-
-`AbilityMasterData.activation_condition`と`AbilityMasterData.effect_data`は独立して保持する. これにより, 発動条件の具体値と効果固有値を同時に保持できる.
-`AbilityMasterData.effect_data`は`AbilityEffectID`に応じて使用する共有体フィールドを切り替える.
-
-* `ABILITY_EFFECT_BUFF`: `stat_correction`を使用する.
-* `ABILITY_EFFECT_DEBUFF`: `stat_correction`を使用する.
-* `ABILITY_EFFECT_AVOIDANCE`: `status_abnormality`を使用する. `avoidance_type=ABILITY_AVOIDANCE_TYPE_NORMAL_ATTACK`では通常攻撃を回避し, `status`を設定しない. `avoidance_type=ABILITY_AVOIDANCE_TYPE_STATUS_ABNORMALITY`では`status`へ指定状態異常IDを必ず設定して回避する. 回避Abilityでは`avoidance_type`を必須とする.
-* `ABILITY_EFFECT_COUNTER`: `no_parameter`を使用し, 効果固有値を持たない.
-* `ABILITY_EFFECT_AVOIDANCE_DISABLE`: `no_parameter`を使用し, 効果固有値を持たない.
-* `ABILITY_EFFECT_COUNTER_DISABLE`: `no_parameter`を使用し, 効果固有値を持たない.
-* `ABILITY_EFFECT_STATUS_ABNORMALITY_ATTACK`: `status_abnormality`を使用し, `status`へ付与する状態異常IDを必ず設定する. `avoidance_type`は設定しない.
-* `ABILITY_EFFECT_DAMAGE_INCREASE`: `correction`を使用する.
-* `ABILITY_EFFECT_FIXED_DAMAGE_INCREASE`: `correction`を使用する.
-* `ABILITY_EFFECT_HEAL`: `correction`を使用する.
-* `ABILITY_EFFECT_COVER`: `no_parameter`を使用し, 効果固有値を持たない.
-* `ABILITY_EFFECT_DRAW_AGGRO`: `no_parameter`を使用し, 効果固有値を持たない.
-* `ABILITY_EFFECT_PURSUIT`: `no_parameter`を使用し, 効果固有値を持たない.
-* `ABILITY_EFFECT_DEFENSE_IGNORE`: `no_parameter`を使用する.
-* `ABILITY_EFFECT_TARGET_HP_LOW_PRIORITY`: `no_parameter`を使用する.
-* `ABILITY_EFFECT_TARGET_DEFENSE_DOWN_PRIORITY`: `no_parameter`を使用する.
-* `ABILITY_EFFECT_DRAW_AGGRO_IGNORE`: `no_parameter`を使用する.
-* `ABILITY_EFFECT_AVOIDANCE_COUNTER`: `no_parameter`を使用する.
-* `ABILITY_EFFECT_SURVIVE_AT_ONE_HP`: `no_parameter`を使用する.
-* `ABILITY_EFFECT_INCAPACITATED_ALLY_COUNT_STAT_CORRECTION`: `incapacitated_ally_count_stat_correction`を使用する.
-* `ABILITY_EFFECT_CASTLE_BREAK_DAMAGE_INCREASE`: `correction`を使用する.
-* 発動条件の具体値は`activation_condition.condition_value`に保持する.
-* `condition_value`と`correction_value`は`AbilityMasterData`直下には保持しない.
-
-```proto
 message TacticsStageEffectData {
   TacticsEffectID effect_id = 1; // 段階効果の対象となる効果種別.
   TacticsTarget target = 2; // 段階効果の対象.
@@ -199,45 +164,3 @@ message TacticsMasterData {
   repeated TacticsEffectData effects = 11; // タクティクスが持つ基本効果一覧.
   TacticsUseCondition use_condition = 12; // 使用要求時に満たす必要がある追加条件.
 }
-
-```
-
-加工済み`ProcessedMasterData`に含めるのは`CharacterMasterData`, `SkillMasterData`, `AbilityMasterData`, `TacticsMasterData`の4系統だけとする.
-Player, Guild, 所属, 役職等の実行時可変データは加工済みマスターデータへ保持しない.
-`FORMATION` / `FORMATION_POSITION`および`ITEM`はDatabase上の固定参照データとして保持し, `ProcessedMasterData`には含めない.
-
-## スキル固有データの共有体
-
-`SkillMasterData.effect_data`はProtocol Buffersの`oneof`を使用する.
-以下のデータは同一スキルについて同時には保持せず, 該当する効果・対象範囲に対応する1種類だけを保持する.
-
-* ランダム攻撃回数: `SkillRandomAttackData`
-* 状態異常ID・状態異常付与率: `SkillStatusAbnormalityData`
-* バフ・デバフ対象能力: `SkillStatCorrectionData`
-* HP0回復可否・回復割合: `SkillHealData`
-
-単体対象条件が`SKILL_TARGET_CONDITION_STATUS_ABNORMALITY`の場合は, `SkillTargetConditionData.status_abnormality_id`から対象とする具体的な状態異常を特定する.
-回復量はすべて割合で保持し, `SkillHealData.heal_rate`は対象の最大HPに対する割合とする. `SkillEffectID=SKILL_EFFECT_HEAL`では`heal_rate`を使用し, `SkillMasterData.correction_value`は使用しない.
-`SkillMasterData.target_side`で味方パーティ・敵パーティ・自身のどれを対象候補とするかを明示する. `SkillEffectID`と`SkillTargetRange`の許可組み合わせは「[スキル仕様](../../specification/game/skill.md)」を正とする.
-攻撃スキルでは`SkillMasterData.damage_value_type`を必須解釈し, `SKILL_DAMAGE_VALUE_TYPE_RATE`では`correction_value`を攻撃力へ乗算する補正値, `SKILL_DAMAGE_VALUE_TYPE_FIXED`では固定ダメージ値として使用する.
-
-## アビリティ固有データの共有体
-
-`AbilityMasterData.effect_data`はProtocol Buffersの`oneof`を使用する. `AbilityEffectID`と必要な効果パラメータに応じて1種類だけを保持する. 発動条件は`activation_condition`として効果共有体と独立して保持し, 発動条件値と効果値を同時に保持できる. `condition_value`および`correction_value`は`AbilityMasterData`直下には保持しない.
-
-## タクティクス特殊データ
-
-* `TACTICS_EFFECT_BP_RECOVERY`では`TacticsEffectData.uint_value`を固定BP回復値として使用する. 値は`u32`とし, 小数値を保持しない. 最大BPを超えて回復しない.
-* `TACTICS_EFFECT_HP_RECOVERY`では`TacticsEffectData.hp_recovery`を使用する. HP0全回復型はHP0のみ, 割合回復型はHP1以上のみを対象とし, いずれも最大HPを超えない. 割合回復型の段階補正は`recovery_rate + (段階レベル - 1) * increase_value`で算出する.
-* `TACTICS_EFFECT_BATTLE_SPECIAL`では`TacticsEffectData.battle_special`を使用し, 特殊効果系列, `TacticsBattleSpecialParameters`の各数値パラメータ, 発動条件を保持する. 効果対象はBattle Special内部へ重複保持せず, 外側の`TacticsEffectData.target`だけを使用する.
-* 上記以外の浮動小数点補正値は`TacticsEffectData.correction_value`を使用する.
-* 段階レベル`n`の最終効果値は`基本効果値 + (n - 1) * 1段階あたり増加値`で算出する. BP固定回復は`uint_value`と`increase_uint_value`, 通常補正・割合は`correction_value`と`increase_value`, Battle Specialは各パラメータと`battle_special_increase`を対応させて同じ式を適用する.
-* `TacticsStageEffectData.effect_index`は同じ`TacticsMasterData.effects`の0始まりIndexを指す. `effects[effect_index].effect_id`と`TacticsStageEffectData.effect_id`, `effects[effect_index].target`と`TacticsStageEffectData.target`は一致必須とし, 不一致はマスターデータ不正とする. 同一`effect_id + target`を複数持つ場合でも`effect_index`で対象効果を一意に識別する.
-
-## 効果値の合算・統合規則
-
-* スキル, アビリティ, タクティクスの効果値は加工済みマスターデータに保持する. フォーメーション補正はDatabaseの`FORMATION_POSITION`を固定参照データとして使用する.
-* スキルは同じ`SkillEffectID`系列, アビリティは同じ`AbilityEffectID`系列として扱い, 同一系列の効果値を加算する.
-* タクティクスの通常効果は同じ`TacticsEffectID`を系列として扱う. `TACTICS_EFFECT_BATTLE_SPECIAL`の各数値パラメータは`TacticsBattleSpecialType`を系列として扱う.
-* タクティクスが同じ計算項目へ複数系列から作用する場合は「[タクティクス仕様](../../specification/game/tactics.md#効果値の統合規則)」を正とし, 系列内を加算した後に異系列の結果を乗算する. 速度だけは全系列を加算する.
-* `SkillEffectID`, `AbilityEffectID`, `TacticsEffectID`, `TacticsBattleSpecialType`は相互に意味の異なる列挙型であり, 異なる種別間で列挙値を共有しない.

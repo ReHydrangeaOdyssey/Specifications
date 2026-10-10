@@ -260,6 +260,12 @@ HCA 22,050Hz・非暗号化・一部ループ・SE同時最大5, 性能閾値GPU
 * `ABILITY_EFFECT_DRAW_AGGRO`は攻撃対象リスト取得前に候補をフォーメーション内部番号順へ並べ, 1キャラクターだけを抽選してその候補だけ発動率判定する. 不成立時に再抽選しない.
 * 対象優先Abilityの2系統が同時に発動条件を満たした場合, Abilityスロット番号が小さい方だけを発動判定・適用する.
 * 同一ターン内に複数の反撃が成立しない. 複数対象攻撃で異なるキャラクターが反撃Abilityを保持する場合も, `ABILITY_EFFECT_COUNTER`と`ABILITY_EFFECT_AVOIDANCE_COUNTER`を合わせて成立回数を1回以下にする.
+* 通常攻撃回避およびELYSION回避が成立した場合も, `CheckCounterInTurn`のターン内成立済み判定を経由する.
+* 回避Abilityの`avoidance_type`に従い通常攻撃回避と状態異常回避を区別し, 後者では`StatusAbnormalityID`の一致を確認する. 分類と`status`の組み合わせが不正なMasterDataを拒否する. 沈黙の状態異常攻撃・回避を含む.
+* 通常攻撃回避・回避無効化・回避＆カウンター・反撃・反撃無効化の非保持時は, 対応する発動済み判定および発動率判定をスキップする.
+* COVER発動キャラクターのHPが対象リスト処理途中で0となっても当該行動中は残りの攻撃・状態異常・追撃を引き受け, 対象リストが空になってからHP0時Abilityを評価する.
+* 反撃で行動者のHPが0になっても現在の攻撃対象リストを最後まで処理し, 行動終了後に存在しない扱いへ切り替える.
+* DRAW_AGGROが発動しない場合に対象優先Abilityを評価し, 同時成立時はAbilityスロット順で先頭のAbilityだけを判定・適用する.
 * `ABILITY_EFFECT_FIXED_DAMAGE_INCREASE`は`SKILL_DAMAGE_VALUE_TYPE_FIXED`の攻撃スキルだけへ加算し, RATE型へ適用しない. 固定ダメージは加算後も250以上99,999以下へクランプする.
 * Ability MasterDataは`AbilityEffectID × AbilityConditionID × AbilityTarget`許可表に一致し, 表外の組み合わせをPipelineが拒否することを確認する. 戦闘不能味方人数連動補正は0～4人のMasterData entryを現在人数に応じて動的参照する.
 * `ABILITY_EFFECT_HEAL`の算出回復量が`最大HP * (1 + アビリティの回復割合)`になり, 回復量自体を最大HPで上限クランプした後に`AbilityTarget`へ適用されることを確認する. `EVERY_N_TURNS`では`turn_timing`, `INCAPACITATED`では戦闘不能確定時に発動し, 回復後HPも最大HPを超えないことを確認する.

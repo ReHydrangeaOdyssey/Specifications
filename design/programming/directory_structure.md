@@ -74,7 +74,9 @@ workspace/
 │
 ├── proto/
 │   ├── public_api.proto
-│   └── guild_battle_replay.proto
+│   ├── guild_battle_replay.proto
+│   ├── game_types.proto
+│   └── master_data.proto
 │
 └── tests/
     ├── integration/
@@ -92,7 +94,7 @@ workspace/
 - Private APIのDatabase transactionは`persistence`境界で開始し、Account/Guild/GuildBattleのApplication処理がtransaction unitを決定します。
 - GameServerの`guild_battle`からReplay/Eventを生成しても、Serialize・ファイルI/O・DB送信は`replay` Worker側へ渡します。
 - Coordinatorの`matching`と`assignment`を分離し、GameServer容量選択と対戦ペア生成を混在させません。
-- 既存`public_api.proto`と`guild_battle_replay.proto`は各対象のwire schemaの正本とします。Private APIを含むComponent間通信PayloadにもProtocol Buffersを使用しますが, 未定義のfield number・wire schemaやファイル配置は推測して追加しません。
+- `public_api.proto`と`guild_battle_replay.proto`は各対象のwire schemaの正本とします。`game_types.proto`と`master_data.proto`は, `design/shared/types.md`と`design/game/master_data.md`にfield numberが明記された共通型と加工済みMasterDataの定義を実装したものです。これら4ファイルの設計上の保存先は`design/system/`とし, 開発Workspaceでは`proto/`に対応して配置します。Private APIを含むComponent間通信PayloadにもProtocol Buffersを使用します。
 
 ## 制約
 

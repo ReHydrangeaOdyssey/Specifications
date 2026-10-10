@@ -14,6 +14,8 @@
 | `server-common` | TLS、Server共通処理等 | Server Component |
 | `auth-common` | JWT Claim等の認証共通処理 | Public API / Private API / Discord Bot |
 
+`protocol`が生成する型の入力は`design/system/public_api.proto`, `design/system/guild_battle_replay.proto`, `design/system/game_types.proto`, `design/system/master_data.proto`とする.
+
 ## 依存ルール
 
 ```mermaid
