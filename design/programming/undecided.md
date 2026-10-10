@@ -6,8 +6,8 @@
 
 ## 未決定事項
 
-- 対応iOS/Androidの最小OSバージョン, PWAインストール手順・配布URL・独自ドメイン（最小対応ブラウザはiOS Safari 16.3, Android Chrome 120で確定済み）
-- GitHub PagesとPublic APIのSite/Origin構成（`SameSite=Strict` Cookieを維持できる構成）, HTTP/2 + TLS 1.3の対象ブラウザ実通信検証
+- 対応iOS/Androidの最小OSバージョン, PWAインストール手順, 初期プロトタイプのローカルWebサーバーのIPアドレス・ポート・サーバーソフトウェア, 正式公開先（Vercel／GitHub Pages）・公開URL・独自ドメイン（初期試作でLAN内サーバーにIP直指定で接続することと最小対応ブラウザは確定済み）
+- 正式公開先とPublic APIのSite/Origin構成（`SameSite=Strict` Cookieを維持できる構成）, HTTP/2 + TLS 1.3の対象ブラウザ実通信検証
 - アセット追加シーンの戻り先・戻り操作, Safari/Chromeでのファイル/フォルダ取り込み操作, 元ファイル削除を伴う「移動」の権限と実現方式
 - Server配布の二段SHA-256辞書の取得API・配布時期・シリアライズ形式, ファイル名SHA-256入力前のUnicode正規化の扱い, OPFS内の割当情報の具体形式, 同名時の上書き規則（二段辞書のキー構造, ファイル名のUTF-8・拡張子を含む・大小文字を区別する規則, 内容SHA-256による配置先識別は確定済み）
 - OPFSセマンティックバージョン別ディレクトリの詳細なPath・検証基準・中断復旧手順, ブラウザ固有のquota/退避/削除, `cache`フォルダの具体的配置階層
@@ -37,9 +37,14 @@
 - `specification/game/guild.md`「施設レベルアップとゴールド」：ゴールド管理とレベルアップ処理の具体仕様は未確定.
 - `design/game/master_data_pipeline.md`の「具体的な数値式が仕様上未確定の効果」という包括的注意書きについて, 上記以外の具体的なゲーム効果は現在のゲーム仕様資料から特定できない. 未確認の効果を推測して列挙しない.
 
+### Client初期プロトタイプの残る詳細
+
+- `proto_type_title.png`・`proto_type_home.png`の画像内容・具体的な保存Path, テスト用ボタンの個数・ラベル・配置先・反応の詳細, プロトタイプ専用ビルド設定の具体値（タイトル表示, 仮ホームへの遷移, 複数テスト用ボタン, 非通信, LAN内ローカルWebサーバーでのIP直指定は確定済み）
+- 正式な公開先をVercel／GitHub Pagesのどちらにするか, 選択後の配信URLと設定（GitHub Pages採用時のGitHub Actions配布設計は既存文書を維持）
+
 ## 確定済みの設計事項
 
-- ClientはRust/WASMのWeb Clientとし, iPhone Safari/PWA・Android Chrome/PWAを対象とする. 配布先はGitHub Pagesを予定する. 最小対応ブラウザはiOS Safari 16.3, Android Chrome 120とし, 最小OSバージョンは未確定とする.
+- ClientはRust/WASMのWeb Clientとし, iPhone Safari/PWA・Android Chrome/PWAを対象とする. 初期プロトタイプはLAN内のローカルWebサーバーからIPアドレス直指定で配布し, 正式公開先はVercelまたはGitHub Pagesを候補として未決定とする. 最小対応ブラウザはiOS Safari 16.3, Android Chrome 120とし, 最小OSバージョンは未確定とする.
 - WebGL 2の独自スプライトバッチ描画とブラウザ`createImageBitmap()`によるPNGデコードを使用する.
 - `wasm-bindgen`, `web-sys`, `js-sys`, `wasm-bindgen-futures`をブラウザ接続に用いる. `cridecoder`はHCAデコードの採用候補とし, 実機検証まで最終確定とはしない.
 - Web Audio APIでPCM再生し, 長い音声は`AudioWorklet`と`MessagePort`によってPCMチャンクを供給する.

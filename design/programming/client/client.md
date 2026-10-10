@@ -53,7 +53,7 @@ classDiagram
 
 ## Web Client実行方式とブラウザ境界
 
-- ClientはRust/WASM（`wasm32-unknown-unknown`）を対象とし, iPhone Safari/PWAおよびAndroid Chrome/PWA上で動作させます。配布先はGitHub Pagesを予定し, 最小対応ブラウザはiOS Safari 16.3, Android Chrome 120です。対応OSの最小バージョンは未確定です。
+- ClientはRust/WASM（`wasm32-unknown-unknown`）を対象とし, iPhone Safari/PWAおよびAndroid Chrome/PWA上で動作させます。初期プロトタイプはLAN内ローカルWebサーバーからIPアドレス直指定で配信し, 正式公開先はVercel／GitHub Pagesのどちらか未決定です。最小対応ブラウザはiOS Safari 16.3, Android Chrome 120です。対応OSの最小バージョンは未確定です。
 - ブラウザとの接続には`wasm-bindgen`, `web-sys`, `js-sys`, `wasm-bindgen-futures`を使用します。Browser APIのPromiseは`wasm-bindgen-futures`を用いてRustの`Future`と連携させます。
 - 描画基盤として汎用2Dエンジンを追加せず, WebGL 2を`web-sys`経由で使用する独自スプライトバッチレンダラーとします。UI Frameworkも使用しません。
 - Rust側の共有`game-core`および既存のProtocol Buffers生成型`protocol`の責務は維持します。既存の`prost`とこれらの内部crateは, 選定資料の「5クレート」に含まれないため削除しません。
