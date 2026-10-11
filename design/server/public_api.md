@@ -115,7 +115,7 @@ Discord追加認可必須時のToken未指定は`ApiErrorResponse(API_ERROR_DISC
 #### 処理内容
 
 - `__Host-RefreshToken` CookieからRefreshTokenを取得する. Request BodyからRefreshTokenを受け付けない.
-- 設定済みClient Originと`Origin` Headerが一致することを確認し, 不一致の場合は処理しない.
+- 認証Originのトップレベルページから送信された要求であり, `Origin` Headerが設定済み認証Originと完全一致することを確認する. 不一致の場合は処理しない.
 - Private API Serverの`RefreshAccessToken`へRefreshTokenを送信する.
 - Private API ServerでRefreshTokenのcurrent/previous Hash, Session存在, 有効期限を検証する.
 - current Hash一致時はRefreshTokenをRotationし, 新しいAccessTokenとRefreshTokenを返す.
@@ -145,7 +145,7 @@ Discord追加認可必須時のToken未指定は`ApiErrorResponse(API_ERROR_DISC
 #### 処理内容
 
 - `__Host-RefreshToken` CookieからRefreshTokenを取得する. Request BodyからRefreshTokenを受け付けない.
-- 設定済みClient Originと`Origin` Headerが一致することを確認し, 不一致の場合は処理しない.
+- 認証Originのトップレベルページから送信された要求であり, `Origin` Headerが設定済み認証Originと完全一致することを確認する. 不一致の場合は処理しない.
 - Private API Serverの`Logout`へRefreshTokenを送信する.
 - Private API ServerはRefreshTokenに対応する`ACCOUNT_SESSION`を削除する.
 - Public API Serverは`__Host-RefreshToken` Cookieを削除する.

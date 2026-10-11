@@ -53,7 +53,7 @@ classDiagram
 
 ## Web Client実行方式とブラウザ境界
 
-- ClientはRust/WASM（`wasm32-unknown-unknown`）を対象とし, iPhone Safari/PWAおよびAndroid Chrome/PWA上で動作させます。正式公開先はVercel／GitHub Pagesのどちらか未決定です。最小対応ブラウザはiOS Safari 16.3, Android Chrome 120です。対応OSの最小バージョンは未確定です。
+- ClientはRust/WASM（`wasm32-unknown-unknown`）を対象とし, iPhone Safari/PWAおよびAndroid Chrome/PWA上で動作させます。配布は`https://github.com/ReHydrangeaOdyssey/ReHydrangeaOdyssey.github.io`のGitHub Pagesを予定します。iOS 14.5 / Android 11をOS下限としますが, ブラウザ下限iOS Safari 16.3 / Android Chrome 120との間でiOSは要件不整合があり, 実質的な対応下限はiOS 16.3以降です。独自ドメインは未決定です。
 - ブラウザとの接続には`wasm-bindgen`, `web-sys`, `js-sys`, `wasm-bindgen-futures`を使用します。Browser APIのPromiseは`wasm-bindgen-futures`を用いてRustの`Future`と連携させます。
 - 描画基盤として汎用2Dエンジンを追加せず, WebGL 2を`web-sys`経由で使用する独自スプライトバッチレンダラーとします。UI Frameworkも使用しません。
 - 戦闘計算は`game-core`、Protocol Buffers生成型は`protocol`、符号化・復号は`prost`を使用する。
@@ -77,25 +77,26 @@ OPFSのPNG → File / Blob → createImageBitmap() → WebGL 2 texImage2D()
 - HCAからPCMへ変換した音声をWeb Audio APIへ渡します。短いSE/ボイスでは必要に応じて全体を`AudioBuffer`へデコードして再利用します。
 - 長いBGM/ボイスはOPFSから必要な圧縮ブロックを読み, 小容量PCMバッファへ逐次デコードします。`AudioWorkletNode`へ`MessagePort`経由でPCMチャンクを供給し, `AudioWorkletProcessor`の小容量キューから再生します。
 - `AudioWorkletProcessor.process()`内でHCAデコードや大容量のメモリ確保を行いません。制御側または専用Workerが先読みし, 音声出力側と役割を分離します。
-- HCAはサンプリングレート22,050Hz, 暗号化なしとし, 一部音源でループします。SEの同時再生上限は5音です。音源のループ区間, チャンネル数は個別ファイルで確認します。PCM先読み量は, デコード時間・OPFS読み出し遅延・音声処理のスケジューリング遅延が未計測のため最適値を算出できず, 実機計測で決定します。`SharedArrayBuffer`を利用する方式は初期実装では採用しません。
+- HCAは22,050Hz・非暗号化とし, 辞書で指定された音源だけ指定ループ区間を再生します。SEの同時再生上限は5です。チャンネル数は各HCAのメタデータから読み, 利用可能なチャンネル数の上限は実機検証で定めます。長尺音声のPCM先読みは初期500ms, 残り250ms到達前に補充する暫定設定を採用し, 欠音・メモリ使用・I/O遅延から調整します。`SharedArrayBuffer`は初期実装では使用しません。
 - HCAのiPhone Safari/WASMでのコンパイル・正しい再生・ピークメモリは未検証です。`cridecoder`は検証合格を最終採用条件とする候補であり, 動作確認済みとは記載しません。
+- `cridecoder`リポジトリはMIT Licenseを掲示していますが, バージョン固定した配布物に含まれる全ての推移的依存ライセンスの確認と, 音源・HCAフォーマットの権利関係は別途確認します。単にデコード可能であることを再配布許諾の根拠としません（参照: https://github.com/seiunx-dev/cridecoder）。
 
 ### OPFSアセット管理
 
-- タイトル画面の「アセットの追加」から専用シーンへ遷移し, ユーザーが選んだPNG/HCAを取り込みOPFSへ保存します。端末別ファイル選択方式と元ファイル削除を伴う移動の可否は未確定です。GameServerからPNG/HCAファイル本体は配信しませんが, ファイル名SHA-256を第1キー, 内容SHA-256を第2キー, 対応配置先パスを値とする二段辞書はServerから配布されます。
-- OPFSのアセットバージョンにはセマンティックバージョニングを使用し, バージョン別ディレクトリを設けます。新バージョンを検証してから使用先を切り替え, 取り込み中断から回復できる状態を保持します。アプリ独自の容量・保存期間・画像解像度上限は設けず, ブラウザ固有quotaや退避・削除条件は別途検証します。
-- OPFSの初期実装は非同期APIを使用します。`FileSystemSyncAccessHandle`はDedicated Worker上で必要なランダムアクセスを計測し, 性能向上が実装・互換性・安定性上の負担を上回る場合のみ採用する条件付き候補です。採否は未確定です。
+- タイトル画面の「アセットの追加」からPNG/HCAをファイル単位またはディレクトリ単位で一括取り込みします。コピー/移動を選択可能にし, 移動時は「ゲーム内へファイルの移動はゲーム終了時に消える可能性がある」と表示します。元ファイル削除権限が得られる端末では保存成功後のみ削除し, 削除機能がないブラウザではコピーのみ利用可能とします。二段辞書は`https://github.com/ReHydrangeaOdyssey/AssetDictionary`からLogin完了時に取得し, GameServerから辞書を配布しません。
+- OPFSの基本構造は`./game_info.json`（現在・前回のバージョン）, `./assets/<something>`, `./cache/<something>`とします。通常のアセットPathは維持し, 配置変更が必要なバージョンでだけ`game_info.json`を照合して差分移行を実行します。`game_info.json`の検証・必要な差分処理でエラーがなければ更新成功と判定します。中断時の自動再開は要件としません。
+- OPFSでは非同期APIと`FileSystemSyncAccessHandle`を利用可能な処理で選択します。非同期のほうが効率的な処理には非同期APIを使い, 同期APIはWorker内でのアクセスに限定します。用途別の性能・互換性測定は継続します。
 - 圧縮HCAファイル全体と全体PCMを同時に常駐させません。デコード済みPCM, GPU資源, WASMメモリは用途別に管理し, 不要な`AudioBuffer`の参照を解除します。
-- アセット取り込み時は選択されたディレクトリの配下を再帰的に探索し, 対象となるPNG/HCAファイルについて拡張子を含むファイル名をUTF-8でバイト列化し, SHA-256ハッシュ値を算出する. 英字の大小文字は区別する. Server配布辞書はファイル名SHA-256をキー, 内容SHA-256をキー・対応配置先パスを値とする辞書を値に持つ二段辞書とする. ファイル名SHA-256に対応する二段目の辞書が1件だけの場合はファイル内容のSHA-256算出を省略し, そのエントリの配置先パスを採用する. 二段目に複数の候補がある場合はファイル内容のSHA-256を算出し, 二段目の辞書のキーと照合して配置先を特定する. これ以外のハッシュ衝突に対する判定・回避処理は設けない. Unicode正規化の扱いは未確定とする. ファイル名SHA-256が辞書に登録されていない場合は, ユーザーが`assets`ディレクトリ配下の任意の配置先を選択する. 複数候補で内容ハッシュが一致しない場合と再取込の上書き規則は未確定とする.
-- PNG/HCA本体とキャラクター画像割当情報はOPFSへ保存します。ファイル名のSHA-256ハッシュ値とServer配布辞書を対応させて自動割当し, 保存済み情報をOPFSから復元します。Clientの自動削除は行わず, ユーザーがOPFSを明示的に消した場合に削除します（ブラウザのquota/ストレージ消去を除きます）。キャッシュクリアはOPFSの`cache`フォルダのファイルだけを対象とします。辞書取得API・配布時期・シリアライズ形式, ファイル名ハッシュのUnicode正規化, 同名ファイルの上書き規則は未確定です。
+- アセット取り込みでは拡張子付きファイル名UTF-8のSHA-256と, 必要な場合の内容SHA-256を辞書に照合し, 一致する辞書Pathへ保存します。一致しない場合はユーザー素材として区分「BGM」「SE」「Voice」「Character」「SD Character」「Character Icon」の選択を求めます。カテゴリと配置先Pathの対応は未確定です。既存Pathへの上書きはユーザー確認を必須とし, 一括上書き/一括キャンセルを選択できます。Unicode正規化方式は未確定です。
+- PNG/HCAは辞書Pathに基づきOPFSの`./assets/`へ保存・復元します。タイトル画面からのアセット削除では任意の素材を個別・一括で削除できます。自動的な容量調整削除はせず, 容量不足時はゲームを利用不可にして削除操作を有効にします。キャッシュクリアは`./cache/`のみです。辞書のファイルURL・形式, ユーザー素材のPath, Unicode正規化は未確定です。
 
 ### 依存・ビルド・検証条件
 
 - Client用ブラウザ連携の選定crateは`wasm-bindgen`, `web-sys`, `js-sys`, `wasm-bindgen-futures`および採用検証を要する`cridecoder`です。`web-sys`は使用API単位でfeaturesを指定します。
 - 描画用の`image`, `png`, `pix`, `wgpu`, `glow`, 汎用2Dゲームエンジン, オーディオ出力専用Rustライブラリは採用しません。
 - `Cargo.lock`を保存して依存を固定し, `cargo tree --target wasm32-unknown-unknown`で推移的依存を確認します。`cargo build --target wasm32-unknown-unknown --release --locked`でビルドを検証します。
-- Release設定候補は`opt-level = 3`, `lto = "fat"`, `codegen-units = 1`, `panic = "abort"`, `strip = "symbols"`とする。`opt-level = "z"`との圧縮後WASMサイズ・HCAデコード時間・初回ロード時間の比較を行い, 本番設定の最終値は検証後に定めます。
-- 実機では40キャラクターと代表的エフェクトの描画, iOS長時間動作, 最大同時SE5, BGM逐次再生, HCAループ・再生遅延・欠音, 依存ライセンスを検証します。目標閾値はGPU負荷80%以下, 実行時メモリ2GB以下, FPS30以上, WASMサイズ500MB以下です。測定方法・対象機種・メモリの対象範囲・WASM圧縮前後は未確定で, 実測結果は未記録です。
+- Releaseビルドは当面`cargo build --release --locked --target wasm32-unknown-unknown`とし, `Cargo.lock`を固定します。CIで非圧縮`.wasm`ファイルサイズを測定し, 50MBを超えた段階で最適化を検討します。500MBは既存の配布サイズ合否上限として維持し, 50MBの最適化検討ラインと区別します。
+- 実機では40キャラクターと代表的エフェクトの描画, iOS長時間動作, 最大同時SE5, BGM逐次再生, 辞書指定HCAループ・欠音, 依存ライセンスを検証します。合否目標はFPS30以上（初期10秒除外後の連続60秒平均）とCI測定の非圧縮WASM500MB以下です。GPUとRAMは統一計測方式がないため合否閾値に使用せず参考値として測定します。
 
 ## ログイン・サーバー未接続時
 
@@ -105,11 +106,11 @@ OPFSのPNG → File / Blob → createImageBitmap() → WebGL 2 texImage2D()
 
 ## タイトル画面のキャラクター画像割り当て
 
-- タイトル画面にキャッシュクリアとアセット追加の操作を提供します。
-- アセット追加ではプレイヤーが選択した画像をゲーム内キャラクターへ割り当てます。
+- タイトル画面にキャッシュクリア・アセット追加・アセット削除の操作を提供します。容量不足でゲーム操作不可の場合もアセット削除は可能とします。
+- アセット追加ではプレイヤーが選択した画像・音声を辞書のPathへ自動割当し, 辞書に一致しない素材は区分選択で配置します。
 - 画像・UVデータはClient側資産とし、Server用`ProcessedMasterData`の対象へ追加しません。
-- PNG以外の画像は受け付けません。画像・音声本体とキャラクター割当情報の永続化先はOPFSとし, Server配布のファイル名SHA-256ハッシュ辞書を使用した自動配置と保存情報の復元を行います。
-- アプリ独自の容量・解像度・保持期間上限と自動削除は設けません。キャッシュクリアはOPFS内の`cache`フォルダのみ対象とします。
+- PNG以外の画像は受け付けません。画像・音声本体は`./assets/`へ保存し, 既定の二段SHA-256辞書から配置Pathを取得します。辞書と不一致の素材はユーザー区分選択とします。
+- アプリ独自の容量・解像度・保持期間上限を設けません。容量不足は通知し, 解消までゲーム操作を不可にします。任意素材の個別・一括削除を提供し, キャッシュクリアは`./cache/`だけを削除します。
 
 ## 認証状態
 
@@ -213,9 +214,9 @@ Seedが`0`かどうかだけでランダム要素の有無を判定しません�
 
 - 既存の`web-sys`, `wasm-bindgen-futures`, `js-sys`からブラウザ標準`fetch()`を呼び出し, `prost`/`protocol`でRequest/ResponseのProtocol Buffersを処理します。`SubscribeGuildBattleUpdates`は`ReadableStream`を逐次読み, chunk境界を跨ぐvarint長prefixとMessageを復元します。HTTP/2/TLS 1.3はブラウザとServerによるネゴシエーションで, Client JavaScriptから強制しません。
 - WebAssemblyおよびJavaScriptはブラウザ内で実行され, API要求にはブラウザのOrigin・CORS・Cookie制約が適用されます。WASM/JavaScript配布後の通信もPublic API Serverへ行い, GameServerへの直接接続へ変更しません。
-- Refresh/LogoutなどCookieを必要とするCross-Origin要求は`credentials: include`とし, Server側は既存のOrigin検証, 許可Origin限定のCORS, `Access-Control-Allow-Credentials`を適用します。ただし`SameSite=Strict`はCross-Siteでは送信不可です。
-- GitHub Pages標準`github.io`と別SiteのPublic APIを組み合わせた構成は既存Cookie規則と両立しません。同一Siteとなる配布用独自ドメイン等の配置案は検討対象で, 採用するドメイン名は未確定です。`__Host-RefreshToken`のHost-only/HttpOnly/Secure/Strict制約を緩和しません。
-- 一般的なBrowser File Picker/`<input type="file">`から取り込み, OPFSへ保存できますが, OPFSはOSのファイル管理UIへ通常のディレクトリとして公開されません。元ファイルの削除を伴う移動やディレクトリ一括選択は端末別の対応を確認する必要があります。
+- Refresh/Logout/LoginなどCookieを必要とするRequestは認証Originのトップレベルページ内で同一Originとして実行します。GitHub Pages上の静的ClientからCookieを含むCross-Site Fetchは行わず, 一度限りの認可コードとPKCE S256を使用したコード交換でAccessTokenを取得します。詳細は`design/system/network.md`とします。
+- `__Host-RefreshToken`のHost-only/HttpOnly/Secure/SameSite=Strict制約を維持し, 配布Originと認証Originの別Site配置に対応するトップレベル遷移方式を採用します。認証Origin, 戻り先URI, 認可コード交換のwire schemaは未確定です。
+- 個別ファイル・フォルダ一括取り込みに対応するUIを設け, ブラウザの対応APIを判定します。元ファイルの削除権限を取得できた場合のみ「移動」を提供します。SafariではブラウザAPI制約により元ファイル削除の提供ができない場合があり, その場合はコピーを利用します。
 - `cridecoder`の採否は`wasm32-unknown-unknown`ビルド、iPhone Safariでの22,050Hz非暗号化HCA・ループ再生・SE5音同時再生・長時間再生時の欠音・メモリ、および依存ライセンス検証の結果で決定します。
 
 ### 外部情報源
@@ -236,7 +237,7 @@ Seedが`0`かどうかだけでランダム要素の有無を判定しません�
 - Server正本の状態とClientの表示状態は再同期する。
 - OPFSの保存容量・データ保持はブラウザの制限に従う。
 - アセット取り込みとHCA/WASMの動作性能は対象実機で検証する。
-- `SameSite=Strict` Cookieを使用するため, Client配布先とPublic APIのSite構成が認証条件を満たす必要がある。
+- Cross-SiteのCookie送受信には依存せず, 認証Origin上の第一者CookieとPKCE認可コード交換で静的Clientの認証を行います。
 
 ## 参照資料
 

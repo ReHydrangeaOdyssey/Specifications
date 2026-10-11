@@ -4,7 +4,7 @@
 
 ClientはRust/WebAssemblyをブラウザ上で実行する静的Webアプリケーションとする。描画にはWebGL 2を使用する。
 
-対象ブラウザはiOS Safari 16.3以降、Android Chrome 120以降とする。
+対応OS下限は2021年4月30日時点の安定版に基づきiOS 14.5 / Android 11とする。対象ブラウザの既定下限はiOS Safari 16.3以降、Android Chrome 120以降とする。iOS 14.5とiOS Safari 16.3は併存できないため、実質的なiOS動作対象はSafari 16.3を使用できるiOS 16.3以降となる。iOS 14.5の実動作をサポートするにはブラウザ要件の再決定が必要であり、現時点では未解決とする。
 
 ## 画面方向と可変レイアウト
 
@@ -29,12 +29,12 @@ ClientはRust/WebAssemblyをブラウザ上で実行する静的Webアプリケ�
 
 - Web Audioの再生開始と停止中の`AudioContext`の再開は、ブラウザの自動再生制約に従いユーザー操作を契機に実施する。既定のHCA→PCM→Web Audio構成は維持する。
 - OPFSは同一Origin内のアプリ専用保存域とし、HTTPSの安全な文脈で利用する。保存可能容量はブラウザに依存し、空き容量照会値は近似値として扱う。ブラウザの容量超過・データ消去・非永続化の可能性をUI上で取り扱う。
-- ユーザーの元ファイルを自動削除しない。アセット追加の端末側ファイル選択UIはブラウザ互換性を確認したうえで決定し、既存の再帰探索要件を満たすことを検証する。
+- ファイル選択・ディレクトリ選択の両方を提供する。元ファイルの移動は端末が明示的な削除権限を提供した場合のみ実行し, OPFSへの保存後に削除する。元ファイル削除が利用できない場合はコピーに限定し, ブラウザ互換性を検証する。
 
 ## 配布
 
 - 公開対象はHTML、ES Module JavaScript、WASM、CSS、Manifestおよび試験に必要な静的アセットとし、GameServer・API Serverの処理や秘密鍵を配布しない。
-- 正式公開先はVercelとGitHub Pagesから選択する。GitHub Pages採用時はGitHub ActionsでReleaseビルド・検証・HTTPS静的配布を実行する。静的資源は相対Pathで参照する。
+- 静的配布は`https://github.com/ReHydrangeaOdyssey/ReHydrangeaOdyssey.github.io`を使用するGitHub Pagesを予定する。独自ドメインの採否と最終公開URLは未決定とする。GitHub ActionsでReleaseビルド・検証・HTTPS静的配布を実行する。静的資源は相対Pathで参照する。
 - JavaScriptのES Moduleと`wasm-bindgen --target web`による生成物をブラウザから読み込む。WASMロード処理の成功後に描画初期化する。
 - PWA用Manifestは配布できる構成とする。`start_url`と`scope`は公開ルート内の相対URLで指定する。
 - PWAインストールの操作案内はiOS Safariでは共有メニューの「ホーム画面に追加」、Android Chromeではメニューの「アプリをインストール」または「ホーム画面に追加」とする。実際の項目名称・表示可否は端末やブラウザバージョンによって変わるため実機で検証する。アプリ名・アイコン素材は正式名称の確定後に指定する。
@@ -49,8 +49,8 @@ ClientはRust/WebAssemblyをブラウザ上で実行する静的Webアプリケ�
 ## 制約
 
 - Clientのソースリポジトリは`https://github.com/ReHydrangeaOdyssey/Client.git`、純粋なゲームロジックは`https://github.com/ReHydrangeaOdyssey/GameLogic.git`、Serverは`https://github.com/ReHydrangeaOdyssey/Server.git`とする。
-- 正式公開先（Vercel／GitHub Pages）・公開URL・独自ドメイン・APIとのSite/Origin構成は未確定とする。Public APIを使う段階では既存の`SameSite=Strict` Cookie要件を優先する。
-- 最小対応OSバージョン、実測による描画解像度上限、音声・保存容量の実機検証結果は別途確定する。
+- 配布リポジトリは上記GitHub Pagesを予定する。独自ドメイン、Public APIのHTTPS Originおよび認証画面の正式URLは未確定とする。静的配布OriginとAPI Originが異なる場合の認証は`design/system/network.md`の第一者Cookie・認可コード方式に従う。
+- iOS 14.5とSafari 16.3の動作下限不整合、実測による描画解像度上限、音声・保存容量の実機検証結果は別途確定する。
 
 ## 参照資料
 

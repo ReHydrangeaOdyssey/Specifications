@@ -48,6 +48,8 @@ Cookie条件は以下です。
 
 Session有効期間は24時間で、RefreshしてもSessionの元の有効期限自体を延長しません。
 
+静的ClientとPublic APIが別Siteになる場合, Cookieに依存するLogin/Refresh/Logoutは認証Originをトップレベルで開いた第一者コンテキストから呼び出す. アクセスTokenのClientへの返却は一度限りの認可コード+PKCE S256交換を使用する. Cookie属性・Sessionの24時間固定期限は変更しない. 詳細は`design/system/network.md`に従う.
+
 ## Login
 
 ```mermaid

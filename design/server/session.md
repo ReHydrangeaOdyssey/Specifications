@@ -24,6 +24,8 @@
 * AccessTokenの期限は5分とする.
 * 新規Login, Logout, Discord Role喪失またはRefreshToken再利用検知でRefresh Sessionを無効化した場合でも, 既に発行済みのAccessTokenは自身の`exp`到達まで最大5分間有効とする. AccessTokenごとの失効確認のためにPublicAPIからDatabaseへ問い合わせる方式とはしない.
 
+Cross-Site配布時の認証は`design/system/network.md`の「静的Clientと認証Originが異なる場合の認証手順」に従う. 既存のRefresh Session回転・期限・Cookie属性は変更しない. 認証APIのClient側呼出元を表す後続のシーケンス図は認証Origin上の画面による第一者要求を論理的に示すものであり, 別Siteの静的配布ClientがStrict Cookieを付けて直接呼ぶことを意味しない.
+
 ## Discord Bot設定
 
 | 設定 | 内容 | 現在の運用値 |
@@ -277,7 +279,7 @@ sequenceDiagram
 ```
 
 * RefreshToken更新ではRefresh Sessionの24時間期限を延長しない.
-* `RefreshAccessToken`は設定済みClient Originと`Origin` Headerが一致する要求だけを処理する.
+* `RefreshAccessToken`は設定済み認証Originと`Origin` Headerが一致する第一者Cookie付き要求だけを処理する. 別Siteの静的Clientへは認可コード+PKCE交換でAccessTokenを渡す.
 
 ## Logout
 
@@ -300,7 +302,7 @@ sequenceDiagram
     Client->>Client: AccessToken削除
 ```
 
-* `Logout`は設定済みClient Originと`Origin` Headerが一致する要求だけを処理する.
+* `Logout`は設定済み認証Originと`Origin` Headerが一致する第一者Cookie付き要求だけを処理する.
 * Logout後も既に発行済みのAccessTokenは自身の`exp`到達まで最大5分間有効とする.
 
 ## 騎士団戦参加時のSession確認

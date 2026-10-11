@@ -27,7 +27,7 @@ Application ComponentがPrivate APIを迂回してDBへ直接接続しません�
 |---|---|
 | Account / Session | `ACCOUNT`, `PLAYER`, `ACCOUNT_SESSION`, Discord token usage |
 | Guild | `GUILD`, `GUILD_MEMBER`, Join Application, Invitation |
-| Master / Player fixed state | Master table、Formation、Item、`PLAYER_ITEM`、`PLAYER_ITEM_DAILY_GRANT`等 |
+| Master / Player fixed state | Master table、Formation、Item、`PLAYER_ITEM`等 |
 | Arena | Arena Party |
 | GuildBattle Coordination | `GUILD_BATTLE`, Excluded Guild, Assignment |
 | GuildBattle Party | Party / Character / Follower / Ability |
@@ -48,12 +48,6 @@ AccountとPlayerを同一Transactionで作成します。片方だけを永続�
 人数上限、Membership Lock、Leader/Subleader条件をTransaction内の現在状態で再確認します。
 
 Guild移動により旧GuildのLeader/Subleader状態変更が必要な場合も同じ整合性境界で扱います。
-
-### BP50回復薬の日次配布
-
-通常Playerの所持数増加と`PLAYER_ITEM_DAILY_GRANT`へのJST対象日付の配布実績登録を, 同一Transactionで実行します。`(player_id, target_date)`の一意性を利用して同日二重配布を防止します。配布数は1日10個であり, 翌日のJST午前0時から新しい日次配布の対象日付になります。
-
-配布時刻は毎日JST 0:00です。具体的な起動ジョブ, 対象Playerの抽出時刻, 未配布日の取扱い, 対象ItemIDの確定方法, GameServerが騎士団戦中に保持するItem残数および`UpdatePlayerItem`の絶対所持数更新との同期方式は未確定であり, この設計では固定しません。通常の最終騎士団戦は23:00開始・23:30終了ですが, 処理遅延や復旧等による競合の可能性は別途評価します。
 
 ### StartGuildBattle
 

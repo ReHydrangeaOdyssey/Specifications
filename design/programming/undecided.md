@@ -2,26 +2,33 @@
 
 ## 未決定事項
 
-- 対応iOS/Androidの最小OSバージョン, PWAの端末別インストール検証, 正式公開先（Vercel／GitHub Pages）・公開URL・独自ドメイン
-- 正式公開先とPublic APIのSite/Origin構成（`SameSite=Strict` Cookieを維持できる構成）, HTTP/2 + TLS 1.3の対象ブラウザ実通信検証
-- アセット追加シーンの戻り先・戻り操作, Safari/Chromeでのファイル/フォルダ取り込み操作, 元ファイル削除を伴う「移動」の権限と実現方式
-- Server配布の二段SHA-256辞書の取得API・配布時期・シリアライズ形式, ファイル名SHA-256入力前のUnicode正規化の扱い, OPFS内の割当情報の具体形式, 複数候補で内容SHA-256が一致しない場合の処理, 同名時の上書き規則
-- OPFSセマンティックバージョン別ディレクトリの詳細なPath・検証基準・中断復旧手順, ブラウザ固有のquota/退避/削除, `cache`フォルダの具体的配置階層
-- `cridecoder`のiPhone Safari/WASM上のビルド・再生・メモリ・ライセンス監査を経た最終採否
-- 22,050Hz HCAのループ開始/終了位置とチャンネル数, 最適PCM先読み量, 実機性能・欠音検証
-- GPU負荷80%, メモリ2GB, FPS30, WASMサイズ500MBの測定方法・範囲・評価端末・測定時間, 本番Release最適化設定の最終値
-- `FileSystemSyncAccessHandle`の非同期API比較計測を経た最終採否
-- Public APIのHTTP Method / HTTP Path, `public_api.proto`へのgRPC Service追加の採否
-- Private APIおよびその他Component間APIの未定義HTTP Method / HTTP Path, Protocol Buffers field number・wire schema・正本ファイル
-- Discord Botの本番配置先
-- GuildBattleCoordinatorが内部APIを受信する場合のServer構成
-- 推奨初期値として記載された運用値の最終運用値
-- 騎士団の武器庫/食糧庫/鍛冶屋補正を既存戦闘計算へ入れる位置・順序・スナップショット反映段階
-- 酒場最大3回の使用回数の集計主体（Player/Guild等）, 最大BP上限の取扱い, 酒場回復のGameServer API・RequestSequence・永続化方式
-- 施設レベルアップ用ゴールドの所持主体・初期値・保有量管理, 施設ごとの消費量・権限・更新API/処理方式
-- BP50回復薬の日次0:00配布の実行主体とJob/API, 対象Playerの確定タイミング, 未配布日の取扱い, 対象ItemIDの特定方式
-- 日次配布と騎士団戦中のGameServer所持数スナップショット・`UpdatePlayerItem`絶対所持数更新が異常時・遅延時等に重なる場合の同期方式
-- 進行中GuildBattleをGameServer異常終了後に別GameServerへ自動復旧する方式
+回答済みの変更は各個別仕様・設計に反映した. ここではユーザー回答だけで確定できない内容と, 今回回答対象外の既存項目だけを残す.
+
+- [U-01] iOS 14.5というOS下限とiOS Safari 16.3というブラウザ下限の併存可否（現状の実質下限はiOS 16.3）.
+- [U-02] iOS/Androidの対象OS・ブラウザごとのPWAインストール操作の実機動作・再起動後の起動可否等の検証結果.
+- [U-03] GitHub Pagesの正式URL・独自ドメイン採否, 公開Public APIのHTTPS Origin.
+- [U-04] 認証Origin/戻り先URI, 一度限りの認可コード交換APIのMethod/Path/Protocol Buffers schema等の実装契約. 方式は`design/system/network.md`に確定.
+- [U-05] HTTP/2 + TLS 1.3の対象ブラウザでの実通信検証結果.
+- [U-07/08] 最小対応ブラウザを含む各端末でのフォルダ一括選択・元ファイル削除権限と実装可否（未対応環境はコピーのみ）.
+- [U-09] AssetDictionaryリポジトリ内の辞書配布ファイルURL, シリアライズ形式, 更新時の整合検証.
+- [U-10] ファイル名SHA-256の入力文字列に適用するUnicode正規化方式.
+- [U-11/12] ユーザー用素材区分から具体的Pathへの対応, 任意素材に関する割当メタデータの形式.
+- [U-14/15] `game_info.json`の具体的キー・差分移行定義.
+- [U-19] `cridecoder`のiPhone Safari/WASM実機動作・依存ライセンス検証後の最終採否.
+- [U-20] HCAの対応チャンネル数の上限と辞書におけるループ区間のデータ形式.
+- [U-21] 暫定先読み500ms/補充250msの実機欠音評価結果（数値は最終最適値ではない）.
+- [U-22] 実機FPS試験に使用する具体端末, 実測結果. GPU/RAM利用率は合否閾値として使用しない.
+- [U-24] OPFSの非同期APIとWorker内同期APIの用途別比較結果.
+- [U-25] Public APIのHTTP Method / Path.
+- [U-26] `public_api.proto`へのgRPC Service追加の採否.
+- [U-27/28] Private APIなどComponent間通信のMethod / Path, Protocol Buffers field number・wire schema・正本ファイル.
+- [U-29] Discord Botの本番配置先（保留）.
+- [U-30] Coordinator運営用APIの具体的Listener・Port・Method/Path・wire schema（mTLS認証と通信経路のみ既定）.
+- [U-31] `design/operation/operation.md`の推奨初期値の最終運用値.
+- [U-32/33] 騎士団の武器庫/食糧庫/鍛冶屋補正を既存戦闘計算へ入れる位置・順序・スナップショット反映段階.
+- [U-34/35/36] 酒場最大3回の集計主体, 最大BP上限, 回復操作API・RequestSequence・永続化方式.
+- [U-37/38] 施設レベルアップ用ゴールド所持主体・初期量・保有量, 消費量・権限・更新API/処理.
+- [U-44] 進行中GuildBattleのGameServer異常終了後の別GameServerへの自動復旧方式.
 
 ## 参照資料
 

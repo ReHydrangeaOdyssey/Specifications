@@ -9,14 +9,14 @@ Rust/WASM製Web Clientの静的配布を定義する。
 - 静的Webサーバーの公開成果物ルートに`index.html`を配置する。HTMLは`viewport`設定、ゲーム用Canvas、初期化状態・エラー表示領域、ES Module起動処理への参照を持つ。
 - JavaScript起動処理は`wasm-bindgen --target web`の生成したES Moduleを読み込み、WASM初期化成功後にRust側のClientを起動する。
 - HTML、JS、WASM、CSS、Manifest等の参照URLには配布ルートからの相対Pathを使用し、GitHub Pagesのプロジェクトサイト（`/<repository>/`）でも配布できる構成にする。各ファイルの配置が変わる場合は、ビルド出力の内部参照も同じ公開ルートを基準にする。
-- 正式公開先のVercel／GitHub Pagesの選択は未確定とする。いずれの静的配信先にもゲーム状態を更新するサーバー処理や認証秘密情報を置かない。
+- 静的配布先は`https://github.com/ReHydrangeaOdyssey/ReHydrangeaOdyssey.github.io`のGitHub Pagesを予定する。独自ドメインと実際の公開URLは未確定とする。静的配布先へゲーム状態を更新するサーバー処理や認証秘密情報を置かない。
 
 ## ビルドと公開
 
 1. Rustの依存を`Cargo.lock`で固定し、`wasm32-unknown-unknown`ターゲットへReleaseビルドする。
 2. Rust crateの`wasm-bindgen`と対応するCLIのバージョンを揃え、`--target web`形式のJavaScript glueとWASMを生成する。
 3. HTML、JS、WASM、CSS、およびその段階で利用するManifest・静的ファイルを1つの公開ディレクトリへ収集する。GitHub Pagesを採用する場合は`.nojekyll`も配置する。
-4. 正式公開先をGitHub Pagesに決定した場合は、GitHub Actions上のビルド・静的参照検証、Pages向けArtifact Upload、`actions/deploy-pages`によるHTTPS配信を使用する。
+4. GitHub Pages向けのGitHub Actionsビルド・静的参照検証、Pages向けArtifact Upload、`actions/deploy-pages`によるHTTPS配信を使用する。
 
 ## リポジトリ
 

@@ -66,9 +66,20 @@ flowchart TD
 * ClientとPublic API Server間の通信はTLS 1.3を必須とする. `LoginID`, `Password`, `AccessToken`, `RefreshToken`, `DiscordAuthorizationToken`を平文transportで送信しない.
 * Public API Serverは接続を可能な限り再利用し, API要求ごとにTLS接続を新規作成する方式とはしない.
 * RefreshTokenは`Secure`, `HttpOnly`, `SameSite=Strict`, `Path=/`, Domain属性なしの`__Host-RefreshToken` CookieだけでClientへ保持させる. Response BodyへRefreshTokenを返さない.
-* `RefreshAccessToken`および`Logout`では設定済みClient Originと`Origin` Headerの一致をPublic API Serverで確認する. CORSを使用する構成ではCredential許可Originを設定済みClient Originだけに限定し, wildcardを使用しない.
+* Cookieを伴う`RefreshAccessToken`および`Logout`等は認証Origin上の第一者ページから呼び, Public API Serverは`Origin` Headerが設定済み認証Originと完全一致する場合だけ受け付ける. Cookieを伴う認証APIのCross-Site CORS Credential許可は行わない. Cookieを伴わない通常API・認可コード交換のCORSは設定済み静的Client Originだけに限定し, wildcardを使用しない.
 * Clientは選定された静的配布先からJavaScript/WASMを取得してブラウザで実行し, API要求はブラウザのFetch APIを介してPublic API Serverへ送信する. WASM実行への移行は, 通信先Originに関するCORS・Cookieの制約を変更しない. GameServerはClientから直接接続させない.
-* Clientの正式配布先はVercelまたはGitHub Pagesから未決定とする. GitHub Pagesを採用し, 通常の`github.io`と別SiteのPublic APIを組み合わせた場合は`SameSite=Strict` Cookieが送信されない. `__Host-RefreshToken`の属性は変更しない. Client配布ドメインとPublic APIドメインは同一Siteとなる構成など, 既存認証条件と両立する方法を別途決定する. Web Clientはブラウザ標準Fetch APIで通信し, HTTP/2/TLS 1.3はブラウザとServerがネゴシエーションするため接続時に検証する. ブラウザ側でTLSバージョンを手動指定する仕様は設けない.
+* Clientの静的配布は`https://github.com/ReHydrangeaOdyssey/ReHydrangeaOdyssey.github.io`のGitHub Pagesを予定し, 独自ドメインとPublic API Originは未決定とする. 異なるSite上のPublic APIと接続する場合は下記のトップレベル認証画面・一度限りの認可コード方式を用い, `SameSite=Strict` CookieをCross-Site要求へ送る方式を採用しない. HTTP/2/TLS 1.3はブラウザとServerがネゴシエーションし, 接続結果を検証する.
+## 静的Clientと認証Originが異なる場合の認証手順
+
+* GitHub Pagesの静的ClientとPublic API ServerがCross-Siteになる構成では、`__Host-RefreshToken`をCross-Site `fetch()`で送受信しない。Cookieの`Secure`, `HttpOnly`, `SameSite=Strict`, `Path=/`, Domain属性なしを維持する。静的Clientが直接送る通常API要求は従来どおりAccessTokenを認証情報として使用する。
+* アカウント作成・Login・SessionからのAccessToken再取得・LogoutなどRefresh Sessionを操作する画面処理は、HTTPSのPublic API認証Originをトップレベルのブラウザページとして開き、当該認証Originのページから同一Originで既存の`CreateAccount`, `Login`, `RefreshAccessToken`, `Logout`を呼ぶ。クロスサイトから認証Originへ最初に遷移した要求に`SameSite=Strict` Cookieが付くことは期待せず、認証Originの画面を開いた後の同一Site要求でSessionを確認する。
+* 静的ClientへのAccessToken受け渡しは一度限りの短寿命「認可コード」経由とする。Clientは遷移前に暗号学的乱数による`state`・PKCE `code_verifier`を生成し、S256の`code_challenge`と登録済みの正確なClient戻り先URIを認証Originへ渡す。認証Originは認証・Session検証成功後、使用済みにできる認可コード（有効期限60秒以内）を発行し、そのコードを当該`state`とともに登録済み戻り先URIへ返す。AccessToken/RefreshToken/Password/DiscordAuthorizationTokenをURLへ載せない。
+* 静的Clientは戻り後に`state`の一致を検証してから、認可コードと`code_verifier`をCookieなしのCross-Origin Protocol Buffers APIへ送信する。Public APIは認可コードの未使用・有効期限・戻り先URI・S256照合を一度の原子的処理で検証し、使用済みにした場合に限りAccessTokenを返す。AccessTokenは既存どおりClientプロセスメモリにのみ保持する。Clientは戻り時のコードをURLから速やかに除去する。
+* 認証コードの保管先、認証用画面の具体Path、認可コード交換のHTTP Method/Path・Protocol Buffers field number、認証Origin/戻り先の運用値は追加の実装契約として未確定とする。認可コードには推測可能な値を使用せず、再利用を許可しない。Client戻り先URIは完全一致の許可リストとし、任意URIへのリダイレクトを許可しない。`state`・PKCE verifierはタブ内の遷移を跨いで照合できる形で一時保持し、AccessTokenやRefreshTokenをWeb Storageへ保存しない。
+* Cookieを伴う認証Origin内の状態変更Requestは既存の正確なOrigin検証とCSRF対策を適用する。認可コード交換APIのCORSは許可した静的Client Originだけに限定し、Cookie Credentialsは許可しない。HTTPSを必須とする。Public API ServerをClientから直接IPアドレスで指定できることは、この認証方式の成立条件とはしない（HTTPS証明書・Originの確定が必要）。
+
+根拠: [RFC 9700 OAuth 2.0 Security BCP](https://www.rfc-editor.org/rfc/rfc9700.html), [MDN Cookie SameSite](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Set-Cookie), [MDN Third-party cookies](https://developer.mozilla.org/en-US/docs/Web/Privacy/Guides/Third-party_cookies)。
+
 * Public API Request Bodyには有限の最大サイズを設定し, IngressとPublic API Serverの双方で上限を適用する. 最大サイズは各Public API Payloadについて仕様上取り得る最大serialization sizeを満たす値として設定し, 無制限にはしない.
 * `AccessToken`および`DiscordAuthorizationToken`にもwire上の有限の最大長を設定し, JWT構文解析および署名検証より前に上限超過を拒否する. 最大長は定義済みClaimと設定値から生成される正規Tokenを格納可能な値として設定し, 無制限にはしない.
 * Public API ServerとGameServer間の通信はmTLSを必須とする. 双方は信頼済みCAによる相手証明書を検証し, 証明書検証に失敗した接続を受け付けない.

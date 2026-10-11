@@ -31,6 +31,10 @@ classDiagram
     MatchingPlanner --> PrivateApiClient
 ```
 
+## 内部API受信側（確定済み範囲）
+
+Coordinatorが受信するのは運営ComponentからのCoordinator固有運用操作とし, 既存`design/system/network.md`のmTLS・運営Service Identity認可を必須とします。CoordinatorからGameServerのControl APIとPrivate APIへの通信は発信側として実行します。ClientのGuildBattle要求はPublic API Serverから所有GameServerへ中継され, Coordinatorは受信しません。内部API受信用HTTP Listenerの具体Port, Method/Path, wire schemaおよび公開範囲は未確定とし, 本文から推定して固定しません。
+
 ## Replica / 永続状態
 
 - CoordinatorはReplica 1です。

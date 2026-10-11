@@ -82,16 +82,16 @@ IEEE-754 32bit浮動小数点として、仕様に記載された演算順を変
 対象端末で以下を検証し、結果を記録します。
 
 - `wasm32-unknown-unknown`を対象に依存を解決し, `Cargo.lock`固定後に`cargo tree --target wasm32-unknown-unknown`および`cargo build --target wasm32-unknown-unknown --release --locked`を確認します。
-- iPhone Safari/PWAおよびAndroid Chrome/PWAで, ユーザー選択PNG/HCAのOPFSへのコピーを検証します。OPFSのセマンティックバージョン別配置と新バージョン検証後の切替, 取り込み中断からの回復を確認します。フォルダ選択と元ファイルの削除を伴う移動はブラウザごとに実現可否を確認します。
+- iPhone Safari/PWAおよびAndroid Chrome/PWAで, PNG/HCAの個別・一括取り込み, 辞書取得（Login完了時）, 上書き確認と一括操作, `./assets/`の個別/一括削除, `./cache/`のみの消去, `game_info.json`のバージョン差分移行結果を検証します。元ファイル削除の「移動」は削除APIと権限があるブラウザに限定し, Safari等の未対応環境ではコピーのみ提供することを確認します。
 - PNGが`File` / `Blob`から`createImageBitmap()`で読み込め, WebGL 2テクスチャ化・描画できることを確認します。表示終了時の`ImageBitmap.close()`と`deleteTexture()`による資源解放を確認します。
-- 40キャラクターと代表的エフェクトをWebGL 2で描画し, GPU負荷80%以下, 実行時メモリ2GB以下, FPS30以上を基準として計測します。メモリ計測範囲・GPU計測方式・端末条件は未確定であり, 条件確定後に合否判定します。
+- 40キャラクターと代表的エフェクトをWebGL 2で描画し, 開始10秒をウォームアップとして除外した連続60秒の平均FPSが30以上かを実機で検証します。GPU利用率と全RAM消費は統一ブラウザ計測値が得られないため合否判定に使用せず, 可能な場合に参考値として記録します。
 - `cridecoder`によるHCAのWASM向けビルドとiPhone Safariでの音声再生が可能か確認します。採用確定は合格後とします。
 - 短いSE・ボイスの`AudioBuffer`再利用と, 長いBGM・ボイスのPCM逐次供給（`AudioWorklet` / `MessagePort`）を確認します。長い音声を全体PCM展開せず再生することを確認します。
-- HCAの一部ループ, チャンネル数, 22,050Hz, 非暗号化, 再生開始遅延, 欠音, SE同時最大5を確認します。AudioWorkletの`process()`内にHCAデコードや大きなメモリ確保を置かないことを確認します。PCM先読み量はデコード・I/O・音声スケジューリングの実測値から評価します。
+- HCA22,050Hz, 非暗号化, 辞書指定素材だけのループ, チャンネル数, SE同時最大5, 欠音と再生遅延を確認します。長尺音声のPCM先読み初期500ms/残量250msを用い, `AudioWorklet.process()`内でHCAデコードや大容量確保を行わないことを検証します。
 - GPUテクスチャ, デコード済みPCM, WASMヒープ, ブラウザ一時メモリを分けて観測します。iOS端末で長時間の騎士団戦を行い, 強制再読み込みの有無を確認します。
-- `opt-level = 3`と`opt-level = "z"`で圧縮後WASMサイズ, HCAデコード時間, 初回ロード時間を比較し, Client依存とライセンスを監査します。WASMサイズ上限500MBは指定済みですが, 圧縮前後・計測方法・実測結果は未確定/未記録です。
+- CIで`cargo build --release --locked --target wasm32-unknown-unknown`を実施し, 生成された非圧縮WASMのファイルサイズを確認します。50MB超過は最適化検討の開始条件, 500MB超過は現行のWASMサイズ合否上限として区別します。依存ライセンスも監査します。
 
-ClientとPublic API Server間はHTTP/2 over TLS 1.3で通信し, API PayloadはProtocol Buffersであることを確認します。`SubscribeGuildBattleUpdates`ではHTTP/2 Response stream上の`GuildBattleScoreUpdate`をProtocol Buffers varint長prefix付きで受信できることを確認します。Public APIの通信方式としてWebSocketは使用しません。ブラウザ標準`fetch()`/`ReadableStream`と既存crateによる通信を検証し, HTTP/2/TLS 1.3のネゴシエーション結果を確認します。GitHub Pages配布Origin・API Origin・`SameSite=Strict` RefreshToken・CORS/Credentialsの整合性も確認します。
+ClientとPublic API Server間はHTTP/2 over TLS 1.3およびProtocol Buffersを検証します。`SubscribeGuildBattleUpdates`はHTTP/2 Response streamのvarint長prefix付きMessageを復号します。通知にWebSocketは使用しません。HTTP/2/TLS 1.3の実ネゴシエーションは対象端末で確認します。別SiteのGitHub Pages静的ClientからのLogin/Refresh/Logoutは認証Originをトップレベルで開き, SameSite=Strictを維持した第一者Cookieで処理すること, 一度限りの認可コード・PKCE S256による受け渡しとコード再利用拒否・戻り先URI完全一致・Origin限定CORSを検証します。
 
 PNG/HCAのOPFS保存・割当情報の復元・キャッシュクリアの範囲を検証します。
 
