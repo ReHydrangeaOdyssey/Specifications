@@ -1406,4 +1406,4 @@ Private APIは再抽選を行わない. `GuildBattleID[]`と`Battles[]`のID集�
 
 ## プロフィール・フレンド通信Payload
 
-通信型・field numberは`design/system/public_api.proto`および`design/system/private_api.proto`を正本とする。`GetPlayerProfile`は対象Playerの名前、騎士団戦参加回数（`Count`）、勝利数（`Count`）、累計騎士団スコア（`Score` = `u64`）を返す。`ListNotifications`は本人が受け取った未処理フレンド申請の送信者ID・名前を含み、`RespondFriendRequest`は送信者PlayerIDと承認/拒否を指定する。`ListFriends`は本人と相互フレンドになったPlayerIDと表示名の組を返す。
+通信型・field numberは`design/system/public_api.proto`および`design/system/private_api.proto`を正本とする。`GetPlayerProfile`は対象Playerの名前、騎士団戦参加回数（`Count`）、勝利数（`Count`）、累計騎士団スコア（`Score` = `u64`）を返す。`ListNotifications`は本人が受け取った未処理フレンド申請の送信者ID・名前を含み、`RespondFriendRequest`は送信者PlayerIDと承認/拒否を指定する。`ListFriends`は本人と相互フレンドになったPlayerIDと表示名の組を返す。`SendFriendRequestResponse.already_requested`は同方向の申請済み状態、`RespondFriendRequestResponse.already_friends`は逆方向申請への応答時にすでにフレンドであった状態を表す。`RemoveFriend`は本人と指定Playerの成立済みフレンド関係を解除する。

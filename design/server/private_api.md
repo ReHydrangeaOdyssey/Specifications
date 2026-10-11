@@ -875,7 +875,7 @@ ReplayQueueおよびDatabase送信失敗時の扱いは「[ログ仕様](../syst
 - 最終結果2Guild分の保存, 参加Playerの参加回数・勝敗数・累計騎士団スコア更新, `status=completed`, 当該対戦2Guildの`membership_locked=false`を同一Databaseトランザクションで実行する. 同一`matching_target_date`・`matching_start_time`の全騎士団戦（後継対戦含む）が`completed`・`canceled`・`replaced`の終端状態となった場合に限り, 同一トランザクションで除外Guildも`membership_locked=false`へ更新し, `GUILD_BATTLE_EXCLUDED_GUILD`を削除する. 並行するComplete・Cancel・Retryはマッチング枠単位排他とGuildBattleID昇順の行Lockで終了判定と後継対戦追加を直列化する.
 - `GuildResults`のGuildID集合がDatabase上の対戦2Guildと一致し, 2件の勝敗組み合わせが最終Scoreと整合することを確認する. Scoreが異なる場合は高い側`WIN`・低い側`LOSE`, 同値の場合は両側`DRAW`だけを許可する.
 - `PlayerRecords`にJoin済み通常Player（出撃0回を含む）の全員を含め、`Participants`の通常PlayerID集合と一致させる。`PlayerRecords`と`Participants`で同一PlayerIDを重複指定できない. PlayerID `0`以外はDatabase上で対戦2Guildのいずれかに所属していることを確認し, 指定`Result`が所属Guildの`GuildResults.Result`と一致することを確認する.
-- `Participants`の各通常Playerの参加回数を1加算し、当該対戦の個人獲得Scoreを累計騎士団スコアへ加算する。勝利の場合は対象Playerの`guild_battle_win_count`を1加算し, 敗北の場合は`guild_battle_lose_count`を1加算する. 引き分けの場合は更新しない.
+- `Participants`の各通常Playerの参加回数を1加算し、騎士団戦終了時点の各Playerの未切り捨て`acquired_score`を小数点以下切り捨てして`u64`へ変換した値を累計騎士団スコアへ加算する。勝利の場合は対象Playerの`guild_battle_win_count`を1加算し, 敗北の場合は`guild_battle_lose_count`を1加算する. 引き分けの場合は更新しない.
 - いずれかの処理が失敗した場合はトランザクション全体をRollbackし, `completed`へ遷移しない.
 - 初回失敗時は同一`X-Operation-ID`で1回だけ再試行する. 再試行も失敗した場合はError Logを保存し, `DiscordNotificationEnabled=true`の場合はBot通知後に運営による手動復旧対象とする.
 
@@ -890,9 +890,10 @@ ReplayQueueおよびDatabase送信失敗時の扱いは「[ログ仕様](../syst
 | Method | 処理 |
 |---|---|
 | `GetPlayerProfilePrivate` | 通常Playerの名前・騎士団戦参加回数・勝利数・累計スコアを`PLAYER`から取得し、二者の承認済みフレンド関係を照会する |
-| `SendFriendRequestPrivate` | 有効な異なる通常PlayerIDを確認し、`FRIEND_REQUEST`へ未処理申請を保存する。既存フレンドとの二重申請を拒否する |
+| `SendFriendRequestPrivate` | 有効な異なる通常PlayerIDを確認し、`FRIEND_REQUEST`へ未処理申請を保存する。既存フレンドとの二重申請を拒否する。同方向の未処理申請には`already_requested=true`を返し、逆方向からの申請は許可する |
 | `ListFriendRequestsPrivate` | 宛先本人の未処理申請を送信元Player名とともに返す |
-| `RespondFriendRequestPrivate` | 受信者本人が指定申請を排他Lockし、承認なら`FRIEND`追加と申請削除を原子的に実行、拒否なら申請のみ削除する |
+| `RespondFriendRequestPrivate` | 受信者本人が指定申請を排他Lockし、承認なら`FRIEND`追加と申請削除を原子的に実行、拒否なら申請のみ削除する。既に両者がフレンドであれば`already_friends=true`を返し、その残存申請を削除して変更操作を終了する |
 | `ListFriendsPrivate` | 両向きに成立した`FRIEND`レコードを相手PlayerID・名前で取得する |
+| `RemoveFriendPrivate` | 指定Playerが当事者である`FRIEND`の組を削除し、残存する対向申請があれば同一Transactionで削除する |
 
 Public API経由で本人性を検証した`AuthenticatedContext`を要求する。更新は既存Private APIの`X-Operation-ID`冪等化とDB Transactionの規則を使う。wire形式は`design/system/private_api.proto`を正とする。

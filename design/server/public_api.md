@@ -828,5 +828,6 @@ GameServer側のチェック.
 | `ListNotifications` | `ListFriendRequestsPrivate` | 本人宛のフレンド申請を通知一覧の項目として返す |
 | `RespondFriendRequest` | `RespondFriendRequestPrivate` | 受信者による承認で相互関係成立、拒否で申請削除 |
 | `ListFriends` | `ListFriendsPrivate` | 本人の承認済みフレンドをPlayer名とIDの一覧で返す |
+| `RemoveFriend` | `RemoveFriendPrivate` | 認証済み本人のフレンド関係を解除する |
 
-すべて既存のBearer認証で本人の`PlayerID`とToken subjectを照合する。プロフィール参照対象は通常Playerとする。自分への申請は拒否する。同一組が既にフレンドである場合は新規申請を成立させない。申請承認・拒否は受信者本人だけが操作でき、申請者に拒否通知を送らない。`ListNotifications`に表示する申請は未処理のものだけとする。プロフィールおよびフレンド一覧は`design/system/public_api.proto`をwire正本とする。`ListFriends`の`player_id`を選択したときは既存の`StartArenaBattle`をFriendモードで要求する。
+すべて既存のBearer認証で本人の`PlayerID`とToken subjectを照合する。プロフィール参照対象は通常Playerとする。自分への申請は拒否する。同一組が既にフレンドである場合は新規申請を成立させない。申請承認・拒否は受信者本人だけが操作でき、申請者に拒否通知を送らない。同方向の未処理申請へ再送した場合は`SendFriendRequestResponse.already_requested=true`を返す。逆方向同時申請は許可し、片方の承認後に残った逆方向申請を操作したときは`RespondFriendRequestResponse.already_friends=true`を返して再承認・再拒否は行わない。申請に有効期限を設けない。`RemoveFriend`は当事者本人からの要求のみ許可し、成立済み相互関係を解除する。`ListNotifications`に表示する申請は未処理のものだけとする。プロフィールおよびフレンド一覧は`design/system/public_api.proto`をwire正本とする。`ListFriends`の`player_id`を選択したときは既存の`StartArenaBattle`をFriendモードで要求する。

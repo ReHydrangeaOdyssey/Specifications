@@ -824,12 +824,14 @@ message GetInitialGuildStatusResponse { bool initial_guild_created = 1; uint64 g
 message GetPlayerProfileRequest { string access_token = 1; uint64 player_id = 2; uint64 target_player_id = 3; }
 message GetPlayerProfileResponse { uint64 player_id = 1; string player_name = 2; uint32 guild_battle_participation_count = 3; uint32 guild_battle_win_count = 4; uint64 guild_battle_total_score = 5; bool already_friends = 6; }
 message SendFriendRequestRequest { string access_token = 1; uint64 player_id = 2; uint64 target_player_id = 3; }
-message SendFriendRequestResponse {}
+message SendFriendRequestResponse { bool already_requested = 1; }
 message FriendRequestNotification { uint64 sender_player_id = 1; string sender_player_name = 2; }
 message ListNotificationsRequest { string access_token = 1; uint64 player_id = 2; }
 message ListNotificationsResponse { repeated FriendRequestNotification friend_requests = 1; }
 message RespondFriendRequestRequest { string access_token = 1; uint64 player_id = 2; uint64 sender_player_id = 3; bool approve = 4; }
-message RespondFriendRequestResponse { bool became_friends = 1; }
+message RespondFriendRequestResponse { bool became_friends = 1; bool already_friends = 2; }
 message FriendListEntry { uint64 player_id = 1; string player_name = 2; }
 message ListFriendsRequest { string access_token = 1; uint64 player_id = 2; }
 message ListFriendsResponse { repeated FriendListEntry friends = 1; }
+message RemoveFriendRequest { string access_token = 1; uint64 player_id = 2; uint64 friend_player_id = 3; }
+message RemoveFriendResponse {}

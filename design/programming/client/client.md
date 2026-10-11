@@ -287,6 +287,6 @@ Seedが`0`かどうかだけでランダム要素の有無を判定しません�
 
 ### プロフィール・フレンド表示
 
-- 所属メンバー選択では`GetPlayerProfile`を取得する。フレンド申請、ホーム通知一覧の承認・拒否、Arenaのフレンド名一覧はそれぞれ`SendFriendRequest`・`ListNotifications`/`RespondFriendRequest`・`ListFriends`を使用する。すべて既存の認証付きPublic APIを経由し、未接続時には状態変更しない。
+- 所属メンバー選択では`GetPlayerProfile`を取得する。フレンド申請、ホーム通知一覧の承認・拒否、Arenaのフレンド名一覧はそれぞれ`SendFriendRequest`・`ListNotifications`/`RespondFriendRequest`・`ListFriends`を使用する。ホームのフレンド一覧で解除する場合は`RemoveFriend`を使用する。すべて既存の認証付きPublic APIを経由し、未接続時には状態変更しない。
 
 音声ファイル未配置・復号失敗・Web Audio再生失敗時は、その音を無音として扱う。戦闘ロジックとServer上の確定結果は変更しない。

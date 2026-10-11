@@ -417,7 +417,7 @@ message GuildBattlePlayerRecordUpdate {
 
 message GuildBattlePlayerParticipation {
   uint64 player_id = 1;
-  uint64 acquired_score = 2; // 騎士団戦1回あたりの個人獲得Scoreをu64で確定した値
+  uint64 acquired_score = 2; // 対戦終了時に未切り捨ての個人取得Score合計を切り捨ててu64へ変換した値
 }
 
 message IssueAuthorizationCodePrivateRequest { bytes refresh_token = 1; string redirect_uri = 2; bytes code_challenge_sha256 = 3; }
@@ -489,10 +489,12 @@ message GetInitialGuildStatusPrivateResponse { bool initial_guild_created = 1; u
 message GetPlayerProfilePrivateRequest { uint64 requester_player_id = 1; uint64 target_player_id = 2; }
 message GetPlayerProfilePrivateResponse { game.publicapi.GetPlayerProfileResponse profile = 1; }
 message SendFriendRequestPrivateRequest { uint64 sender_player_id = 1; uint64 recipient_player_id = 2; }
-message SendFriendRequestPrivateResponse {}
+message SendFriendRequestPrivateResponse { bool already_requested = 1; }
 message ListFriendRequestsPrivateRequest { uint64 recipient_player_id = 1; }
 message ListFriendRequestsPrivateResponse { repeated game.publicapi.FriendRequestNotification friend_requests = 1; }
 message RespondFriendRequestPrivateRequest { uint64 recipient_player_id = 1; uint64 sender_player_id = 2; bool approve = 3; }
-message RespondFriendRequestPrivateResponse { bool became_friends = 1; }
+message RespondFriendRequestPrivateResponse { bool became_friends = 1; bool already_friends = 2; }
 message ListFriendsPrivateRequest { uint64 player_id = 1; }
 message ListFriendsPrivateResponse { repeated game.publicapi.FriendListEntry friends = 1; }
+message RemoveFriendPrivateRequest { uint64 player_id = 1; uint64 friend_player_id = 2; }
+message RemoveFriendPrivateResponse {}
