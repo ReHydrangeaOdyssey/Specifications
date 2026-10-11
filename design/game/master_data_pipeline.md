@@ -344,4 +344,4 @@ Database反映途中に失敗した場合は, 部分反映のままDatabase固�
 本リポジトリにはMasterData実データを配置しない.
 生成Pipelineのコード, Schema, Validation規則は配置してよい.
 
-画像およびUVデータはClient側資産として扱い, Server用MasterData Pipelineの対象外とする.
+画像・UVデータおよびキャラクターのスプライトアニメーションデータはClient側資産として扱い, Server用MasterData Pipelineの対象外とする.

@@ -1,0 +1,119 @@
+// Character sprite animation structure for the Client.
+// Sprite PNG image data and texture atlas file contents are separate assets.
+syntax = "proto3";
+
+package game.spriteanimation;
+
+message SpriteAnimationData {
+  repeated ArmatureData armature_data = 1 [json_name = "armature_data"];
+  repeated AnimationData animation_data = 2 [json_name = "animation_data"];
+  repeated TextureData texture_data = 3 [json_name = "texture_data"];
+  repeated string config_file_path = 4 [json_name = "config_file_path"];
+  repeated string config_png_path = 5 [json_name = "config_png_path"];
+  float content_scale = 6 [json_name = "content_scale"];
+
+  reserved 7;
+}
+
+message ArmatureData {
+  string name = 1;
+  string str_version = 2 [json_name = "strVersion"];
+  float version = 3;
+  repeated BoneData bone_data = 4 [json_name = "bone_data"];
+}
+
+message BoneData {
+  string name = 1;
+  string parent = 2;
+  sint32 display_index = 3 [json_name = "dI"];
+
+  float x = 4;
+  float y = 5;
+  sint32 z = 6;
+  float scale_x = 7 [json_name = "cX"];
+  float scale_y = 8 [json_name = "cY"];
+  float skew_x = 9 [json_name = "kX"];
+  float skew_y = 10 [json_name = "kY"];
+  float arrow_x = 11 [json_name = "arrow_x"];
+  float arrow_y = 12 [json_name = "arrow_y"];
+  bool effect_by_skeleton = 13 [json_name = "effectbyskeleton"];
+
+  repeated DisplayData display_data = 14 [json_name = "display_data"];
+}
+
+message DisplayData {
+  uint32 display_type = 1 [json_name = "displayType"];
+
+  optional string name = 2;
+  optional string plist = 3;
+  repeated SkinData skin_data = 4 [json_name = "skin_data"];
+}
+
+message SkinData {
+  float x = 1;
+  float y = 2;
+  float scale_x = 3 [json_name = "cX"];
+  float scale_y = 4 [json_name = "cY"];
+  float skew_x = 5 [json_name = "kX"];
+  float skew_y = 6 [json_name = "kY"];
+}
+
+message AnimationData {
+  string name = 1;
+  repeated MovementData mov_data = 2 [json_name = "mov_data"];
+}
+
+message MovementData {
+  string name = 1;
+  uint32 duration = 2 [json_name = "dr"];
+  uint32 tween_duration = 3 [json_name = "drTW"];
+  bool loop = 4 [json_name = "lp"];
+  float speed_scale = 5 [json_name = "sc"];
+  uint32 transition = 6 [json_name = "to"];
+  sint32 tween_easing = 7 [json_name = "twE"];
+  repeated BoneTimeline mov_bone_data = 8 [json_name = "mov_bone_data"];
+}
+
+message BoneTimeline {
+  string name = 1;
+  float delay = 2 [json_name = "dl"];
+  repeated FrameData frame_data = 3 [json_name = "frame_data"];
+}
+
+message FrameData {
+  uint32 frame_index = 1 [json_name = "fi"];
+  float x = 2;
+  float y = 3;
+  sint32 z = 4;
+  float scale_x = 5 [json_name = "cX"];
+  float scale_y = 6 [json_name = "cY"];
+  float skew_x = 7 [json_name = "kX"];
+  float skew_y = 8 [json_name = "kY"];
+  sint32 display_index = 9 [json_name = "dI"];
+  sint32 tween_easing = 10 [json_name = "twE"];
+  bool tween_frame = 11 [json_name = "tweenFrame"];
+  uint32 blend_source = 12 [json_name = "bd_src"];
+  uint32 blend_destination = 13 [json_name = "bd_dst"];
+
+  Color color = 14;
+  optional string event_name = 15 [json_name = "evt"];
+  repeated float tween_easing_params = 16 [json_name = "twEP"];
+
+  reserved 17;
+}
+
+message Color {
+  uint32 a = 1;
+  uint32 r = 2;
+  uint32 g = 3;
+  uint32 b = 4;
+}
+
+message TextureData {
+  string name = 1;
+  float width = 2;
+  float height = 3;
+  float pivot_x = 4 [json_name = "pX"];
+  float pivot_y = 5 [json_name = "pY"];
+  string plist_file = 6 [json_name = "plistFile"];
+}

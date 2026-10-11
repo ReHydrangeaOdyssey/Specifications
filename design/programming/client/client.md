@@ -71,6 +71,12 @@ OPFSのPNG → File / Blob → createImageBitmap() → WebGL 2 texImage2D()
 - 使用終了時には`ImageBitmap.close()`と`deleteTexture()`によって不要な資源を解放します。
 - GPUテクスチャ, WASMヒープ, ブラウザ内の一時メモリを別々に把握します。WebGL 2とCanvas 2Dの比較優位やFPS値は現時点で保証しません。
 
+### キャラクタースプライトアニメーション
+
+- アニメーションデータは`design/system/sprite_animation.proto`に定義する`SpriteAnimationData`を使用します。骨格・ボーン・表示データ、モーション・ボーンタイムライン・フレーム、テクスチャ参照をそれぞれ保持し、`repeated`フィールドの要素順を維持します。
+- ボーンおよびフレームの座標・拡縮・傾き、表示Index、補間・色・ブレンド情報をスプライトのアニメーション描画に使用します。PNGの画像本体・アトラスファイル本体は別アセットとし、既定のOPFS読込み・WebGL 2テクスチャ描画の経路を使用します。
+- アニメーションはClientのイベントキューに連動した表示処理とし、画像・UV・アニメーションデータをGameServerの`ProcessedMasterData`に含めません。
+
 ### HCAデコード・音声パイプライン
 
 - HCAデコード候補は`cridecoder`（`0.3.6`）とする。`default-features = false`を指定し, 不要なPythonバインディングを有効化しません。
