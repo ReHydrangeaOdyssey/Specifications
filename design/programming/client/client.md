@@ -243,7 +243,7 @@ Seedが`0`かどうかだけでランダム要素の有無を判定しません�
 - 既存の`web-sys`, `wasm-bindgen-futures`, `js-sys`からブラウザ標準`fetch()`を呼び出し, `prost`/`protocol`でRequest/ResponseのProtocol Buffersを処理します。`SubscribeGuildBattleUpdates`は`ReadableStream`を逐次読み, chunk境界を跨ぐvarint長prefixとMessageを復元します。HTTP/2/TLS 1.3はブラウザとServerによるネゴシエーションで, Client JavaScriptから強制しません。
 - WebAssemblyおよびJavaScriptはブラウザ内で実行され, API要求にはブラウザのOrigin・CORS・Cookie制約が適用されます。WASM/JavaScript配布後の通信もPublic API Serverへ行い, GameServerへの直接接続へ変更しません。
 - Refresh/Logout/LoginなどCookieを必要とするRequestは認証Originのトップレベルページ内で同一Originとして実行します。GitHub Pages上の静的ClientからCookieを含むCross-Site Fetchは行わず, 一度限りの認可コードとPKCE S256を使用したコード交換でAccessTokenを取得します。詳細は`design/system/network.md`とします。
-- `__Host-RefreshToken`のHost-only/HttpOnly/Secure/SameSite=Strict制約を維持し, 配布Originと認証Originの別Site配置に対応するトップレベル遷移方式を採用します。認証Origin, 戻り先URI, 認可コード交換のwire schemaは未確定です。
+- `__Host-RefreshToken`のHost-only/HttpOnly/Secure/SameSite=Strict制約を維持し, 配布Originと認証Originの別Site配置に対応するトップレベル遷移方式を採用します。認証画面Pathは`GET /auth/authorize`、固定戻り先は`https://rehydrangeaodyssey.github.io/auth/callback/`とする。認可コード発行・交換のwire schemaは`design/system/public_api.proto`を正とする。認証Originの具体的なホスト値のみ環境設定で指定する。
 - 個別ファイル・フォルダ一括取り込みに対応するUIを設け, ブラウザの対応APIを判定します。元ファイルの削除権限を取得できた場合のみ「移動」を提供します。SafariではブラウザAPI制約により元ファイル削除の提供ができない場合があり, その場合はコピーを利用します。
 - `cridecoder`の採否は`wasm32-unknown-unknown`ビルド、iPhone Safariでの22,050Hz・ステレオ2チャンネルの非暗号化HCA・ループ再生・SE5音同時再生・長時間再生時の欠音・メモリ、およびClient配布物に含まれる依存ライセンス検証の結果で決定します。
 

@@ -330,7 +330,7 @@ GuildNameがBoundary Validationを満たさない場合は`ApiErrorResponse(API_
 | `SearchPlayers` | `SearchPlayersPrivate` | 名前prefixのPlayerID/名前をID昇順で取得 |
 | `ListGuildJoinApplications` | `ListGuildJoinApplicationsPrivate` | 団長/副団長が対象Guildの未承認申請一覧を取得 |
 | `ListGuildInvitations` | `ListGuildInvitationsPrivate` | 認証Player本人宛ての未承諾招待一覧を取得 |
-| `GetGuildDetail` | `GetGuildDetailPrivate` | Guild名、所属メンバー、役職、施設値、開始時刻を取得 |
+| `GetGuildDetail` | `GetGuildDetailPrivate` | Guild名、所属メンバー、役職、施設値、現時点で有効な昼夜開始時刻、および未適用の予約値と適用開始時刻を取得 |
 | `UpdateGuildBattleStartTimes` | `UpdateGuildBattleStartTimesPrivate` | 団長のみ。JST翌日0:00から変更を反映し適用時刻を返す |
 | `GetMyGuildBattle` | `GetMyGuildBattlePrivate` | 本人の所属Guildに割り当てられた対戦ID・予定時刻・状態を取得 |
 | `GetGuildBattleResult` | `GetGuildBattleResultPrivate` | 対象対戦の最終Scoreと終了確定状態を取得 |
@@ -401,6 +401,7 @@ GuildNameがBoundary Validationを満たさない場合は`ApiErrorResponse(API_
 - 要求元PlayerIDのArenaPartyが未登録の場合は対戦処理を開始せず`ARENA_BATTLE_ERROR_REQUESTER_ARENA_PARTY_NOT_REGISTERED`を返す.
 - `Mode=friend`で指定した`OpponentID`がDatabaseに存在しない場合は`ARENA_BATTLE_ERROR_PLAYER_NOT_FOUND`を返す.
 - `Mode=friend`で指定した`OpponentID`は存在するがArenaParty未登録の場合は`ARENA_BATTLE_ERROR_ARENA_PARTY_NOT_REGISTERED`を返す.
+- `Mode=friend`では戦闘開始前にPrivate APIの`GetPlayerProfilePrivate`で要求元PlayerIDと`OpponentID`の現在の承認済みフレンド関係をDatabaseから再照合する。`already_friends=false`なら戦闘を開始せず`ARENA_BATTLE_ERROR_NOT_FRIENDS`を返す。Clientのフレンド一覧に表示されていた事実だけでは成立させない。
 - 対戦相手抽選後, 戦闘開始前に同じSeedから戦闘専用の新しいPRNGを生成する. 対戦相手抽選で進んだPRNG状態は引き継がない.
 - GameServerが自分側と相手側双方のFormationID・キャラクター初期状態を用いて戦闘を実行し, その計算結果を正本とする.
 - 成功レスポンスでは戦闘結果そのものは返さず, Clientが同一戦闘を再現するための自分側編成一致結果・Server保存自分側編成・`EnemyPlayerID`・`EnemyFormationID`・相手キャラクター初期状態（最大HP含む）・Seedを返す. Clientは`OwnPartyMatched=false`の場合, Server保存自分側編成でローカル編成を上書きしてその編成を戦闘再現に使用する.
@@ -416,7 +417,7 @@ GuildNameがBoundary Validationを満たさない場合は`ApiErrorResponse(API_
 
 #### エラー時レスポンス
 
-[API Payload](api_payload.md)の「ArenaBattleErrorResponse」を参照する. 要求元PlayerIDのArenaPartyが未登録の場合は`ARENA_BATTLE_ERROR_REQUESTER_ARENA_PARTY_NOT_REGISTERED`, ランダム対戦で候補が存在しない場合は`ARENA_BATTLE_ERROR_NO_OPPONENT_AVAILABLE`, フレンド対戦でOpponentIDが存在しない場合は`ARENA_BATTLE_ERROR_PLAYER_NOT_FOUND`, OpponentIDは存在するがArenaParty未登録の場合は`ARENA_BATTLE_ERROR_ARENA_PARTY_NOT_REGISTERED`を返す. `ClientVersion`がGameServer Versionと不一致の場合は`ClientVersionMismatchResponse`を返す.
+[API Payload](api_payload.md)の「ArenaBattleErrorResponse」を参照する. 要求元PlayerIDのArenaPartyが未登録の場合は`ARENA_BATTLE_ERROR_REQUESTER_ARENA_PARTY_NOT_REGISTERED`, ランダム対戦で候補が存在しない場合は`ARENA_BATTLE_ERROR_NO_OPPONENT_AVAILABLE`, フレンド対戦でOpponentIDが存在しない場合は`ARENA_BATTLE_ERROR_PLAYER_NOT_FOUND`, OpponentIDは存在するがArenaParty未登録の場合は`ARENA_BATTLE_ERROR_ARENA_PARTY_NOT_REGISTERED`、承認済みフレンド関係がない場合は`ARENA_BATTLE_ERROR_NOT_FRIENDS`を返す. `ClientVersion`がGameServer Versionと不一致の場合は`ClientVersionMismatchResponse`を返す.
 
 
 ## 騎士団戦関連
@@ -532,7 +533,7 @@ GuildNameがBoundary Validationを満たさない場合は`ApiErrorResponse(API_
 
 [API Payload](api_payload.md)の「GuildBattleScoreUpdate」を参照する.
 
-`SubscribeGuildBattleUpdates`は既存スコア通知のほか、回復・復活・出撃待機タイマーのServer側終了を検知した場合に限り、そのPlayer向け通知の`timer_update`を設定する。該当フィールドがない通知はスコア専用とする。Client側が先に残時間0を表示した場合は`GetGuildBattleStatus`で現在の残時間を再取得する。タイマーの定期同期は行わない。
+`SubscribeGuildBattleUpdates`は既存スコア通知のほか、回復・復活・出撃待機タイマーのServer側終了を検知した場合に限り、そのPlayer向け通知の`timer_update`を設定する。該当フィールドがない通知はスコア専用とする。複数タイマーが同時終了した場合は種類ごとに別の通知を出し、種類Enumの順序（HEAL、REVIVE、SORTIE_WAIT）で発行する。Clientは通知された種類のタイマーだけを更新する。Client側が先に残時間0を表示した場合は`GetGuildBattleStatus`で現在の残時間を再取得する。タイマーの定期同期は行わない。
 
 ### 出撃要求
 

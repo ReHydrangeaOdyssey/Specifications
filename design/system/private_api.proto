@@ -492,7 +492,7 @@ message SendFriendRequestPrivateRequest { uint64 sender_player_id = 1; uint64 re
 message SendFriendRequestPrivateResponse { bool already_requested = 1; }
 message ListFriendRequestsPrivateRequest { uint64 recipient_player_id = 1; }
 message ListFriendRequestsPrivateResponse { repeated game.publicapi.FriendRequestNotification friend_requests = 1; }
-message RespondFriendRequestPrivateRequest { uint64 recipient_player_id = 1; uint64 sender_player_id = 2; bool approve = 3; }
+message RespondFriendRequestPrivateRequest { uint64 recipient_player_id = 1; uint64 sender_player_id = 2; optional bool approve = 3; }
 message RespondFriendRequestPrivateResponse { bool became_friends = 1; bool already_friends = 2; }
 message ListFriendsPrivateRequest { uint64 player_id = 1; }
 message ListFriendsPrivateResponse { repeated game.publicapi.FriendListEntry friends = 1; }

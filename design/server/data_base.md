@@ -626,3 +626,9 @@ Private API Serverは更新対象Databaseトランザクション内で`GUILD_BA
 対象日・`GuildBattleStartTime`ごとに, その開始時刻を設定している騎士団を抽出し, 疑似乱数の「抽選」を使用して順序を決める. 先頭から2騎士団ずつペアにし, 奇数の場合は最後の騎士団を事前作成済みダミープレイヤーの初期騎士団と組み合わせる. 各ペアについて`GUILD_BATTLE`を`scheduled`状態で作成する.
 
 `GuildBattleID`は`u64`で, 通常のマッチング生成時は`GuildBattleID = YYYYMMDD * 10^11 + GuildBattleStartTimeEnumValue * 10^8 + PairIndex`とする. これは`<YYYYMMDD 8桁><GuildBattleStartTime Enum値 3桁><PairIndex 8桁>`を10進連結した値に相当する. Preload失敗後の同一ペア再開では通常IDを再利用せず, Private API ServerがDatabaseの再開専用Sequenceから一意の連番（1～`2^63-1`）を採番し, `2^63 + 連番`で新規IDを作成する. 専用Sequenceの値はDatabaseのトランザクションRollbackで巻き戻さない. 通常IDと再開用IDを区別するため通常IDは`2^63`未満とする. 新旧`GUILD_BATTLE`を別レコードで保存し, 旧レコードの`replaced_by_guild_battle_id`で新IDを参照する.
+
+## 騎士団戦開始時刻の予約値と取得
+
+`GUILD.pending_start_time_effective_at`は予約更新が存在するときだけ値を持ち、未予約時はNULLとする。予約中の`pending_daytime_start_time`と`pending_nighttime_start_time`は同じ適用時刻に対する一組である。団長が適用前に再変更した場合は、この一組の予約値を新しい要求値で置換し、適用開始はその再変更要求を受けたJST日付の翌日0:00とする。
+
+開始時刻を参照・マッチングに使用するトランザクションでは、現在時刻が`pending_start_time_effective_at`以上であれば、予約値を`daytime_start_time`・`nighttime_start_time`へ確定し、予約3カラムをNULLに戻す。その後の`GetGuildDetail`は有効値を通常フィールドへ返し、予約中の場合に限り3つの`pending_*`フィールドを返す。適用前の読み取りは現行値と予約値を混同しない。作成済みの対戦レコードは変更しない。

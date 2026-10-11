@@ -49,7 +49,7 @@ ClientはRust/WebAssemblyをブラウザ上で実行する静的Webアプリケ�
 ## 制約
 
 - Clientのソースリポジトリは`https://github.com/ReHydrangeaOdyssey/Client.git`、純粋なゲームロジックは`https://github.com/ReHydrangeaOdyssey/GameLogic.git`、Serverは`https://github.com/ReHydrangeaOdyssey/Server.git`とする。
-- 静的ClientのOriginは`https://rehydrangeaodyssey.github.io`とする。Public APIのHTTPS Originと認証画面のPathは別途定義する。静的配布OriginとAPI Originが異なる場合の認証は`design/system/network.md`の第一者Cookie・認可コード方式に従う。
+- 静的ClientのOriginは`https://rehydrangeaodyssey.github.io`とする。Public APIのHTTPS Originは配布設定で指定する。認証画面Pathは`GET /auth/authorize`、認証Callbackは`https://rehydrangeaodyssey.github.io/auth/callback/`とする（`design/system/api_transport.md`）。静的配布OriginとAPI Originが異なる場合の認証は`design/system/network.md`の第一者Cookie・認可コード方式に従う。
 - 最低対応OS・ブラウザの組合せにおけるゲーム動作, 実測による描画解像度上限, 音声・保存容量の実機検証結果は別途確定する。
 
 ## 参照資料

@@ -14,6 +14,7 @@ enum ArenaBattleErrorCode {
   ARENA_BATTLE_ERROR_PLAYER_NOT_FOUND = 1; // フレンド対戦で指定したPlayerIDが存在しない.
   ARENA_BATTLE_ERROR_ARENA_PARTY_NOT_REGISTERED = 2; // フレンド対戦で指定したOpponentIDは存在するがArenaPartyが未登録である.
   ARENA_BATTLE_ERROR_REQUESTER_ARENA_PARTY_NOT_REGISTERED = 3; // 対戦要求元PlayerIDのArenaPartyが未登録である.
+  ARENA_BATTLE_ERROR_NOT_FRIENDS = 4; // Friend Arenaで双方が現在フレンドではない.
 }
 
 enum SkillEffectID {

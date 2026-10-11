@@ -22,7 +22,7 @@
 * GuildおよびGuild加入・招待・役職変更.
 * GuildBattle.
 * 疑似乱数.
-* Public API / Private APIの主要状態遷移. Private APIのRequest/ResponseをProtocol Buffersで送受信することを確認する. 未定義のwire schema・HTTP Method/Pathに対する具体的な期待値は設定しない.
+* Public API / Private APIの主要状態遷移. Private APIのRequest/ResponseをProtocol Buffersで送受信することを確認する. `design/system/api_transport.md`のHTTP Method/PathとRPC型対応, `design/system/public_api.proto`および`design/system/private_api.proto`のwire schemaに従って期待値を定義する. 未定義の業務フィールド制約は仕様として確定した範囲でのみ検証する.
 * Databaseの制約および冪等性.
 * GuildBattle Replay.
 * ProcessedMasterDataのValidation.

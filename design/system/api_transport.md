@@ -177,3 +177,7 @@ ClientがAccessToken失効を確認した場合、ログアウトして通信未
 | Private | `RespondFriendRequestPrivate` | `RespondFriendRequestPrivateRequest` | `RespondFriendRequestPrivateResponse` |
 | Private | `ListFriendsPrivate` | `ListFriendsPrivateRequest` | `ListFriendsPrivateResponse` |
 | Private | `RemoveFriendPrivate` | `RemoveFriendPrivateRequest` | `RemoveFriendPrivateResponse` |
+
+## 申請承認の真偽値Presence
+
+`RespondFriendRequestRequest.approve`は`optional bool`を使用し、省略と明示した`false`を区別する。Public APIは未指定を入力不正（HTTP 400）として拒否し、明示した`true`を承認、明示した`false`を拒否としてPrivate APIへ送る。Private側も対応する`optional bool`を必須のPresenceとして検証する。これ以外のフィールドの必須性・値域は個別APIの定義を優先し、`false`や`0`を一律に入力不正としない。

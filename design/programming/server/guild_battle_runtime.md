@@ -134,7 +134,7 @@ flowchart TD
 出撃計算式はすべて`f32`で評価し, 出撃の最終`SortieScore`が負数・NaN・正負Infinityの場合は0.0へ正規化してからResponseとPlayerの`acquired_score`へ反映する. 出撃Responseの`Score`およびPlayerの`acquired_score`は`SortieScore`（`f32`）で保持する. 騎士団合計ptだけ, 1出撃ごとに小数点以下を切り捨てて`Score`（`u64`）へ加算する. 個人累計戦績へ加算する値は騎士団戦終了時点の未切り捨て`acquired_score`を1回だけ小数点以下切り捨てして`u64`に変換する. `u64`へ変換する値と合計値には`u64::MAX`を上限とする飽和変換・飽和加算を使用する.
 
 
-回復・復活・出撃待機がServer上で先に終了した場合は、そのPlayer宛て`SubscribeGuildBattleUpdates`の`GuildBattleScoreUpdate.timer_update`へ終了対象と残り0秒を設定して通知する。Client側が先に0と判断した場合は`GetGuildBattleStatus`で現在値を取得する。タイマーの定期通知は行わない。
+回復・復活・出撃待機がServer上で先に終了した場合は、そのPlayer宛て`SubscribeGuildBattleUpdates`の`GuildBattleScoreUpdate.timer_update`へ終了対象と残り0秒を設定して通知する。同一処理時点で複数種類が終了した場合は1種類につき1つの`GuildBattleScoreUpdate`を発行し、`HEAL`→`REVIVE`→`SORTIE_WAIT`の順とする。各通知に含めるスコア・チェイン情報は同一の確定済みスナップショットとする。Clientは`timer_update.kind`が示すタイマーだけを更新する。Client側が先に0と判断した場合は`GetGuildBattleStatus`で現在値を取得する。タイマーの定期通知は行わない。
 
 ## 通知購読とチェイン残り時間
 

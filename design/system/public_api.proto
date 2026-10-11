@@ -22,6 +22,7 @@ enum ArenaBattleErrorCode {
   ARENA_BATTLE_ERROR_PLAYER_NOT_FOUND = 1;
   ARENA_BATTLE_ERROR_ARENA_PARTY_NOT_REGISTERED = 2;
   ARENA_BATTLE_ERROR_REQUESTER_ARENA_PARTY_NOT_REGISTERED = 3;
+  ARENA_BATTLE_ERROR_NOT_FRIENDS = 4; // Friend Arena requires a currently approved friendship.
 }
 
 enum TacticsEffectID {
@@ -796,7 +797,19 @@ message ListGuildInvitationsRequest { string access_token = 1; uint64 player_id 
 message ListGuildInvitationsResponse { repeated GuildDirectoryEntry guilds = 1; }
 message GetGuildDetailRequest { string access_token = 1; uint64 player_id = 2; uint64 guild_id = 3; }
 message GuildFacilityLevels { uint32 castle = 1; uint32 armory = 2; uint32 food_storage = 3; uint32 smithy = 4; uint32 strategy_office = 5; uint32 tavern = 6; }
-message GetGuildDetailResponse { uint64 guild_id = 1; string name = 2; uint64 leader_player_id = 3; uint64 subleader_player_id = 4; repeated PlayerDirectoryEntry members = 5; GuildFacilityLevels levels = 6; GuildBattleStartTime daytime_start_time = 7; GuildBattleStartTime nighttime_start_time = 8; }
+message GetGuildDetailResponse {
+  uint64 guild_id = 1;
+  string name = 2;
+  uint64 leader_player_id = 3;
+  uint64 subleader_player_id = 4;
+  repeated PlayerDirectoryEntry members = 5;
+  GuildFacilityLevels levels = 6;
+  GuildBattleStartTime daytime_start_time = 7; // Currently effective time.
+  GuildBattleStartTime nighttime_start_time = 8; // Currently effective time.
+  optional GuildBattleStartTime pending_daytime_start_time = 9; // Present only before effective_at.
+  optional GuildBattleStartTime pending_nighttime_start_time = 10; // Present only before effective_at.
+  optional uint64 pending_start_time_effective_at = 11; // UNIX epoch seconds; absent if no pending change.
+}
 message UpdateGuildBattleStartTimesRequest { string access_token = 1; uint64 player_id = 2; uint64 guild_id = 3; GuildBattleStartTime daytime_start_time = 4; GuildBattleStartTime nighttime_start_time = 5; }
 message UpdateGuildBattleStartTimesResponse { uint64 effective_at = 1; }
 
@@ -828,7 +841,7 @@ message SendFriendRequestResponse { bool already_requested = 1; }
 message FriendRequestNotification { uint64 sender_player_id = 1; string sender_player_name = 2; }
 message ListNotificationsRequest { string access_token = 1; uint64 player_id = 2; }
 message ListNotificationsResponse { repeated FriendRequestNotification friend_requests = 1; }
-message RespondFriendRequestRequest { string access_token = 1; uint64 player_id = 2; uint64 sender_player_id = 3; bool approve = 4; }
+message RespondFriendRequestRequest { string access_token = 1; uint64 player_id = 2; uint64 sender_player_id = 3; optional bool approve = 4; }
 message RespondFriendRequestResponse { bool became_friends = 1; bool already_friends = 2; }
 message FriendListEntry { uint64 player_id = 1; string player_name = 2; }
 message ListFriendsRequest { string access_token = 1; uint64 player_id = 2; }

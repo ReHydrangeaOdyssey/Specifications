@@ -897,3 +897,5 @@ ReplayQueueおよびDatabase送信失敗時の扱いは「[ログ仕様](../syst
 | `RemoveFriendPrivate` | 指定Playerが当事者である`FRIEND`の組を削除し、残存する対向申請があれば同一Transactionで削除する |
 
 Public API経由で本人性を検証した`AuthenticatedContext`を要求する。更新は既存Private APIの`X-Operation-ID`冪等化とDB Transactionの規則を使う。wire形式は`design/system/private_api.proto`を正とする。
+
+`GetGuildDetailPrivate`は`GUILD`の開始時刻予約を読み取るときに、適用開始を経過した予約を同じDBトランザクションで有効値へ反映し、予約値を消去してから応答を構成する。未適用の予約は`GetGuildDetailResponse`の`pending_daytime_start_time`・`pending_nighttime_start_time`・`pending_start_time_effective_at`として返す。未予約時はこれらのoptionalフィールドを設定しない。

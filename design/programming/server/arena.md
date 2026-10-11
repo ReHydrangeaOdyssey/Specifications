@@ -75,7 +75,7 @@ Seed生成・DB取得等の正確な処理順は`design/server/arina.md`を正�
 
 Random Arenaの候補は毎回Private API `GetAllPlayerIDs`でDatabaseから取得し、GameServer内でキャッシュしない。PlayerID昇順の取得結果から自身とID `0`を除外して、既存のSeedで抽選する。ArenaPartyの登録・更新を全GameServerに通知する処理は設けない。
 
-フレンド対戦の対象指定には既存の`OpponentID`を使用し、対戦前に`GetArenaBattleData`でPlayerの存在とArenaParty登録状態を検証する。フレンド一覧の作成・登録のゲームルールは本設計で追加しない。
+フレンド対戦の対象指定には既存の`OpponentID`を使用し、対戦前に`GetArenaBattleData`でPlayerの存在とArenaParty登録状態を検証する。さらに`GetPlayerProfilePrivate(requester_player_id, target_player_id)`のDB照会結果`already_friends`がtrueであることを検証する。未承認・解除済みなら`ARENA_BATTLE_ERROR_NOT_FRIENDS`を返し、戦闘を開始しない。
 
 ## Errorの分離
 
@@ -84,6 +84,7 @@ Random Arenaの候補は毎回Private API `GetAllPlayerIDs`でDatabaseから取�
 - 要求元PlayerのArena Party未登録
 - Friend Arena対象Playerが存在しない
 - Friend Arena対象PlayerのArena Party未登録
+- Friend Arena対象との承認済みフレンド関係がない
 - ClientVersion不一致
 
 ## 再現性
@@ -107,4 +108,4 @@ ClientとGameServerで以下が同一なら、Arenaの戦闘結果が一致す�
 - `design/server/api_payload.md`
 - `design/test/test_policy.md`
 
-Friend Arenaで選択可能なOpponentIDの一覧は、`ListFriends`による承認済みフレンド関係を正本とする。対戦時のArena編成確認は既存の`GetArenaBattleData`を継続する。
+Friend ArenaのUI一覧は`ListFriends`による承認済みフレンド関係を使用する。実際の成立判断は対戦要求を受けた時点の`GetPlayerProfilePrivate`で再検証する。Arena編成確認は既存の`GetArenaBattleData`を継続する。
