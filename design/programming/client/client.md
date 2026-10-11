@@ -53,7 +53,7 @@ classDiagram
 
 ## Web Client実行方式とブラウザ境界
 
-- ClientはRust/WASM（`wasm32-unknown-unknown`）を対象とし, iPhone Safari/PWAおよびAndroid Chrome/PWA上で動作させます。配布は`https://github.com/ReHydrangeaOdyssey/ReHydrangeaOdyssey.github.io`のGitHub Pagesを予定します。ブラウザ下限をiOS Safari 16.3 / Android Chrome 120, 対応するOS下限をiOS 16.3 / Android 8.0とします。OS下限はブラウザの導入可能条件に基づくものであり, 該当OSでの全機能・性能の合格判定には実機試験を要します。PWAインストール・ホーム画面からの起動等はプロトタイプで検証済み（開発者申告）ですが, 下限環境での個別試験記録は未提示です。
+- ClientはRust/WASM（`wasm32-unknown-unknown`）を対象とし, iPhone Safari/PWAおよびAndroid Chrome/PWA上で動作させます。静的Clientは`https://rehydrangeaodyssey.github.io/`で配布し, 配布リポジトリは`https://github.com/ReHydrangeaOdyssey/ReHydrangeaOdyssey.github.io`とします。独自ドメインは採用しません。ブラウザ下限をiOS Safari 16.3 / Android Chrome 120, 対応するOS下限をiOS 16.3 / Android 8.0とします。OS下限はブラウザの導入可能条件に基づくものであり, 該当OSでの全機能・性能の合格判定には実機試験を要します。対応するブラウザ機能の動作は対象環境ごとの試験で確認します。
 - ブラウザとの接続には`wasm-bindgen`, `web-sys`, `js-sys`, `wasm-bindgen-futures`を使用します。Browser APIのPromiseは`wasm-bindgen-futures`を用いてRustの`Future`と連携させます。
 - 描画基盤として汎用2Dエンジンを追加せず, WebGL 2を`web-sys`経由で使用する独自スプライトバッチレンダラーとします。UI Frameworkも使用しません。
 - 戦闘計算は`game-core`、Protocol Buffers生成型は`protocol`、符号化・復号は`prost`を使用する。
@@ -107,8 +107,9 @@ OPFSのPNG → File / Blob → createImageBitmap() → WebGL 2 texImage2D()
 
 ## ログイン・サーバー未接続時
 
-- ログイン不可またはServer未接続の場合, タイトルからホームへ遷移することだけを許可し, その他の機能は利用できません。
-- Server接続と必要な認証が復帰した場合は, 接続可能状態と同じ機能を使用可能に戻します。
+- ログイン不可またはServer未接続の場合, Server通信が必須の処理のみを無効にし, ローカルで成立する機能を維持します。タイトル・ホーム間の遷移, アセットの追加・削除, キャッシュクリア, クレジット画面の表示と戻る操作は, Server通信の有無で制限しません。
+- Client各機能の利用可否は, Server通信・認証が必要かどうかと, OPFS等の必要なブラウザ機能の状態によって判定します。容量不足によるゲーム操作制限時もアセット削除を可能とします。
+- Server接続と必要な認証が復帰した場合は, Server通信を必要とする機能も使用可能に戻します。
 - Serverを正本とする処理の状態や戦闘結果は、未接続時のClientだけで確定しません。
 
 ## タイトル画面のキャラクター画像割り当て

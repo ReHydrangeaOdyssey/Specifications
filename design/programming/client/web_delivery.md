@@ -8,15 +8,15 @@ Rust/WASM製Web Clientの静的配布を定義する。
 
 - 静的Webサーバーの公開成果物ルートに`index.html`を配置する。HTMLは`viewport`設定、ゲーム用Canvas、初期化状態・エラー表示領域、ES Module起動処理への参照を持つ。
 - JavaScript起動処理は`wasm-bindgen --target web`の生成したES Moduleを読み込み、WASM初期化成功後にRust側のClientを起動する。
-- HTML、JS、WASM、CSS、Manifest等の参照URLには配布ルートからの相対Pathを使用し、GitHub Pagesのプロジェクトサイト（`/<repository>/`）でも配布できる構成にする。各ファイルの配置が変わる場合は、ビルド出力の内部参照も同じ公開ルートを基準にする。
-- 静的配布先は`https://github.com/ReHydrangeaOdyssey/ReHydrangeaOdyssey.github.io`のGitHub Pagesを予定する。独自ドメインと実際の公開URLは未確定とする。静的配布先へゲーム状態を更新するサーバー処理や認証秘密情報を置かない。
+- HTML、JS、WASM、CSS、Manifest等の参照URLには配布ルートからの相対Pathを使用する。配布ルートはGitHub Pagesのユーザー／組織サイトの`/`とする。各ファイルの配置が変わる場合は、ビルド出力の内部参照も同じ公開ルートを基準にする。
+- 静的Clientは`https://rehydrangeaodyssey.github.io/`で配布する。配布リポジトリは`https://github.com/ReHydrangeaOdyssey/ReHydrangeaOdyssey.github.io`とし, 独自ドメインは採用しない。静的配布先へGameServerの実行処理・ゲーム状態を更新するサーバー処理や認証秘密情報を置かない。Public API ServerのHTTPS Originは静的配布先とは別途定義する。
 
 ## ビルドと公開
 
 1. Rustの依存を`Cargo.lock`で固定し、`wasm32-unknown-unknown`ターゲットへReleaseビルドする。
 2. Rust crateの`wasm-bindgen`と対応するCLIのバージョンを揃え、`--target web`形式のJavaScript glueとWASMを生成する。
 3. Clientの`Cargo.lock`で固定したRust依存関係を対象に`cargo-about`を実行し, ライセンス情報をHTML形式で生成する。Client配布物に含まれるRust依存ライブラリの必要表記と, 自動生成の対象外となる同梱物・ゲーム本体の必要表記をクレジット画面に組み込む。表示用の生成結果がない状態ではRelease配布しない。
-4. HTML、JS、WASM、CSS、Manifestに加え, クレジット画面で読むライセンス情報を配布ディレクトリへ同梱する。GitHub Pagesを採用する場合は`.nojekyll`も配置し, 公開後のクレジット画面から同梱した情報を閲覧可能にする。
+4. HTML、JS、WASM、CSS、Manifestに加え, クレジット画面で読むライセンス情報を配布ディレクトリへ同梱する。GitHub Pages向けに`.nojekyll`も配置し, 公開後のクレジット画面から同梱した情報を閲覧可能にする。
 5. GitHub Pages向けのGitHub Actionsビルド・静的参照検証、Pages向けArtifact Upload、`actions/deploy-pages`によるHTTPS配信を使用する。
 
 ## リポジトリ

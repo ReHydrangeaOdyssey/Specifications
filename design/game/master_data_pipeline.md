@@ -335,7 +335,7 @@ Replayを再生する場合はReplayに記録されたVersionに対応するゲ�
 Pipeline失敗時は生成途中の成果物を採用しない.
 前回正常生成物を保持している場合はそのまま維持する.
 
-Database反映途中に失敗した場合は, 部分反映のままDatabase固定参照データに依存するServer側処理を開始せず, 対象Versionの固定参照データ一式が整合した状態へ戻してから再実行する. Clientのログイン・Server未接続時の動作は「[クライアント仕様](../client/client.md)」を正とし, タイトルからホームへの遷移のみ可能とする.
+Database反映途中に失敗した場合は, 部分反映のままDatabase固定参照データに依存するServer側処理を開始せず, 対象Versionの固定参照データ一式が整合した状態へ戻してから再実行する. Clientのログイン・Server未接続時の動作は「[クライアント仕様](../client/client.md)」を正とし, Server通信に依存しない機能は利用可能とする.
 
 原本を修正せず生成済みProtocol BuffersやDatabaseだけを手修正して解決しない.
 

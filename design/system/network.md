@@ -68,7 +68,7 @@ flowchart TD
 * RefreshTokenは`Secure`, `HttpOnly`, `SameSite=Strict`, `Path=/`, Domain属性なしの`__Host-RefreshToken` CookieだけでClientへ保持させる. Response BodyへRefreshTokenを返さない.
 * Cookieを伴う`RefreshAccessToken`および`Logout`等は認証Origin上の第一者ページから呼び, Public API Serverは`Origin` Headerが設定済み認証Originと完全一致する場合だけ受け付ける. Cookieを伴う認証APIのCross-Site CORS Credential許可は行わない. Cookieを伴わない通常API・認可コード交換のCORSは設定済み静的Client Originだけに限定し, wildcardを使用しない.
 * Clientは選定された静的配布先からJavaScript/WASMを取得してブラウザで実行し, API要求はブラウザのFetch APIを介してPublic API Serverへ送信する. WASM実行への移行は, 通信先Originに関するCORS・Cookieの制約を変更しない. GameServerはClientから直接接続させない.
-* Clientの静的配布は`https://github.com/ReHydrangeaOdyssey/ReHydrangeaOdyssey.github.io`のGitHub Pagesを予定し, 独自ドメインとPublic API Originは未決定とする. 異なるSite上のPublic APIと接続する場合は下記のトップレベル認証画面・一度限りの認可コード方式を用い, `SameSite=Strict` CookieをCross-Site要求へ送る方式を採用しない. HTTP/2/TLS 1.3はブラウザとServerがネゴシエーションし, 接続結果を検証する.
+* 静的ClientのOriginは`https://rehydrangeaodyssey.github.io`とし, 公開URLは`https://rehydrangeaodyssey.github.io/`, 配布リポジトリは`https://github.com/ReHydrangeaOdyssey/ReHydrangeaOdyssey.github.io`とする. 独自ドメインは採用しない. GameServerはClientから直接アクセスできる公開Endpointを持たず, ClientのAPI通信はPublic API Serverへ送信する. Public APIのHTTPS Originは別途定義する. 異なるSite上のPublic APIと接続する場合は下記のトップレベル認証画面・一度限りの認可コード方式を用い, `SameSite=Strict` CookieをCross-Site要求へ送る方式を採用しない. HTTP/2/TLS 1.3はブラウザとServerがネゴシエーションし, 接続結果を検証する.
 ## 静的Clientと認証Originが異なる場合の認証手順
 
 * GitHub Pagesの静的ClientとPublic API ServerがCross-Siteになる構成では、`__Host-RefreshToken`をCross-Site `fetch()`で送受信しない。Cookieの`Secure`, `HttpOnly`, `SameSite=Strict`, `Path=/`, Domain属性なしを維持する。静的Clientが直接送る通常API要求は従来どおりAccessTokenを認証情報として使用する。

@@ -34,10 +34,10 @@ ClientはRust/WebAssemblyをブラウザ上で実行する静的Webアプリケ�
 ## 配布
 
 - 公開対象はHTML、ES Module JavaScript、WASM、CSS、Manifestおよび試験に必要な静的アセットとし、GameServer・API Serverの処理や秘密鍵を配布しない。
-- 静的配布は`https://github.com/ReHydrangeaOdyssey/ReHydrangeaOdyssey.github.io`を使用するGitHub Pagesを予定する。独自ドメインの採否と最終公開URLは未決定とする。GitHub ActionsでReleaseビルド・検証・HTTPS静的配布を実行する。静的資源は相対Pathで参照する。
+- 静的Clientの公開URLは`https://rehydrangeaodyssey.github.io/`とし, 配布リポジトリは`https://github.com/ReHydrangeaOdyssey/ReHydrangeaOdyssey.github.io`とする。独自ドメインは採用しない。GitHub ActionsでReleaseビルド・検証・HTTPS静的配布を実行する。静的資源は相対Pathで参照する。GameServerの処理は公開静的配布物に含めず, ClientからGameServerへ直接接続させない。
 - JavaScriptのES Moduleと`wasm-bindgen --target web`による生成物をブラウザから読み込む。WASMロード処理の成功後に描画初期化する。
 - PWA用Manifestは配布できる構成とする。`start_url`と`scope`は公開ルート内の相対URLで指定する。
-- PWAインストールの操作案内はiOS Safariでは共有メニューの「ホーム画面に追加」、Android Chromeではメニューの「アプリをインストール」または「ホーム画面に追加」とする。インストール・ホーム画面からの起動等の検証はプロトタイプ段階で実施済みとする（開発者申告）。検証端末・OS・ブラウザ・試験記録の具体情報は未提示であり、アルファ/ベータ版およびブラウザ要件の下限については対象別に再確認する。アプリ名・アイコン素材は正式名称の確定後に指定する。
+- PWAインストールの操作案内はiOS Safariでは共有メニューの「ホーム画面に追加」、Android Chromeではメニューの「アプリをインストール」または「ホーム画面に追加」とする。インストールおよびホーム画面からの起動は対象ブラウザで動作することを必要とする。アプリ名・アイコン素材は正式名称の確定後に指定する。
 - 公開する試験データは再配布可能なものだけを含め、Token、個人データ、秘密鍵を同梱しない。
 
 ## 検証条件
@@ -49,7 +49,7 @@ ClientはRust/WebAssemblyをブラウザ上で実行する静的Webアプリケ�
 ## 制約
 
 - Clientのソースリポジトリは`https://github.com/ReHydrangeaOdyssey/Client.git`、純粋なゲームロジックは`https://github.com/ReHydrangeaOdyssey/GameLogic.git`、Serverは`https://github.com/ReHydrangeaOdyssey/Server.git`とする。
-- 配布リポジトリは上記GitHub Pagesを予定する。独自ドメイン、Public APIのHTTPS Originおよび認証画面の正式URLは未確定とする。静的配布OriginとAPI Originが異なる場合の認証は`design/system/network.md`の第一者Cookie・認可コード方式に従う。
+- 静的ClientのOriginは`https://rehydrangeaodyssey.github.io`とする。Public APIのHTTPS Originと認証画面のPathは別途定義する。静的配布OriginとAPI Originが異なる場合の認証は`design/system/network.md`の第一者Cookie・認可コード方式に従う。
 - 最低対応OS・ブラウザの組合せにおけるゲーム動作, 実測による描画解像度上限, 音声・保存容量の実機検証結果は別途確定する。
 
 ## 参照資料

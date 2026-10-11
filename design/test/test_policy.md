@@ -167,7 +167,7 @@ GuildBattle Replayは「[リプレイProtocol Buffers定義](../system/guild_bat
 
 以下を確認する.
 
-* ログイン不可またはServer未接続の場合はオンラインゲーム操作を不可とするが, OPFS容量不足を解消するアセット削除操作はタイトル画面から利用可能とする.
+* ログイン不可またはServer未接続の場合, Server通信を必須とする機能だけを利用不可とする. 通信不要の機能はすべて使用可能であることを合格条件とする. タイトル・ホーム間の遷移, ローカルのアセット追加・削除, キャッシュクリア, クレジット画面表示・復帰を対象に含め, OPFS容量不足時にもアセット削除を利用可能とする. 必要なブラウザAPIの非対応・保存域の障害はServer未接続とは別条件として検証する.
 * 必要な認証とServer接続が復帰すると, 接続状態と同じすべての機能を使用可能に戻す.
 * タイトル画面にキャッシュクリア, アセット追加, アセット削除, クレジットボタンがある.
 * タイトル画面の「アセットの追加」ボタンからアセット追加へ遷移し, タイトルのボタン以外の領域をタップするとホームへ遷移する.
@@ -175,7 +175,7 @@ GuildBattle Replayは「[リプレイProtocol Buffers定義](../system/guild_bat
 * キャッシュクリアは`./cache/`のみ, アセット削除は`./assets/`の任意個別素材または一括を対象とし, `./game_info.json`は維持される. OPFS容量不足時は通知を表示し, 解消までゲーム操作を不可とする.
 * タイトルの「クレジット」から専用画面へ移動し, 全ライセンス・著作権・帰属表記をスクロール閲覧でき, 「戻る」でタイトルへ復帰する. ログイン不可でも閲覧できる. Rust依存は`cargo-about`生成結果, その他のClient同梱物は追加表記によって必要事項を同じ画面に表示する.
 
-Clientの選定済み実装方式については, `design/programming/test/test_design.md`の「ブラウザ実装・アセット・音声の検証」を参照し, iPhone Safari/PWA, Android Chrome/PWA, WebGL 2, PNG, OPFS, HCA/音声を検証する. PWAのインストール・起動等はプロトタイプで検証済み（開発者申告）とし, 対象OS・ブラウザの組合せおよびアルファ/ベータ版への適用は回帰試験で確認する. PNG/HCAファイル本体のOPFS保存は定義済みである一方, HCAデコーダーの最終採用には実機検証を要する. ClientとPublic API Server間のHTTP/2 over TLS 1.3・Protocol Buffersおよび騎士団戦通知のHTTP/2 Response streamを通信仕様として確認し, WebSocketをPublic API通信方式として使用しない.
+Clientの選定済み実装方式については, `design/programming/test/test_design.md`の「ブラウザ実装・アセット・音声の検証」を参照し, iPhone Safari/PWA, Android Chrome/PWA, WebGL 2, PNG, OPFS, HCA/音声を検証する. PWAのインストール・起動等を含め, 対象OS・ブラウザの組合せで回帰試験を実施する. PNG/HCAファイル本体のOPFS保存は定義済みである一方, HCAデコーダーの最終採用には実機検証を要する. ClientとPublic API Server間のHTTP/2 over TLS 1.3・Protocol Buffersおよび騎士団戦通知のHTTP/2 Response streamを通信仕様として確認し, WebSocketをPublic API通信方式として使用しない.
 
 HCA 22,050Hz・非暗号化・左右2チャンネルのステレオ・辞書指定ループ・SE同時最大5を検証する. PCM先読みの初期500ms/補充250msを実機で調整する. 性能合否はFPS30以上（連続60秒平均, 初期10秒除外）・CIの非圧縮WASM500MB以下とし, 50MB超で最適化を検討する. GPU・RAMは参考計測とする.
 
