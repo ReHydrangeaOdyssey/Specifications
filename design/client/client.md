@@ -3,7 +3,7 @@
 ## 実行環境・描画方式
 
 * Clientの実装方式はRustをWebAssembly（WASM）へコンパイルするWeb Clientとする.
-* 対象環境はiPhoneのSafari / PWAおよびAndroidのChrome / PWAとする. 初期プロトタイプはLAN内ローカルWebサーバーからIPアドレス直指定で配信し, 正式公開先はVercelまたはGitHub Pagesのいずれかから未決定とする. 対象ブラウザの最小バージョンはiOS Safari 16.3, Android Chrome 120とする. 対応OSの最小バージョンは未確定とする. PWAインストール手順の詳細は未確定とする.
+* 対象環境はiPhoneのSafari / PWAおよびAndroidのChrome / PWAとする. 正式公開先はVercelまたはGitHub Pagesのいずれかから未決定とする. 対象ブラウザの最小バージョンはiOS Safari 16.3, Android Chrome 120とする. 対応OSの最小バージョンは未確定とする. PWAインストール手順の詳細は未確定とする.
 * 対象は2Dゲームとし, 最大20対20のリアルタイム騎士団戦での表示を想定する. 最大20対20を描画性能試験の条件とする.
 * 主描画方式はWebGL 2とし, `web-sys`を介した独自のスプライトバッチレンダラーを使用する. 汎用2DエンジンとCanvas 2Dを主レンダラーとしては使用しない. 別途UI Frameworkも使用しない.
 * PNGのデコードにはブラウザの`createImageBitmap()`を使用し, `ImageBitmap`からWebGL 2テクスチャへアップロードして描画する. PNGの全画素RGBAを描画のためにWASMメモリへ複製することは前提としない.

@@ -31,30 +31,25 @@ ClientはRust/WebAssemblyをブラウザ上で実行する静的Webアプリケ�
 - OPFSは同一Origin内のアプリ専用保存域とし、HTTPSの安全な文脈で利用する。保存可能容量はブラウザに依存し、空き容量照会値は近似値として扱う。ブラウザの容量超過・データ消去・非永続化の可能性をUI上で取り扱う。
 - ユーザーの元ファイルを自動削除しない。アセット追加の端末側ファイル選択UIはブラウザ互換性を確認したうえで決定し、既存の再帰探索要件を満たすことを検証する。
 
-## 配布とプロトタイプ
+## 配布
 
 - 公開対象はHTML、ES Module JavaScript、WASM、CSS、Manifestおよび試験に必要な静的アセットとし、GameServer・API Serverの処理や秘密鍵を配布しない。
-- 初期プロトタイプの配布はLAN内のローカル静的Webサーバーを使用し、試験端末のブラウザから当該サーバーのIPアドレスを直接指定してアクセスする。ローカルWebサーバーではゲーム処理・認証を実行しない。
 - 正式公開先はVercelとGitHub Pagesから選択する。GitHub Pages採用時はGitHub ActionsでReleaseビルド・検証・HTTPS静的配布を実行する。静的資源は相対Pathで参照する。
-- 初期試作ではJavaScriptのES Moduleと`wasm-bindgen --target web`による生成物をブラウザから読み込む。WASMロード処理の成功後に描画初期化する。
-- 初期試作では自動Service Worker登録とオフラインキャッシュを導入しない。PWA用Manifestは配布できる構成とし、初期のインストール検証では`display: standalone`・`orientation: landscape`を希望値とする。`start_url`と`scope`は公開ルート内の相対URLで指定する。これらの指定によってすべてのブラウザで画面方向や表示モードが強制されるとは扱わない。
+- JavaScriptのES Moduleと`wasm-bindgen --target web`による生成物をブラウザから読み込む。WASMロード処理の成功後に描画初期化する。
+- PWA用Manifestは配布できる構成とする。`start_url`と`scope`は公開ルート内の相対URLで指定する。
 - PWAインストールの操作案内はiOS Safariでは共有メニューの「ホーム画面に追加」、Android Chromeではメニューの「アプリをインストール」または「ホーム画面に追加」とする。実際の項目名称・表示可否は端末やブラウザバージョンによって変わるため実機で検証する。アプリ名・アイコン素材は正式名称の確定後に指定する。
-- 初期プロトタイプは`assets/prototype/`配下の試験用PNG`proto_type_title.png`、`proto_type_home.png`を、それぞれタイトル画面と仮ホーム画面に表示する。縦画面の上部余白および16:9より横長の画面の左右余白には`proto_type_fill.png`を使用する。各PNGは1280×720ピクセル、非透過とし、タイトルとホームは画面名が識別できる異なる配色・文字、補助背景は操作情報を含まない図柄とする。
-- 初期プロトタイプではタイトル画面の操作可能領域をタップ／クリックすると仮ホームへ遷移する。仮ホームでは「タイトルへ」ボタンでタイトルへ戻り、「カウント+1」ボタンで画面内の`COUNT: N`表示を1増加させる。仮ホームに入ったときの`N`は0とする。ボタンとレイアウトの具体値は`design/programming/client/web_delivery.md`に従う。
-- 試験用の画面遷移・表示・入力はプロトタイプ専用ビルドでのみ有効にする。本番ビルドではGameServerをゲーム状態の正本とする。
 - 公開する試験データは再配布可能なものだけを含め、Token、個人データ、秘密鍵を同梱しない。
 
 ## 検証条件
 
-- 初期プロトタイプはLAN内の別端末からローカルWebサーバーのIPアドレスを指定してHTML・JavaScript・WASM・試験用PNGを取得し、WebGL 2を初期化できることを確認する。タイトル画像から仮ホーム画像への遷移、仮ホームの2ボタンによる戻りとカウント増加、再読み込み後の再起動を確認する。
 - 16:9と4:3、16:9より横長の比率で、背景の左右切り取り・追加背景・中央UI配置とタップ座標の整合を確認する。縦画面ではゲーム領域の全体縮小・下端中央配置・上部補助背景・入力判定を確認する。高さ320px以上での表示と画面回転による再配置、Safe Areaへの侵入がないことを確認する。横画面への切替要求結果を実機で記録する。
 - 対象ブラウザの最小バージョンで動作確認を行う。機能を追加する場合は、追加した機能ごとに試験を増やす。
-- 初期のLAN接続による起動・画面・入力試験と、HTTPS等の安全なコンテキストを要するOPFS・PWA機能の検証は区別する。LAN内IPアドレスへの接続結果だけでOPFS・PWAの動作を合格としない。WASM・WebGL 2・OPFS・Web Audioの対応有無と実際の動作は対象機能ごとに端末で確認し、数値性能要件を測定なしに合格としない。
+- WASM・WebGL 2・OPFS・Web Audioの対応有無と実際の動作は対象機能ごとに端末で確認し、数値性能要件を測定なしに合格としない。
 
 ## 制約
 
 - Clientのソースリポジトリは`https://github.com/ReHydrangeaOdyssey/Client.git`、純粋なゲームロジックは`https://github.com/ReHydrangeaOdyssey/GameLogic.git`、Serverは`https://github.com/ReHydrangeaOdyssey/Server.git`とする。
-- 初期ローカルWebサーバーのIPアドレス・ポート、正式公開先（Vercel／GitHub Pages）・公開URL・独自ドメイン・APIとのSite/Origin構成は未確定とする。Public APIを使う段階では既存の`SameSite=Strict` Cookie要件を優先する。
+- 正式公開先（Vercel／GitHub Pages）・公開URL・独自ドメイン・APIとのSite/Origin構成は未確定とする。Public APIを使う段階では既存の`SameSite=Strict` Cookie要件を優先する。
 - 最小対応OSバージョン、実測による描画解像度上限、音声・保存容量の実機検証結果は別途確定する。
 
 ## 参照資料

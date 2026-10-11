@@ -2,7 +2,7 @@
 
 ## 未決定事項
 
-- 対応iOS/Androidの最小OSバージョン, PWAの端末別インストール検証, 初期プロトタイプのローカルWebサーバーのIPアドレス・ポート・サーバーソフトウェア, 正式公開先（Vercel／GitHub Pages）・公開URL・独自ドメイン
+- 対応iOS/Androidの最小OSバージョン, PWAの端末別インストール検証, 正式公開先（Vercel／GitHub Pages）・公開URL・独自ドメイン
 - 正式公開先とPublic APIのSite/Origin構成（`SameSite=Strict` Cookieを維持できる構成）, HTTP/2 + TLS 1.3の対象ブラウザ実通信検証
 - アセット追加シーンの戻り先・戻り操作, Safari/Chromeでのファイル/フォルダ取り込み操作, 元ファイル削除を伴う「移動」の権限と実現方式
 - Server配布の二段SHA-256辞書の取得API・配布時期・シリアライズ形式, ファイル名SHA-256入力前のUnicode正規化の扱い, OPFS内の割当情報の具体形式, 複数候補で内容SHA-256が一致しない場合の処理, 同名時の上書き規則
@@ -22,11 +22,6 @@
 - BP50回復薬の日次0:00配布の実行主体とJob/API, 対象Playerの確定タイミング, 未配布日の取扱い, 対象ItemIDの特定方式
 - 日次配布と騎士団戦中のGameServer所持数スナップショット・`UpdatePlayerItem`絶対所持数更新が異常時・遅延時等に重なる場合の同期方式
 - 進行中GuildBattleをGameServer異常終了後に別GameServerへ自動復旧する方式
-
-### Client初期プロトタイプの残る詳細
-
-- プロトタイプ専用ビルド設定の具体値
-- 正式な公開先をVercel／GitHub Pagesのどちらにするか, 選択後の配信URLと設定
 
 ## 参照資料
 

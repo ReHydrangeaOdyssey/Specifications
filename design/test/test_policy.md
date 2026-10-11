@@ -174,15 +174,6 @@ GuildBattle Replayは「[リプレイProtocol Buffers定義](../system/guild_bat
 * 「アセットの追加」ボタンから専用シーンへ遷移し, PNG/HCAをOPFSへ取り込める. 選択ディレクトリ配下を再帰的に探索し, ファイル名のSHA-256ハッシュ値に対応するServer配布辞書に基づき画像が自動配置され, OPFSへ割当情報を保存・復元する. 二段辞書の内容ハッシュ候補が1件の場合はファイル内容のSHA-256計算を省略しその配置先パスを採用する. 複数候補の場合はファイル内容のSHA-256によって配置先を区別する. それ以上のハッシュ衝突処理は検証対象としない.
 * キャッシュクリアがOPFSの`cache`フォルダだけを対象とし, その他のアセット・割当情報が維持される.
 
-### 初期Clientプロトタイプ
-
-* LAN内のローカル静的WebサーバーのIPアドレスを試験端末から直接指定し, HTML・JS・WASM・試験用PNGを取得してClientを起動できる.
-* タイトルで`assets/prototype/proto_type_title.png`を表示でき, ゲーム領域のタップ・クリックで仮ホームへ遷移した後は`assets/prototype/proto_type_home.png`を表示できる.
-* 仮ホームの「タイトルへ」ボタンでタイトルに戻り, 「カウント+1」ボタンの操作1回につき`COUNT: N`が1増加すること, 仮ホームへの再遷移時に0へ戻ること, タッチ操作で二重実行されないことを確認する.
-* 横画面16:9・4:3・横長画面および縦画面でゲーム領域と入力位置が一致することを確認する. 縦画面ではゲーム領域が下端中央に全体表示され, 上側だけ`assets/prototype/proto_type_fill.png`が描画され, 上部余白では入力が発生しないことを確認する.
-* 初期プロトタイプの操作は本番用のServer未接続時制限とは分けて検証する. GameServer・Public API Serverへの通信は行わない.
-* 正式公開先（Vercel／GitHub Pages）での公開試験と, HTTPSの安全なコンテキストを要するOPFS・PWA等の検証は, 本初期試験の合否に含めない.
-
 Clientの選定済み実装方式については, `design/programming/test/test_design.md`の「ブラウザ実装・アセット・音声の検証」を参照し, iPhone Safari/PWA, Android Chrome/PWA, WebGL 2, PNG, OPFS, HCA/音声を検証する. PNG/HCAファイル本体のOPFS保存は定義済みである一方, HCAデコーダーの最終採用には実機検証を要する. ClientとPublic API Server間のHTTP/2 over TLS 1.3・Protocol Buffersおよび騎士団戦通知のHTTP/2 Response streamを通信仕様として確認し, WebSocketをPublic API通信方式として使用しない.
 
 HCA 22,050Hz・非暗号化・一部ループ・SE同時最大5, 性能閾値GPU80%以下・メモリ2GB以下・FPS30以上・WASM 500MB以下の検証計画を作成する. 

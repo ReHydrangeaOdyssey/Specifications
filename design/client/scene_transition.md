@@ -34,14 +34,6 @@ stateDiagram-v2
 
 ## UI
 
-### 初期Clientプロトタイプ限定
-
-* プロトタイプではGameServerおよびPublic API Serverに接続せず、タイトル画面と仮ホーム画面を表示・遷移する。
-* タイトル画面には`assets/prototype/proto_type_title.png`を表示し、ゲーム領域のタップ・クリックで仮ホーム画面へ遷移する。
-* 仮ホーム画面には`assets/prototype/proto_type_home.png`を表示し、「タイトルへ」ボタンでタイトル画面へ戻る。「カウント+1」ボタンで`COUNT: N`の値を1増やす。仮ホームへの遷移直後の値は0とする。
-* 縦画面でゲーム領域の上部に生じる余白と、横長画面で基準背景の左右に生じる余白には`assets/prototype/proto_type_fill.png`を表示する。余白には入力操作を割り当てない。
-* 画面内の2ボタン、描画位置および入力判定は`design/programming/client/web_delivery.md`に従う。プロトタイプ用の画面遷移とボタン操作はプロトタイプ専用ビルドでのみ使用する。
-
 ### タイトル
 
 * ボタン以外の領域をタップするとホーム画面へ遷移する.
