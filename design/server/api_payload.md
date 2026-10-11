@@ -1273,7 +1273,8 @@ Private APIは再抽選を行わない. `GuildBattleID[]`と`Battles[]`のID集�
 | GuildBattleID | `GuildBattleID` | `resolving -> completed`へ遷移する騎士団戦ID |
 | GameServerInstanceID | `GameServerInstanceID` | 完了を要求する所有GameServer. Database上の割当と一致必須 |
 | GuildResults | `GuildBattleFinalGuildResult[2]` | 対戦2Guildの最終スコア・勝敗. GuildID集合はDatabase上の対戦Guildと一致必須 |
-| PlayerRecords | `GuildBattlePlayerRecordUpdate[]` | 1回以上出撃成立した通常PlayerとDummy PlayerID `0`の勝敗数更新情報. PlayerID重複不可 |
+| PlayerRecords | `GuildBattlePlayerRecordUpdate[]` | Join済み通常Player（出撃0回を含む）とDummy PlayerID `0`の勝敗数更新情報. PlayerID重複不可 |
+| Participants | `GuildBattlePlayerParticipation[]` | Join済み通常Playerの参加実績と今回獲得した個人Score（u64）。出撃0回も含む。PlayerID重複不可 |
 
 ### GuildBattleFinalGuildResult
 
@@ -1402,3 +1403,7 @@ Private APIは再抽選を行わない. `GuildBattleID[]`と`Battles[]`のID集�
 ## 施設・Guild参照・Replay取得Payload
 
 施設強化・次Lv費用・Guild/Player検索・招待/申請・Guild詳細・開始時刻変更・本人編成取得・Battle割当/結果・Replay一覧/取得・初期Guild作成状態の型とfield numberは、それぞれ`design/system/public_api.proto`・`design/system/private_api.proto`の対応`Request`/`Response`を正とする。業務条件と権限は`design/server/public_api.md`および`design/server/private_api.md`を正とする。
+
+## プロフィール・フレンド通信Payload
+
+通信型・field numberは`design/system/public_api.proto`および`design/system/private_api.proto`を正本とする。`GetPlayerProfile`は対象Playerの名前、騎士団戦参加回数（`Count`）、勝利数（`Count`）、累計騎士団スコア（`Score` = `u64`）を返す。`ListNotifications`は本人が受け取った未処理フレンド申請の送信者ID・名前を含み、`RespondFriendRequest`は送信者PlayerIDと承認/拒否を指定する。`ListFriends`は本人と相互フレンドになったPlayerIDと表示名の組を返す。

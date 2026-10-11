@@ -818,3 +818,15 @@ GameServer側のチェック.
 ## 初期騎士団作成状態の参照
 
 `GetInitialGuildStatus`は認証済み本人の`PlayerID`についてPrivate API `GetInitialGuildStatusPrivate`を呼び出し、`GUILD.id=PlayerID`の存在を返す。初期Guild未作成の場合にも許可する。`CreateGuild`応答が失われた場合は、この参照APIでDBの確定状態を取得し、CreateGuild要求自体は再送しない。
+
+## プロフィール・フレンド・通知
+
+| Method | Private API | 成功時の動作 |
+|---|---|---|
+| `GetPlayerProfile` | `GetPlayerProfilePrivate` | 指定Playerの名前・参加回数・勝利数・累計騎士団スコアを返す |
+| `SendFriendRequest` | `SendFriendRequestPrivate` | 申請先Playerに未処理の申請を保存する |
+| `ListNotifications` | `ListFriendRequestsPrivate` | 本人宛のフレンド申請を通知一覧の項目として返す |
+| `RespondFriendRequest` | `RespondFriendRequestPrivate` | 受信者による承認で相互関係成立、拒否で申請削除 |
+| `ListFriends` | `ListFriendsPrivate` | 本人の承認済みフレンドをPlayer名とIDの一覧で返す |
+
+すべて既存のBearer認証で本人の`PlayerID`とToken subjectを照合する。プロフィール参照対象は通常Playerとする。自分への申請は拒否する。同一組が既にフレンドである場合は新規申請を成立させない。申請承認・拒否は受信者本人だけが操作でき、申請者に拒否通知を送らない。`ListNotifications`に表示する申請は未処理のものだけとする。プロフィールおよびフレンド一覧は`design/system/public_api.proto`をwire正本とする。`ListFriends`の`player_id`を選択したときは既存の`StartArenaBattle`をFriendモードで要求する。

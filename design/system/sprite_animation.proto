@@ -30,8 +30,8 @@ message BoneData {
   float x = 4;
   float y = 5;
   sint32 z = 6;
-  float scale_x = 7 [json_name = "cX"];
-  float scale_y = 8 [json_name = "cY"];
+  optional float scale_x = 7 [json_name = "cX"];
+  optional float scale_y = 8 [json_name = "cY"];
   float skew_x = 9 [json_name = "kX"];
   float skew_y = 10 [json_name = "kY"];
   float arrow_x = 11 [json_name = "arrow_x"];
@@ -52,8 +52,8 @@ message DisplayData {
 message SkinData {
   float x = 1;
   float y = 2;
-  float scale_x = 3 [json_name = "cX"];
-  float scale_y = 4 [json_name = "cY"];
+  optional float scale_x = 3 [json_name = "cX"];
+  optional float scale_y = 4 [json_name = "cY"];
   float skew_x = 5 [json_name = "kX"];
   float skew_y = 6 [json_name = "kY"];
 }
@@ -85,13 +85,13 @@ message FrameData {
   float x = 2;
   float y = 3;
   sint32 z = 4;
-  float scale_x = 5 [json_name = "cX"];
-  float scale_y = 6 [json_name = "cY"];
+  optional float scale_x = 5 [json_name = "cX"];
+  optional float scale_y = 6 [json_name = "cY"];
   float skew_x = 7 [json_name = "kX"];
   float skew_y = 8 [json_name = "kY"];
   sint32 display_index = 9 [json_name = "dI"];
   sint32 tween_easing = 10 [json_name = "twE"];
-  bool tween_frame = 11 [json_name = "tweenFrame"];
+  optional bool tween_frame = 11 [json_name = "tweenFrame"];
   uint32 blend_source = 12 [json_name = "bd_src"];
   uint32 blend_destination = 13 [json_name = "bd_dst"];
 
@@ -113,7 +113,7 @@ message TextureData {
   string name = 1;
   float width = 2;
   float height = 3;
-  float pivot_x = 4 [json_name = "pX"];
-  float pivot_y = 5 [json_name = "pY"];
+  optional float pivot_x = 4 [json_name = "pX"];
+  optional float pivot_y = 5 [json_name = "pY"];
   string plist_file = 6 [json_name = "plistFile"];
 }

@@ -106,3 +106,5 @@ ClientとGameServerで以下が同一なら、Arenaの戦闘結果が一致す�
 - `design/game/pseudorandom.md`
 - `design/server/api_payload.md`
 - `design/test/test_policy.md`
+
+Friend Arenaで選択可能なOpponentIDの一覧は、`ListFriends`による承認済みフレンド関係を正本とする。対戦時のArena編成確認は既存の`GetArenaBattleData`を継続する。

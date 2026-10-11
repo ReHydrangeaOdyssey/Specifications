@@ -76,6 +76,7 @@ OPFSのPNG → File / Blob → createImageBitmap() → WebGL 2 texImage2D()
 - アニメーションデータは`design/system/sprite_animation.proto`に定義する`SpriteAnimationData`を使用します。骨格・ボーン・表示データ、モーション・ボーンタイムライン・フレーム、テクスチャ参照をそれぞれ保持し、`repeated`フィールドの要素順を維持します。
 - ボーンおよびフレームの座標・拡縮・傾き、表示Index、補間・色・ブレンド情報をスプライトのアニメーション描画に使用します。PNGの画像本体・アトラスファイル本体は別アセットとし、既定のOPFS読込み・WebGL 2テクスチャ描画の経路を使用します。
 - スプライトのアトラスデータは`design/system/plist.proto`の`PlistRoot`・`Frames`・`FramesFrame`・`Metadata`・`Texture`で表現します。フレームのキーと切り出し矩形・元画像サイズ・オフセットを保持し、アニメーションの`DisplayData`・`TextureData`が持つ画像参照情報と区別します。
+- 骨格・スプライトアトラスの復元、モーション評価、補間、親子行列合成、表示Index・Z順の確定規則は`design/client/sprite_animation_runtime.md`に従います。
 - アニメーションはClientのイベントキューに連動した表示処理とし、画像・UV・アニメーションデータをGameServerの`ProcessedMasterData`に含めません。
 
 ### HCAデコード・音声パイプライン
@@ -98,7 +99,7 @@ OPFSのPNG → File / Blob → createImageBitmap() → WebGL 2 texImage2D()
 ### OPFSアセット管理
 
 - タイトル画面の「アセットの追加」からPNG/HCAをファイル単位またはディレクトリ単位で一括取り込みします。コピー/移動を選択可能にし, 移動時は「ゲーム内へファイルの移動はゲーム終了時に消える可能性がある」と表示します。元ファイル削除権限が得られる端末では保存成功後のみ削除し, 削除機能がないブラウザではコピーのみ利用可能とします。二段辞書は`https://github.com/ReHydrangeaOdyssey/AssetDictionary`からLogin完了時に取得し, GameServerから辞書を配布しません。
-- OPFSの基本構造は`./game_info.json`（現在・前回のバージョン）, `./assets/<something>`, `./cache/<something>`とします。通常のアセットPathは維持し, 配置変更が必要なバージョンでだけ`game_info.json`を照合して差分移行を実行します。`game_info.json`の検証・必要な差分処理でエラーがなければ更新成功と判定します。中断時の自動再開は要件としません。
+- OPFSの基本構造は`./game_info.json`（現在・前回のバージョン）, `./assets/<something>`, `./cache/<something>`とします。通常のアセットPathは維持し, 配置変更が必要なバージョンでだけ`game_info.json`を照合して差分移行を実行します。`game_info.json`の`version`と`previous_version`は`design/client/client.md`で定義したu32 3要素形式で検証し、不正値は初期データに再生成します。必要な差分処理でエラーがなければ更新成功と判定します。中断時の自動再開は要件としません。
 - OPFSでは非同期APIと`FileSystemSyncAccessHandle`を利用可能な処理で選択します。非同期のほうが効率的な処理には非同期APIを使い, 同期APIはWorker内でのアクセスに限定します。用途別の性能・互換性測定は継続します。
 - 圧縮HCAファイル全体と全体PCMを同時に常駐させません。デコード済みPCM, GPU資源, WASMメモリは用途別に管理し, 不要な`AudioBuffer`の参照を解除します。
 - アセット取り込みでは拡張子付きファイル名UTF-8のSHA-256と, 必要な場合の内容SHA-256を辞書に照合し, 一致する辞書Pathへ保存します。一致しない場合はユーザー素材として区分「BGM」「SE」「Voice」「Character」「SD Character」「Character Icon」の選択を求めます。カテゴリと配置先Pathの対応は未確定です。既存Pathへの上書きはユーザー確認を必須とし, 一括上書き/一括キャンセルを選択できます。ファイル名は英語表記の運用を前提に, ハッシュ入力のUnicode正規化は行わず, 辞書生成側と同一の元ファイル名文字列をUTF-8化します。
@@ -283,3 +284,9 @@ Seedが`0`かどうかだけでランダム要素の有無を判定しません�
 - 添付`rust_wasm_png_hca_library_selection(1).md`（2026-10-09）, 第1～7節.
 - `design/system/network.md`.
 - `design/system/rust_dependencies.md`.
+
+### プロフィール・フレンド表示
+
+- 所属メンバー選択では`GetPlayerProfile`を取得する。フレンド申請、ホーム通知一覧の承認・拒否、Arenaのフレンド名一覧はそれぞれ`SendFriendRequest`・`ListNotifications`/`RespondFriendRequest`・`ListFriends`を使用する。すべて既存の認証付きPublic APIを経由し、未接続時には状態変更しない。
+
+音声ファイル未配置・復号失敗・Web Audio再生失敗時は、その音を無音として扱う。戦闘ロジックとServer上の確定結果は変更しない。

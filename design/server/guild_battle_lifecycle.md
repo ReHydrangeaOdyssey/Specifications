@@ -61,11 +61,12 @@ InitialSeedだけ保存済み, Create Replayだけ保存済み, `in_progress`だ
 2. `game_server_instance_id`が要求`GameServerInstanceID`と一致することを確認する.
 3. `GuildResults`がDatabase上の対戦2Guildと一対一で一致し, 勝敗組み合わせが最終Scoreと整合することを確認する. Scoreが異なる場合は高い側`WIN`・低い側`LOSE`, 同値の場合は両側`DRAW`だけを許可する.
 4. 2Guildの最終スコア・勝敗を`GUILD_BATTLE_RESULT`へ保存する.
-5. `PlayerRecords`のPlayerID重複を拒否する. PlayerID `0`以外は対戦2Guildのいずれかへの所属を確認し, 指定Resultが所属Guildの最終結果と一致することを確認した上で, 勝利なら`guild_battle_win_count+1`, 敗北なら`guild_battle_lose_count+1`, 引き分けなら更新なしとする.
-6. `status=completed`へ更新する.
-7. 対戦2Guildの`GUILD.membership_locked=false`へ更新する. 複数Guildを更新する場合はGuildID昇順でLock・更新する.
-8. `start_at`ではなく`matching_target_date`と`matching_start_time`で同一マッチング枠を識別する. 先に取得した同一枠のトランザクション単位排他を保持し, 同一枠の`GUILD_BATTLE`（旧ID・新IDの後継対戦を含む）をID昇順で行ロックする.
-9. `completed`・`canceled`・`replaced`を終端状態とし, 今回の更新後に同枠の全対戦が終端状態となった場合に限り, `GUILD_BATTLE_EXCLUDED_GUILD`の除外GuildをGuildID昇順で`membership_locked=false`へ更新し, 対応する除外一覧を削除する. `preload_failed`（運営判断待ち）や新IDで再開した未完了対戦が1件でも残る場合は解除しない. `CompleteGuildBattle`, `CancelPreloadFailedGuildBattle`, `RetryPreloadFailedGuildBattle`は同じ枠単位排他を使い, 判定中に後継対戦が追加されることを防ぐ.
+5. `PlayerRecords`はJoin済みのPlayer（出撃0回の通常Playerを含む）を持つ。通常PlayerのID集合は`Participants`のPlayerID集合と一致させ、双方の重複を拒否する。 PlayerID `0`以外は対戦2Guildのいずれかへの所属を確認し, 指定Resultが所属Guildの最終結果と一致することを確認した上で, 勝利なら`guild_battle_win_count+1`, 敗北なら`guild_battle_lose_count+1`, 引き分けなら更新なしとする.
+6. `Participants`はJoin済みの通常Playerを対象とし、PlayerID重複・対戦2Guildの所属不一致を拒否する。各Playerの`guild_battle_participation_count`を1加算し、`guild_battle_total_score`へ当該対戦で確定した個人獲得Score（u64）を加算する。参加だけで出撃していないPlayerも対象に含める。同一`GuildBattleID`の二重完了は既存冪等化により重複計上しない。累計値が各論理型の上限を超える更新は成立させない。
+7. `status=completed`へ更新する.
+8. 対戦2Guildの`GUILD.membership_locked=false`へ更新する. 複数Guildを更新する場合はGuildID昇順でLock・更新する.
+9. `start_at`ではなく`matching_target_date`と`matching_start_time`で同一マッチング枠を識別する. 先に取得した同一枠のトランザクション単位排他を保持し, 同一枠の`GUILD_BATTLE`（旧ID・新IDの後継対戦を含む）をID昇順で行ロックする.
+10. `completed`・`canceled`・`replaced`を終端状態とし, 今回の更新後に同枠の全対戦が終端状態となった場合に限り, `GUILD_BATTLE_EXCLUDED_GUILD`の除外GuildをGuildID昇順で`membership_locked=false`へ更新し, 対応する除外一覧を削除する. `preload_failed`（運営判断待ち）や新IDで再開した未完了対戦が1件でも残る場合は解除しない. `CompleteGuildBattle`, `CancelPreloadFailedGuildBattle`, `RetryPreloadFailedGuildBattle`は同じ枠単位排他を使い, 判定中に後継対戦が追加されることを防ぐ.
 
 最終結果保存, Player勝敗数更新, `completed`遷移, membership lock解除の一部だけが確定した中間状態を作らない.
 

@@ -78,7 +78,7 @@ Database, Public API Server, Private API Server, GameServer, GuildBattleCoordina
 * `MarkGuildBattlePreloadFailed`による`scheduled -> PRELOAD_FAILED`遷移と所有GameServer不一致時の拒否.
 * `StartGuildBattle`でInitialSeed保存, Create Replay保存, `scheduled -> in_progress`が同一トランザクションで確定すること.
 * `BeginGuildBattleResolving`による`in_progress -> resolving`以外の遷移拒否.
-* `CompleteGuildBattle`で最終結果, Player勝敗数, `completed`, membership lock解除, 除外一覧削除が同一トランザクションで確定すること.
+* `CompleteGuildBattle`で最終結果, Join済みPlayerの参加回数・個人累計スコア・勝敗数（出撃0回を含む）, `completed`, membership lock解除, 除外一覧削除が同一トランザクションで確定すること.
 * `CompleteGuildBattle`で対戦外Player, PlayerID重複, Guild結果とPlayer結果の不一致, 最終Scoreと不整合な2Guild勝敗組み合わせを拒否すること.
 * Lifecycle APIで定義されていない`GuildBattleStatus`遷移を拒否すること.
 * `RetryPreloadFailedGuildBattle`による同一ペア再Preload.

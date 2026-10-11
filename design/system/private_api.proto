@@ -400,7 +400,8 @@ message CompleteGuildBattleRequest {
   uint64 guild_battle_id = 1; // `resolving -> completed`へ遷移する騎士団戦ID
   string game_server_instance_id = 2; // 完了を要求する所有GameServer. Database上の割当と一致必須
   repeated GuildBattleFinalGuildResult guild_results = 3; // 対戦2Guildの最終スコア・勝敗. GuildID集合はDatabase上の対戦Guildと一致必須
-  repeated GuildBattlePlayerRecordUpdate player_records = 4; // 1回以上出撃成立した通常PlayerとDummy PlayerID `0`の勝敗数更新情報. PlayerID重複不可
+  repeated GuildBattlePlayerRecordUpdate player_records = 4; // Join済み通常Player（出撃0回を含む）およびDummy PlayerID `0`の勝敗数更新情報. PlayerID重複不可
+  repeated GuildBattlePlayerParticipation participants = 5; // Join済みの通常Player（出撃0回を含む）。PlayerID重複不可
 }
 
 message GuildBattleFinalGuildResult {
@@ -412,6 +413,11 @@ message GuildBattleFinalGuildResult {
 message GuildBattlePlayerRecordUpdate {
   uint64 player_id = 1; // 更新対象PlayerID
   game.model.GuildBattleResult result = 2; // 当該Playerの勝敗. drawの場合は勝敗数を更新しない
+}
+
+message GuildBattlePlayerParticipation {
+  uint64 player_id = 1;
+  uint64 acquired_score = 2; // 騎士団戦1回あたりの個人獲得Scoreをu64で確定した値
 }
 
 message IssueAuthorizationCodePrivateRequest { bytes refresh_token = 1; string redirect_uri = 2; bytes code_challenge_sha256 = 3; }
@@ -478,3 +484,15 @@ message GetMyGuildBattleReplayPrivateResponse { repeated bytes envelopes = 1; }
 
 message GetInitialGuildStatusPrivateRequest { uint64 player_id = 1; }
 message GetInitialGuildStatusPrivateResponse { bool initial_guild_created = 1; uint64 guild_id = 2; }
+
+// Player profile, incoming friend requests and mutual friendship storage.
+message GetPlayerProfilePrivateRequest { uint64 requester_player_id = 1; uint64 target_player_id = 2; }
+message GetPlayerProfilePrivateResponse { game.publicapi.GetPlayerProfileResponse profile = 1; }
+message SendFriendRequestPrivateRequest { uint64 sender_player_id = 1; uint64 recipient_player_id = 2; }
+message SendFriendRequestPrivateResponse {}
+message ListFriendRequestsPrivateRequest { uint64 recipient_player_id = 1; }
+message ListFriendRequestsPrivateResponse { repeated game.publicapi.FriendRequestNotification friend_requests = 1; }
+message RespondFriendRequestPrivateRequest { uint64 recipient_player_id = 1; uint64 sender_player_id = 2; bool approve = 3; }
+message RespondFriendRequestPrivateResponse { bool became_friends = 1; }
+message ListFriendsPrivateRequest { uint64 player_id = 1; }
+message ListFriendsPrivateResponse { repeated game.publicapi.FriendListEntry friends = 1; }

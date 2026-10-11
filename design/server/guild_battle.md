@@ -703,9 +703,9 @@ sequenceDiagram
         end
     end
 
-    GameServer->>GameServer: GuildResults[2]とPlayerRecords[]を生成
-    GameServer->>PrivateAPIServer: CompleteGuildBattle(GuildBattleID, GameServerInstanceID, GuildResults, PlayerRecords)
-    PrivateAPIServer->>Database: 結果・勝敗更新 + completed + 対戦2Guildロック解除; 同時間帯全対戦完了時だけexcluded解除・削除
+    GameServer->>GameServer: GuildResults[2]・PlayerRecords[]・Participants[]を生成
+    GameServer->>PrivateAPIServer: CompleteGuildBattle(GuildBattleID, GameServerInstanceID, GuildResults, PlayerRecords, Participants)
+    PrivateAPIServer->>Database: 結果・参加回数・勝敗数・個人累計スコア更新 + completed + 対戦2Guildロック解除; 同時間帯全対戦完了時だけexcluded解除・削除
     Database-->>PrivateAPIServer: 完了結果
     PrivateAPIServer-->>GameServer: CompleteGuildBattle
 

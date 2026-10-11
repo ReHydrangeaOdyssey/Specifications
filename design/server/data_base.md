@@ -24,6 +24,8 @@ erDiagram
         UserName name
         Count guild_battle_win_count
         Count guild_battle_lose_count
+        Count guild_battle_participation_count
+        Score guild_battle_total_score
         BP max_bp
         Gold gold
     }
@@ -88,6 +90,18 @@ erDiagram
         PlayerID inviter_player_id FK
     }
 
+    FRIEND_REQUEST {
+        PlayerID sender_player_id PK, FK
+        PlayerID recipient_player_id PK, FK
+        DateTime created_at
+    }
+
+    FRIEND {
+        PlayerID lower_player_id PK, FK
+        PlayerID higher_player_id PK, FK
+        DateTime created_at
+    }
+
     ACCOUNT ||--|| PLAYER : owns
     ACCOUNT ||--o| ACCOUNT_SESSION : has
     ACCOUNT ||--o{ AUTHORIZATION_CODE : issues
@@ -97,6 +111,9 @@ erDiagram
     PLAYER ||--o{ GUILD_JOIN_APPLICATION : applies
     GUILD ||--o{ GUILD_INVITATION : issues
     PLAYER ||--o{ GUILD_INVITATION : receives
+    PLAYER ||--o{ FRIEND_REQUEST : sends
+    PLAYER ||--o{ FRIEND_REQUEST : receives
+    PLAYER ||--o{ FRIEND : is_friends_with
 
     PLAYER ||--o| GUILD : leader
 ```
@@ -115,12 +132,20 @@ Logout時は対象`ACCOUNT_SESSION`レコードを削除する.
 `DISCORD_AUTHORIZATION_TOKEN_USAGE.token_id`には成功したAccount新規作成またはLoginで使用した`DiscordAuthorizationToken.jti`を保存する. 同一`token_id`を複数回成功させない. `expires_at`経過後のレコードは削除してよい.
 Discord Botから`RevokeDiscordSessions`を受信した場合は, 指定DiscordUserIDと一致する`ACCOUNT.discord_user_id`を持つAccountの`ACCOUNT_SESSION`を削除する.
 
-`PLAYER.guild_battle_win_count`と`PLAYER.guild_battle_lose_count`の初期値はともに`0`とする.
+`PLAYER.guild_battle_win_count`、`PLAYER.guild_battle_lose_count`、`PLAYER.guild_battle_participation_count`、`PLAYER.guild_battle_total_score`の初期値はすべて`0`とする。`guild_battle_total_score`は`numeric(20,0)`で`u64`全域を表現する。
 `PLAYER.max_bp`の新規プレイヤー作成時初期値は`200`とする.
 `PLAYER.gold`は通常Playerごとのゴールド残高の正本とし, `0..4294967295`の整数だけを保存する. 新規Player作成時は`0`で初期化する.
 
 
 初期Guild作成フローの完了判定の正本は、通常Playerに対応する`GUILD.id=PLAYER.id`行の有無とする。専用の「新規プレイヤーフラグ」を別途永続化しない。作成済みの場合は同じ初期Guildの再作成を拒否する。
+
+## フレンドの永続化
+
+* `FRIEND_REQUEST`は未処理の申請だけを保持する。送信者・受信者の組を主キーとし、両IDは存在する通常Player、かつ異なるIDでなければならない。
+* 承認時は申請行を排他Lockし、`FRIEND`に両PlayerIDを数値昇順の組（`lower_player_id < higher_player_id`）で一意に保存し、同一トランザクションで申請行を削除する。双方で同一の1件を参照する。
+* 拒否時は受信者本人の未処理申請行を削除する。申請者向けの拒否通知レコードは作成しない。
+* 未処理申請の受信一覧をホームの通知一覧のフレンド申請部分の正本とする。承認・拒否の操作対象は通知を受け取ったPlayerに限る。
+* フレンド一覧は`FRIEND`から現在のPlayerIDを含む組を検索し、相手の`PLAYER.name`を付して返す。
 
 ## GUILD / GUILD_MEMBER 制約
 

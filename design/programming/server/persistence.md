@@ -152,3 +152,5 @@ Replayの完全再現性を保つため、DB保存用に別内容へ変換しま
 - `design/system/guild_battle_replay.proto`
 - `design/shared/types.md`
 - `design/test/test_policy.md`
+
+`CompleteGuildBattle`の確定Transactionは、参加済みPlayerの`guild_battle_participation_count`および`guild_battle_total_score`更新も含む。更新対象はJoin済み通常Playerで、出撃0回の参加者も含む。同じ`GuildBattleID`の再送時に二重計上しない。
