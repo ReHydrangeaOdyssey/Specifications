@@ -163,13 +163,15 @@ Server側処理時間がSlow Request判定閾値を超えた要求はSampling Ra
 Public API ServerからGameServer, 必要な場合はPrivate API Serverまでの粗い処理単位をTrace対象とする.
 Trace Exportは騎士団戦処理スレッドから同期実行しない.
 
+Player向けのReplay閲覧は現行Versionと一致する保存済み履歴だけに制限する. 旧VersionのReplayログはDatabaseから削除せず保持するが, Playerからは視聴不可とする. 各Playerへ提供する履歴は過去50件を上限とする.
+
 ## 騎士団戦リプレイログ
 
 ファイル名は`./log/guild_battle/<生成時刻(YYYY_MMDD_HHMMSS)(JST)>_<騎士団戦ID>_replay.pb`とする.
 リプレイログのwire形式は「[guild_battle_replay.proto](guild_battle_replay.proto)」を正本とする.
 ファイルは`GuildBattleReplayEnvelope`をProtocol BuffersでSerializeし, 各Messageの前へprotobuf varintのMessage長を付与したlength-delimited Message列として処理成立順に追記する.
 JSONへ変換して保存しない. Databaseの`GUILD_BATTLE_REPLAY_LOG.payload`にも同じ`GuildBattleReplayEnvelope`のSerialize済みバイナリを保存する.
-`GuildBattleReplayEnvelope.process_type`と`oneof payload`は必ず対応する組み合わせを設定する.
+`GuildBattleReplayEnvelope.process_type`と`oneof payload`は必ず対応する組み合わせを設定する. 施設BP回復成立は`GUILD_BATTLE_REPLAY_TAVERN_RECOVERY`と`tavern_recovery`で記録する.
 処理が成立した場合のみReplay Eventを生成する(失敗は含まれない).
 成立した処理はReplayQueueへ追加し, Replay Workerが本リプレイログへ書き出すとともに, Private API Server経由でDatabaseへ保存する.
 ログの最初から辿ることで特定地点まで完全に再現可能にする.
@@ -206,6 +208,10 @@ GameServer受信時刻, `GuildBattleID`, `GuildBattleReplayProcessType`, PlayerI
 ### アイテム回復時
 
 GameServer受信時刻, `GuildBattleID`, `GuildBattleReplayProcessType`, PlayerID, ItemID.
+
+### 施設からのBP回復時
+
+GameServer受信時刻, `GuildBattleID`, `GuildBattleReplayProcessType`, 使用PlayerID, 所属GuildID, 使用後BP, 使用後回数を保存する.
 
 ## 騎士団戦システムログ
 

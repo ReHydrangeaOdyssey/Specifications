@@ -75,7 +75,7 @@ Seed生成・DB取得等の正確な処理順は`design/server/arina.md`を正�
 
 Random Arena候補をGameServer内で保持する場合、候補はArena Party登録済み通常Playerのみとし、System Dummy PlayerID `0`を含めません。
 
-候補列の並びや抽選時の乱数消費順はArena設計を正とします。Cache更新頻度など、現仕様に明示されていない運用値は本設計で固定しません。
+候補列の並びや抽選時の乱数消費順はArena設計を正とします。`SaveArenaParty`が成功した場合は対象PlayerIDと登録状態に限った更新を各GameServerの候補キャッシュへ反映し, PlayerID昇順を維持します。対象外IDをまとめて再同期せず, 更新済み候補を次のランダム対戦要求から使用します。
 
 ## Errorの分離
 

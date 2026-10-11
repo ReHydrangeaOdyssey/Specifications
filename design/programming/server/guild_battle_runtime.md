@@ -32,6 +32,7 @@ classDiagram
         CharacterHPs
         BP
         TP
+        TavernUseCount
         HealState
         ReviveState
         SortieCooldown
@@ -62,7 +63,7 @@ classDiagram
 
 ## 初期化・Replay
 
-PreloadではPrivate API経由でGuild / Member / Party / Item等の必要な情報を取得し, 開戦時の可変初期状態を`GuildBattleInitialSnapshot`へ固定する. InitialSeed, Version, GuildID, SnapshotのCreate Replayを最初のEventとする. `StartGuildBattle`成功時にCreate Replayの保存と`scheduled -> in_progress`を同一Database Transactionで確定する. Replay復元で現在のDatabaseの可変値を初期状態として使用しない.
+PreloadではPrivate API経由でGuild / Member / Party / Item等の必要な情報を取得し, 各キャラクターの基礎攻撃力・基礎最大HP・基礎防御力へ所属騎士団の武器庫・食糧庫・鍛冶屋のレベルに応じた固定量を直接加算する. 加算済み3値を`GuildBattlePartyCharacter`の`facility_adjusted_*`に保持し, 開戦時の可変初期状態とともに`GuildBattleInitialSnapshot`へ固定する. 戦闘とReplay復元は記録済みの値を入力に使用し, 施設補正を再加算しない. InitialSeed, Version, GuildID, SnapshotのCreate Replayを最初のEventとする. `StartGuildBattle`成功時にCreate Replayの保存と`scheduled -> in_progress`を同一Database Transactionで確定する. Replay復元で現在のDatabaseの可変値を初期状態として使用しない.
 
 成功した状態変更は成立順にReplay Eventとして記録する. Replayに記録するEventの意味と書式は`design/system/guild_battle_replay.proto`, 保存障害と再送は`design/system/log.md`を正とする.
 
@@ -102,7 +103,7 @@ flowchart TD
 
 ## GetGuildBattleStatus
 
-`GetGuildBattleStatus`はRequestSequence不要・Sequence不消費の状態参照で, 再接続時の正本同期に使用する. 現在HP, BP/最大BP, TP/最大TP, Heal/Reviveと残り時間, 出撃待機, Active Tactics Effects, Item残数, 両Guild Score, 所属Guild Chain, CBC, 現在RequestSequenceを返す. CharacterID, Follower, MainSkill, Ability, Formation等の静的編成はJoin時に同期済みのClient情報を利用し再送しない.
+`GetGuildBattleStatus`はRequestSequence不要・Sequence不消費の状態参照で, 再接続時の正本同期に使用する. 当該要求者へ適用される酒場の使用残回数も返す. 現在HP, BP/最大BP, TP/最大TP, Heal/Reviveと残り時間, 出撃待機, Active Tactics Effects, Item残数, 両Guild Score, 所属Guild Chain, CBC, 現在RequestSequenceを返す. CharacterID, Follower, MainSkill, Ability, Formation等の静的編成はJoin時に同期済みのClient情報を利用し再送しない.
 
 ## 出撃専用処理
 
@@ -130,7 +131,7 @@ flowchart TD
 殲滅では`GuildBattleAnnihilationResponse`に戦闘開始時点の`OwnCharacters`, `EnemyCharacters`, `EnemyPlayerID`, `EnemyFormationID`, 戦闘に関係する`BattleTacticsEffects`, `Seed`を格納する. ClientはJoin時同期済み自身の編成とこの入力で同一`game-core`を実行する. 表示済みの古いHPやTacticsを流用せず, 関係しない継続効果・最終HP・行動履歴を追加送信しない.
 
 出撃結果Responseは要求元へ先に送るが, その後のBattle Special回復, `acquired_score`, スコア・チェイン確定, Replay Event追加まで同一出撃の直列実行範囲とする. GameServerにおける騎士団合計スコアの正本はResponseの未切り捨て`SortieScore`ではなくRuntimeの確定済み`Score`である. 送信通知の失敗によって出撃を巻き戻さない.
-出撃計算式はすべて`f32`で評価し, 出撃Responseの`Score`およびPlayerの`acquired_score`は`SortieScore`（`f32`）で保持する. 騎士団合計ptだけ, 1出撃ごとに小数点以下を切り捨てて`Score`（`u64`）へ加算する.
+出撃計算式はすべて`f32`で評価し, 出撃の最終`SortieScore`が負数・NaN・正負Infinityの場合は0.0へ正規化してからResponseとPlayerの`acquired_score`へ反映する. 出撃Responseの`Score`およびPlayerの`acquired_score`は`SortieScore`（`f32`）で保持する. 騎士団合計ptだけ, 1出撃ごとに小数点以下を切り捨てて`Score`（`u64`）へ加算する. `u64`へ変換する値と合計値には`u64::MAX`を上限とする飽和変換・飽和加算を使用する.
 
 
 ## 通知購読とチェイン残り時間
@@ -175,7 +176,7 @@ sequenceDiagram
 
 `UseTactics`成立時にはUseCondition・TP・残使用回数を確認する. Random要素ありの場合だけGuildBattle本体PRNGから専用Seedを1回生成し, `Random::new(Seed)`のTactics専用PRNGで固有抽選を行う. Random要素なしはResponse Seedを0とするが, Seedの数値からRandom使用有無を判定しない. Active Effectsは`TacticsActiveEffectState`として, 終了時刻・残回数・発動元PlayerID/GuildIDとともに保持する. DURATIONは絶対時刻, COUNTは`remaining_count`と`count_consume_trigger`を使用し, `OPPONENT_PARTY`は各出撃時の現在の対戦相手へ解決する.
 
-Item使用はRuntimeの所持数・条件を検証し, 永続数の更新はPrivate API経由で`X-Operation-ID`の冪等性を適用する. BP50回復薬の日次配布は現段階では実施しない. 酒場の`floor(酒場レベル / 3)`BP回復は専用UI操作として仕様化されたが, API・使用回数の集計主体・Runtime更新方式は未確定とする.
+Item使用はRuntimeの所持数・条件を検証し, 永続数の更新はPrivate API経由で`X-Operation-ID`の冪等性を適用する. BP50回復薬の日次配布は現段階では実施しない. 酒場の`UseTavernRecovery`は通常のRequestSequence検証・直列処理・成功時Event記録に従う. GameServerは適用される利用回数を`TavernUseCount`（0～3）で管理し, JST 0:00を跨ぐ場合は使用回数をリセットする. 成立時はBPを最大BPへクランプし, 回復量が0でも1回使用として記録する. 回復後BP・残回数・RequestSequenceをClientへ返す. 成立操作のPlayerID・GuildID・時刻・回復後BP・使用後回数をReplay Eventに保存し, 復元時は同じイベントを成立順に適用する.
 
 Heal / Reviveは仕様の状態遷移と待機時間に従う. Start, Cancel, Completeが成立した場合だけRequestSequenceを加算しReplayへ記録する. 出撃待機時間はHeal / Reviveとは独立して保持する. 具体的な状態と時刻処理は`specification/game/guild_battle.md`および`design/server/guild_battle.md`の各APIシーケンスを正本とする.
 

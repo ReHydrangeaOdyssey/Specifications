@@ -14,6 +14,7 @@ enum GuildBattleReplayProcessType {
   GUILD_BATTLE_REPLAY_REVIVE = 4;
   GUILD_BATTLE_REPLAY_ITEM = 5;
   GUILD_BATTLE_REPLAY_JOIN = 6;
+  GUILD_BATTLE_REPLAY_TAVERN_RECOVERY = 7;
 }
 
 enum HealState {
@@ -36,6 +37,9 @@ message GuildBattlePartyCharacter {
   repeated uint32 ability_id = 4; // 必ず2要素. indexがAbility枠番号(0,1). 空枠はuint32最大値(4294967295).
   uint32 main_skill_id = 5;
   uint32 party_slot_no = 6; // 0..9. 固定長配列上の編成スロットID.
+  float facility_adjusted_attack = 7; // Preload時点の基礎攻撃力 + 武器庫Lv*10.
+  float facility_adjusted_max_hp = 8; // Preload時点の基礎最大HP + 食糧庫Lv*20.
+  float facility_adjusted_defense = 9; // Preload時点の基礎防御力 + 鍛冶屋Lv*10.
 }
 
 message PlayerItemData {
@@ -122,6 +126,15 @@ message GuildBattleReviveLogPayload {
   ReviveState revive_state = 4;
 }
 
+message GuildBattleTavernRecoveryLogPayload {
+  uint64 time = 1; // UNIX epoch microseconds.
+  uint64 guild_battle_id = 2;
+  uint64 player_id = 3; // 回復を行ったPlayerID.
+  uint64 guild_id = 4; // 使用時の所属GuildID.
+  uint32 bp_after = 5; // 回復後BP.
+  uint32 use_count_after = 6; // 回復成立後に適用された使用回数. 0..3.
+}
+
 message GuildBattleReplayEnvelope {
   GuildBattleReplayProcessType process_type = 1;
   oneof payload {
@@ -132,5 +145,6 @@ message GuildBattleReplayEnvelope {
     GuildBattleReviveLogPayload revive = 6;
     GuildBattleItemLogPayload item = 7;
     GuildBattleJoinLogPayload join = 8;
+    GuildBattleTavernRecoveryLogPayload tavern_recovery = 9;
   }
 }

@@ -184,6 +184,7 @@ enum ApiErrorCode {
   API_ERROR_GUILD_LEADER_MOVE_NOT_ALLOWED = 39;
   API_ERROR_ACCOUNT_CREATION_FAILED = 40;
   API_ERROR_REQUIRED_OPERATION_FAILED = 41;
+  API_ERROR_TAVERN_RECOVERY_NOT_AVAILABLE = 42;
 }
 
 enum SpeedRank {
@@ -597,6 +598,7 @@ message GetGuildBattleStatusResponse {
   uint32 chain = 16;
   GuildBattleCbcStatus cbc_status = 17;
   uint64 request_sequence = 18;
+  uint32 tavern_remaining_uses = 19; // 0..3, current callerに適用される酒場使用残回数.
 }
 
 message GuildBattleSortieRequest {
@@ -667,6 +669,19 @@ message UseItemRequest {
 message UseItemResponse {
   uint32 bp = 1;
   uint32 remaining_count = 2;
+  uint64 next_request_sequence = 3;
+}
+
+message UseTavernRecoveryRequest {
+  string access_token = 1;
+  uint64 player_id = 2;
+  uint64 guild_battle_id = 3;
+  uint64 request_sequence = 4;
+}
+
+message UseTavernRecoveryResponse {
+  uint32 bp = 1; // 最大BP以下の回復後BP.
+  uint32 remaining_uses = 2; // 0..3. 成立した使用は回復0でも減らす.
   uint64 next_request_sequence = 3;
 }
 

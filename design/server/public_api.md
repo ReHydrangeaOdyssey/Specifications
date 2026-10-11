@@ -347,6 +347,7 @@ GuildNameがBoundary Validationを満たさない場合は`ApiErrorResponse(API_
 - `Characters`は1～5件とし, 各`Position`はフォーメーション内部番号1～9だけを許可する. 同一`Position`への複数本体キャラクター配置は編成不正とする.
 - 検証成功後, GameServerからPrivate API Serverへ編成情報登録を要求する.
 - Private API ServerがDatabaseへ編成情報を登録する.
+- 登録確定後は対象PlayerIDとArenaParty登録状態のみを全GameServerへ同期し, 次のランダム対戦候補選択へ反映する.
 
 #### 要求データ
 
@@ -590,6 +591,31 @@ GameServer側のチェック.
 #### 使用不可時レスポンス
 
 [API Payload](api_payload.md)の「ApiErrorResponse」を参照する. `API_ERROR_ITEM_NOT_AVAILABLE`.
+
+### 施設からのBP回復要求
+
+#### メソッド名
+
+`UseTavernRecovery`
+
+#### 処理内容
+
+- ClientからのAccessToken・PlayerID・GuildBattleID・RequestSequenceを検証し, Join済みの当該騎士団戦GameServerへ中継する.
+- GameServerは要求受信順に現在の使用回数と所属Guildの酒場レベルを検証する. 受付不可または使用回数上限到達時には状態を変更せず`API_ERROR_TAVERN_RECOVERY_NOT_AVAILABLE`を返す.
+- 成功時は`min(現在BP + floor(酒場レベル / 3), 最大BP)`をBPへ反映し, 回復量0でも使用回数を1増やす. RequestSequenceを1増やし, 同一の操作結果をReplayへ記録する.
+- 回復後BP, 適用対象に残る使用回数, 更新後のRequestSequenceを返す. 成立した要求を別のRequestSequenceで自動再送しない.
+
+#### 要求データ
+
+[API Payload](api_payload.md)の「UseTavernRecoveryRequest」を参照する.
+
+#### 成功時レスポンス
+
+[API Payload](api_payload.md)の「UseTavernRecoveryResponse」を参照する.
+
+#### 使用不可時レスポンス
+
+[API Payload](api_payload.md)の「ApiErrorResponse」を参照する. `API_ERROR_TAVERN_RECOVERY_NOT_AVAILABLE`.
 
 ### 治療開始要求
 

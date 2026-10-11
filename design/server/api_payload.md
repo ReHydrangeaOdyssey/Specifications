@@ -463,6 +463,7 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 | Chain | `Count` | 現在のチェイン数 |
 | CbcStatus | `GuildBattleCbcStatus` | 現在のキャッスルブレイクチャンス状態 |
 | RequestSequence | `RequestSequence` | GameServerが現在保持する要求シーケンス番号. 状態取得では加算しない |
+| TavernRemainingUses | `TavernUseCount` | 当該Playerの操作に適用される酒場の残り使用回数（0～3） |
 
 ### GuildBattleSortieRequest
 
@@ -563,6 +564,23 @@ GameServerが決定した戦闘開始時点の入力を送信し, ClientはGameS
 | BP | `BP` | 使用後の現在BP |
 | RemainingCount | `Count` | 使用後の残り所持数 |
 | NextRequestSequence | `RequestSequence` | 要求成功後の次要求シーケンス番号 |
+
+### UseTavernRecoveryRequest
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| AccessToken | `AccessToken` | 認証に用いるAccessToken |
+| PlayerID | `PlayerID` | 回復を操作するPlayerID |
+| GuildBattleID | `GuildBattleID` | 参加中の騎士団戦ID |
+| RequestSequence | `RequestSequence` | 操作実行時の現在Sequence |
+
+### UseTavernRecoveryResponse
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| BP | `BP` | 回復成立後のBP. 最大BPを超えない |
+| RemainingUses | `TavernUseCount` | 操作者に適用される残り回数（0～3） |
+| NextRequestSequence | `RequestSequence` | 成立時に1加算したSequence |
 
 ### StartHealRequest
 
@@ -1351,6 +1369,17 @@ Private APIは再抽選を行わない. `GuildBattleID[]`と`Battles[]`のID集�
 | GuildBattleID | `GuildBattleID` | ログ対象の騎士団戦ID |
 | PlayerID | `PlayerID` | 使用したPlayerID |
 | ItemID | `ItemID` | 使用したアイテムID |
+
+### GuildBattleTavernRecoveryLogPayload
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| Time | `GameServerTime` | GameServer受信時刻 |
+| GuildBattleID | `GuildBattleID` | 対象の騎士団戦ID |
+| PlayerID | `PlayerID` | 回復を使用したPlayerID |
+| GuildID | `GuildID` | 使用時に所属していたGuildID |
+| BPAfter | `BP` | 回復後のBP |
+| UseCountAfter | `TavernUseCount` | 成立後の使用回数（0～3） |
 
 ### GuildBattleHealLogPayload
 

@@ -25,6 +25,7 @@ erDiagram
         Count guild_battle_win_count
         Count guild_battle_lose_count
         BP max_bp
+        Gold gold
     }
 
     ACCOUNT_SESSION {
@@ -113,6 +114,7 @@ Discord Botから`RevokeDiscordSessions`を受信した場合は, 指定DiscordU
 
 `PLAYER.guild_battle_win_count`と`PLAYER.guild_battle_lose_count`の初期値はともに`0`とする.
 `PLAYER.max_bp`の新規プレイヤー作成時初期値は`200`とする.
+`PLAYER.gold`は通常Playerごとのゴールド残高の正本とし, `0..4294967295`の整数だけを保存する. 新規Player作成時は`0`で初期化する.
 
 
 ## GUILD / GUILD_MEMBER 制約

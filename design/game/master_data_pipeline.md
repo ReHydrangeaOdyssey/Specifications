@@ -311,7 +311,11 @@ GuildBattle Replayでは`Version`がゲームロジックとMasterDataの組み�
 MasterData変更を実際のゲーム挙動へ反映する場合は, 対応するVersionを更新する.
 
 本プロジェクトでは複数世代間のMasterData互換変換を必須としない.
-Replayを再生する場合はReplayに記録されたVersionに対応するゲームロジックとMasterDataを使用する.
+Replayを再生する場合はReplayに記録されたVersionに対応するゲームロジックとMasterDataを使用する. Player向けリプレイ閲覧は現行ゲームVersionと一致するReplayだけを対象とし, 旧VersionのReplayはDatabaseへ保持してもPlayerへ再生を提供しない. Playerごとに閲覧できるReplay履歴の上限は過去50件とする.
+
+## Version更新時の停止境界
+
+ゲームロジックまたはMasterDataのVersionを更新する際は, 全Serverコンポーネントを停止してから新Versionの固定参照データ・成果物を反映し, 整合性検証を終えてから全Serverを再起動する. 稼働中の騎士団戦に新旧MasterDataを混在させず, 戦闘進行中にVersionの切替を行わない.
 
 ## 反映手順
 
