@@ -46,6 +46,8 @@ classDiagram
     PublicApiApplication --> ErrorMapper
 ```
 
+RPCのMethod/Path・CORS・Cookie・CSRF・Code交換は`design/system/api_transport.md`を正とします。
+
 ## Request Pipeline
 
 ```mermaid

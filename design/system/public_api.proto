@@ -5,7 +5,7 @@ package game.publicapi;
 // Public APIのRequest/Response Payload wire schema.
 // Transportはdesign/system/network.md, 各APIの処理・成功/失敗Response選択は
 // design/server/public_api.md, 論理型の範囲制約はdesign/shared/types.mdを正とする.
-// 本ファイルはgRPC Service, HTTP method, HTTP pathを追加定義しない.
+// gRPC Serviceは採用しない. HTTP Method/Pathはapi_transport.mdを正とする.
 // repeatedで固定長を表すフィールドはコメントに記載した要素数をApplication層で検証する.
 
 // -----------------------------------------------------------------------------
@@ -741,3 +741,9 @@ message CompleteReviveResponse {
   repeated CharacterHP character_hp = 2;
   uint64 next_request_sequence = 3;
 }
+
+// Cross-site code exchange. Credentialed issuance is only from the authentication Origin.
+message IssueAuthorizationCodeRequest { string redirect_uri = 1; bytes code_challenge_sha256 = 2; }
+message IssueAuthorizationCodeResponse { bytes authorization_code = 1; }
+message ExchangeAuthorizationCodeRequest { bytes authorization_code = 1; string redirect_uri = 2; string code_verifier = 3; }
+message ExchangeAuthorizationCodeResponse { string access_token = 1; uint64 player_id = 2; }

@@ -35,6 +35,10 @@ stateDiagram-v2
 ```
 
 
+## 認証画面
+
+AccessTokenを要する操作を行う場合、Public API Originの`/auth/authorize`をトップレベルで開く。ログイン・Session確認後は固定Callback URI `https://rehydrangeaodyssey.github.io/auth/callback/`へ戻り、認可コードを一度だけ交換する。認証失敗・キャンセルの場合はClientタイトルへ復帰し、ローカル機能は利用可能なままとする。
+
 ## UI
 
 ### タイトル

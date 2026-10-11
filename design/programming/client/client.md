@@ -112,6 +112,12 @@ OPFSのPNG → File / Blob → createImageBitmap() → WebGL 2 texImage2D()
 - Server接続と必要な認証が復帰した場合は, Server通信を必要とする機能も使用可能に戻します。
 - Serverを正本とする処理の状態や戦闘結果は、未接続時のClientだけで確定しません。
 
+### OPFSアセット安全性と一括処理
+
+辞書の配置Pathは`assets/`配下の相対Pathのみ受け付け、絶対Path、URL、`..`、`.`、NULを含む制御文字、空のセグメント、バックスラッシュを拒否する。ファイル名ハッシュの計算とは分けて検証する。
+
+一括取込みと上書きはファイル単位の成功を基本とする。途中中断・キャンセル後も確定保存済みのファイルは残し、未処理ファイルは変更しない。ファイルごとの一時保存と切替処理により既存ファイルを途中書込みで破損させない。成功・失敗・未処理の件数を表示する。削除した素材の割当情報とキャッシュ参照を無効化する。
+
 ## タイトル画面のキャラクター画像割り当て
 
 - タイトル画面にキャッシュクリア・アセット追加・アセット削除・クレジットの操作を提供します。容量不足でゲーム操作不可の場合もアセット削除は可能とします。
@@ -129,6 +135,12 @@ Clientが扱う認証情報は以下です。
 - RefreshTokenをClient JavaScriptから読み取る前提の実装にはしません。
 - AccessToken失効後またはClient起動・再読込時のSession更新はRefresh APIを使用します。
 - Logout後も発行済みAccessTokenは`exp`までは暗号学的には有効であるため、Client側だけでSession失効を正本化しません。
+
+## Cross-Site認証と通信復帰
+
+- Clientは`state`とPKCE `code_verifier`を認証開始時に生成し、同じタブの`sessionStorage`へ一時保存する。Code交換成功後または失敗・キャンセル時に破棄する。AccessTokenはメモリのみへ保持する。
+- `POST /v1/public/{MethodName}`はProtobufのBodyを用いて送受信し、CookieをCross-Originで送信しない。Stream断は`GetGuildBattleStatus`→再購読の順に回復し、1秒から30秒のBackoffを適用する。
+- 認証画面はPublic API Originのトップレベルページを使用し、Callback URIは`https://rehydrangeaodyssey.github.io/auth/callback/`とする。詳細は`design/system/api_transport.md`に従う。
 
 ## Arena
 

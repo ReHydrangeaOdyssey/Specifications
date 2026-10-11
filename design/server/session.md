@@ -171,6 +171,10 @@ sequenceDiagram
 * AccountIDおよびPlayerIDは予約済み無効値を生成しない.
 * LoginID重複による作成失敗はClientへ既存LoginIDの存在を明示せず`API_ERROR_ACCOUNT_CREATION_FAILED`として返す.
 
+### クロスサイト構成の画面境界
+
+本番のClientと異なる認証Originにおける`CreateAccount`・`Login`・`RefreshAccessToken`・`Logout`は認証Originのトップレベルページで実施する。以下の従来図中でClientが認証Requestを送る部分は、認証Originの第一者画面の処理を表す。静的Clientへ直接AccessTokenを返す経路は使用せず、ログイン後は`IssueAuthorizationCode`→`https://rehydrangeaodyssey.github.io/auth/callback/`→`ExchangeAuthorizationCode`の経路で渡す。
+
 ## ログイン
 
 ```mermaid

@@ -1,5 +1,7 @@
 # Private API仕様
 
+Methodごとの通信Pathは`POST /v1/private/{MethodName}`とし、wire schemaは`design/system/private_api.proto`、Transportは`design/system/api_transport.md`を正とする。
+
 API全体の分類は「[API仕様](api.md)」を参照する.
 
 - Private Network 内に配置される.
@@ -12,11 +14,15 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 - AccessToken署名用秘密鍵はPrivate API Serverだけが保持する.
 - Databaseとのデータ保存・取得を仲介する. Arenaの抽選はGameServer, 騎士団戦のマッチング生成はGuildBattleCoordinatorが行う.
 - Database上の`GUILD_BATTLE.status`遷移はPrivate API Server内の`GuildBattleLifecycleService`が所有する. 状態遷移規則は「[騎士団戦永続ライフサイクル](guild_battle_lifecycle.md)」を正とし, 任意statusを指定する汎用更新APIは公開しない.
-- 要求/レスポンスのデータ構造は[API Payload](api_payload.md)を参照する. Private APIの要求・レスポンスPayloadはProtocol Buffersで表現する. 各メソッドのfield number・wire schemaおよびHTTP Method/Pathは未確定とする.
+- 要求/レスポンスのデータ構造は[API Payload](api_payload.md)を参照する. Private APIの要求・レスポンスPayloadはProtocol Buffersで表現する. 各メソッドのfield number・wire schemaは`design/system/private_api.proto`, HTTP Method/Pathは`design/system/api_transport.md`を正とする.
 - Public API Serverから受信するAccessToken認証済みのAccount/Guild系内部要求では`AuthenticatedContext`を内部Request Contextとして必須とする. Caller Identityは`AuthenticatedContext.PlayerID`を正とし, Client由来のPlayerIDをCaller Identityとして使用しない. 内部PayloadにCaller PlayerIDと同義のフィールドが存在する場合はPublic API Serverが`AuthenticatedContext`から設定し, Private API Serverは不一致を拒否する.
 - 騎士団戦中のDatabase送信失敗時は同一要求を1回だけ再試行する. Replay Workerによるリプレイログ送信も同じ規則を使用する. 再試行も失敗した場合, GameServerはDB障害発生状態へ移行し, それ以降の騎士団戦中DB送信を行わず, 本来送信するデータを`/var/lib/game-server/recovery`配下のUTF-8 JSONファイルへ保存する. Replay EventのRecovery保存はReplay Worker側で行い, 騎士団戦処理スレッドはファイルI/O完了を待機しない. 本番Kubernetes環境では同PathをGameServer専用Persistent Volumeへmountし, GameServer実行Userだけが読み書き可能とする. Recovery保存領域にはGameServer Instanceごとに運用設定で容量上限およびファイル数上限を必須設定し, 推奨初期値を2 GiBおよび1,000 filesとする. 無制限に増加させない. ファイルはGameServer再起動後も保持する. 騎士団戦終了時およびGameServer起動時に残存Recoveryファイルを保存順に再送し, 全件成功時だけ対応ファイルを削除し, 途中失敗時は削除せず残す.
 - `GuildBattleLifecycleService`による状態変更および騎士団戦中にDatabase状態を変更する要求は共通HTTP Header `X-Operation-ID`を必須とする. 値は128bit UUIDとし, 同一論理操作の初回送信, 1回再試行, Recovery再送で同じ値を使用する. Private API ServerはDatabaseトランザクション内でOperation IDの重複を検査し, 処理済みの場合は更新を再適用せず初回成功時レスポンスを返す.
 - `CompleteGuildBattle`は専用の失敗処理を使用し, 1回再試行しても失敗した場合はErrorLogを保存し, `DiscordNotificationEnabled=true`の場合はBot通知を行った後, 運営による手動復旧対象とする.
+
+## 認証コードの永続化
+
+`IssueAuthorizationCodePrivate`では第一者認証OriginのCookieから渡されたRefreshTokenをPrivate APIが検証してSessionを識別する。`RedeemAuthorizationCodePrivate`ではコード未使用、60秒期限、Session有効、URI完全一致、PKCE S256一致を原子的に判定し、成立した場合だけコードを消費してAccessTokenを発行する。`design/system/private_api.proto`を正とする。
 
 ## 認証・アカウント関連
 

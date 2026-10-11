@@ -3,7 +3,7 @@
 ## 共通
 
 各項目の型は「[型定義](../shared/types.md)」を参照する.
-Public APIとPrivate APIの通信PayloadはProtocol Buffersを使用する. Public APIのProtocol Buffers field numberおよびwire schemaは「[public_api.proto](../system/public_api.proto)」を正とする. Private APIの各Payloadは本書の論理項目に従うが, field numberとwire schemaは未確定である. 本書は各Payloadの意味・固定長・利用条件を正とし, `.proto`と不一致がある場合は意味・制約を本書で確認した上でfield number/wire型を`.proto`へ合わせる.
+Public APIとPrivate APIの通信PayloadはProtocol Buffersを使用する. Public APIのProtocol Buffers field numberおよびwire schemaは「[public_api.proto](../system/public_api.proto)」を正とする. Private APIのfield number・wire schemaは`design/system/private_api.proto`を正とする. Private APIの論理項目・固定長・意味は本書を正とする. 本書は各Payloadの意味・固定長・利用条件を正とし, `.proto`と不一致がある場合は意味・制約を本書で確認した上でfield number/wire型を`.proto`へ合わせる.
 
 Public APIで内部`Float32`の現在HPを論理型`HP`（`uint32`）として返す場合は, 小数点以下を切り捨ててから変換する. HPはゲーム処理側で0以上へクランプした値を使用する.
 
@@ -661,6 +661,34 @@ GameServerが決定した戦闘開始時点の入力を送信し, ClientはGameS
 | BP | `BP` | 復活後の現在BP |
 | CharacterHP | `CharacterHP[]` | 復活後の編成キャラクターの現在HP |
 | NextRequestSequence | `RequestSequence` | 要求成功後の次要求シーケンス番号 |
+
+### IssueAuthorizationCodeRequest
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| RedirectURI | `String` | 登録済みClient戻り先URI |
+| CodeChallengeSha256 | `Bytes[32]` | PKCE S256 digest |
+
+### IssueAuthorizationCodeResponse
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| AuthorizationCode | `Bytes[32]` | 60秒以内・単回使用認可コード |
+
+### ExchangeAuthorizationCodeRequest
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| AuthorizationCode | `Bytes[32]` | 認可コード |
+| RedirectURI | `String` | 登録済み戻り先URI |
+| CodeVerifier | `String` | PKCE検証文字列 |
+
+### ExchangeAuthorizationCodeResponse
+
+| 項目 | 型 | 内容 |
+|---|---|---|
+| AccessToken | `AccessToken` | Sessionの5分有効AccessToken |
+| PlayerID | `PlayerID` | 紐付くPlayerID |
 
 ## PrivateAPI
 

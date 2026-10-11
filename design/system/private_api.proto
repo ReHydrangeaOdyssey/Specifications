@@ -1,0 +1,448 @@
+syntax = "proto3";
+
+package game.privateapi;
+
+import "public_api.proto";
+import "game_types.proto";
+import "guild_battle_replay.proto";
+
+// Field numbers follow the APIPayload table order.
+// Logical validation and fixed array sizes: design/server/api_payload.md.
+
+message CreateAccountPrivateRequest {
+  string login_id = 1; // 新規作成するLoginID
+  string password = 2; // Argon2idでHash化して保存するPassword
+  string user_name = 3; // 新規Playerのゲーム内表示名
+  uint64 discord_user_id = 4; // `DiscordAuthorizationRequired=true`の場合は検証済みTokenの`sub`. 無効な構成では`0`
+  bytes discord_authorization_token_id = 5; // `DiscordAuthorizationRequired=true`の場合は検証済みTokenの`jti`. 無効な構成では予約済み無効値
+}
+
+message CreateAccountPrivateResponse {
+  uint64 player_id = 1; // 新規生成されたPlayerID
+}
+
+message AuthenticateAccountRequest {
+  string login_id = 1; // 認証対象LoginID
+  string password = 2; // 検証するPassword
+  uint64 discord_user_id = 3; // `DiscordAuthorizationRequired=true`の場合は検証済みTokenの`sub`. 無効な構成では`0`
+  bytes discord_authorization_token_id = 4; // `DiscordAuthorizationRequired=true`の場合は検証済みTokenの`jti`. 無効な構成では予約済み無効値
+}
+
+message AuthenticateAccountResponse {
+  uint64 player_id = 1; // 認証したAccountに結び付くPlayerID
+  string access_token = 2; // 新しく発行したAccessToken
+  bytes refresh_token = 3; // 新しく発行したRefreshToken
+}
+
+message RefreshAccessTokenPrivateRequest {
+  bytes refresh_token = 1; // 更新対象RefreshToken
+}
+
+message RefreshAccessTokenPrivateResponse {
+  string access_token = 1; // 新しく発行したAccessToken
+  bytes refresh_token = 2; // Rotation後の新しいRefreshToken
+}
+
+message LogoutPrivateRequest {
+  bytes refresh_token = 1; // 無効化対象RefreshToken
+}
+
+message LogoutPrivateResponse {
+}
+
+message ValidateAccountSessionRequest {
+  bytes session_id = 1; // 有効性を確認するRefresh Session ID
+}
+
+message ValidateAccountSessionResponse {
+  bool is_valid = 1; // Sessionが存在し24時間の期限内である場合true
+}
+
+message RevokeDiscordSessionsRequest {
+  uint64 discord_user_id = 1; // 必要Roleを保持しなくなったDiscordUserID
+}
+
+message RevokeDiscordSessionsResponse {
+}
+
+message CreateGuildPrivateRequest {
+  string guild_name = 1; // 作成する騎士団名. UTF-8, 最大10文字, 空文字不可, 重複可
+  game.model.GuildBattleStartTime daytime_start_time = 2; // 昼開始時刻.11:30 / 12:15 / 13:00のいずれか
+  game.model.GuildBattleStartTime nighttime_start_time = 3; // 夜開始時刻.21:00 / 22:00 / 23:00のいずれか
+}
+
+message CreateGuildPrivateResponse {
+  uint64 guild_id = 1; // 作成された初期騎士団ID
+}
+
+message ApplyGuildJoinPrivateRequest {
+  uint64 guild_id = 1; // 申請先GuildID
+}
+
+message ApproveGuildJoinApplicationPrivateRequest {
+  uint64 guild_id = 1; // 申請先GuildID
+  uint64 applicant_player_id = 2; // 加入させる申請PlayerID
+}
+
+message SendGuildInvitationPrivateRequest {
+  uint64 guild_id = 1; // 招待元GuildID
+  uint64 invitee_player_id = 2; // 招待対象PlayerID
+}
+
+message AcceptGuildInvitationPrivateRequest {
+  uint64 guild_id = 1; // 招待元GuildID
+}
+
+message LeaveGuildPrivateRequest {
+}
+
+message LeaveGuildPrivateResponse {
+  uint64 guild_id = 1; // 脱退Playerが所属した初期GuildID
+  uint64 swapped_player_id = 2; // 所属スワップを行った場合の相手PlayerID. スワップなしは0
+  uint64 swapped_player_guild_id = 3; // スワップ相手の新しい所属GuildID. スワップなしは0
+}
+
+message UpdateGuildLeadershipPrivateRequest {
+  uint64 guild_id = 1; // 更新対象の騎士団ID
+  uint64 leader_player_id = 2; // 保存する団長PlayerID. 対象Guild所属Playerのみ指定可能
+  uint64 subleader_player_id = 3; // 保存する副団長PlayerID. `0`は未設定. `0`以外は対象Guild所属Playerのみ指定可能かつLeaderPlayerIDと同一値不可
+}
+
+message SetGuildMembershipLockRequest {
+  repeated uint64 guild_id = 1; // 所属変更禁止状態を更新する騎士団ID一覧
+  bool locked = 2; // `true`で所属変更禁止, `false`で解除
+}
+
+message SetGuildMembershipLockResponse {
+}
+
+message SaveArenaPartyRequest {
+  uint64 player_id = 1; // 保存対象PlayerID
+  uint32 formation_id = 2; // 使用するフォーメーションID
+  repeated game.publicapi.ArenaPartyCharacter characters = 3; // 編成キャラクター情報.1～5件
+}
+
+message SaveArenaPartyResponse {
+}
+
+message GetArenaBattleDataRequest {
+  uint64 player_id = 1; // アリーナ戦闘用データを取得するPlayerID
+}
+
+message GetArenaBattleDataResponse {
+  bool player_exists = 1; // 対象PlayerIDがDatabaseに存在する場合true
+  bool arena_party_registered = 2; // 対象PlayerIDにArenaPartyが登録されている場合true
+  uint32 formation_id = 3; // `PlayerExists=true`かつ`ArenaPartyRegistered=true`の場合のフォーメーションID
+  repeated game.publicapi.ArenaPartyCharacter characters = 4; // `PlayerExists=true`かつ`ArenaPartyRegistered=true`の場合のキャラクター情報.1～5件
+}
+
+message AssignScheduledGuildBattlesRequest {
+  string game_server_instance_id = 1; // GuildBattleCoordinatorが割当先として選択したGameServer Instance ID
+  repeated uint64 guild_battle_id = 2; // 対象GameServerへ割り当てる`scheduled`かつ未割当の騎士団戦ID一覧. 件数は対象GameServerの`AvailableGuildBattleCount`以下とする
+}
+
+message AssignScheduledGuildBattlesResponse {
+  repeated ScheduledGuildBattle battles = 1; // 条件一致により指定GameServerへ原子的に割り当てられた騎士団戦一覧
+}
+
+message ReleaseScheduledGuildBattleAssignmentsRequest {
+  string game_server_instance_id = 1; // 割当解除対象として確認する現在のGameServer Instance ID
+  repeated uint64 guild_battle_id = 2; // 割当解除を要求する`scheduled`騎士団戦ID一覧
+}
+
+message ReleaseScheduledGuildBattleAssignmentsResponse {
+  repeated uint64 released_guild_battle_id = 1; // 条件一致により実際に未割当へ戻した騎士団戦ID一覧
+}
+
+message GetGameServerCapacityRequest {
+}
+
+message GetGameServerCapacityResponse {
+  string game_server_instance_id = 1; // 応答したGameServer Instance ID
+  bool accept_new_guild_battle = 2; // 新しい騎士団戦を割当可能な場合true. `draining`ではfalse
+  uint32 owned_guild_battle_count = 3; // 現在所有している未完了騎士団戦数
+  uint32 available_guild_battle_count = 4; // 現在追加で割当可能な騎士団戦数. `AcceptNewGuildBattle=false`の場合0
+  uint32 available_guild_battle_thread_count = 5; // 現在1件も騎士団戦を担当していない騎士団戦専用スレッド数
+  uint32 total_guild_battle_thread_count = 6; // 騎士団戦専用スレッド総数. Capacity使用率の分母
+}
+
+message StartGuildBattlePreloadRequest {
+  repeated ScheduledGuildBattle battles = 1; // GuildBattleCoordinatorが当該GameServerへ割当済みとしてPreload開始を要求する騎士団戦一覧
+}
+
+message StartGuildBattlePreloadResponse {
+  repeated uint64 accepted_guild_battle_id = 1; // 自身への割当を確認し, 新規Preload対象または既存Preload対象として受理した騎士団戦ID一覧
+}
+
+message GetGuildBattleAssignmentRequest {
+  uint64 guild_battle_id = 1; // 所有GameServerを取得する騎士団戦ID
+}
+
+message GetGuildBattleAssignmentResponse {
+  bool exists = 1; // GameServer割当が存在する場合true
+  string game_server_instance_id = 2; // `Exists=true`の場合の所有GameServer Instance ID
+}
+
+message SaveGuildBattlePartyRequest {
+  uint64 player_id = 1; // 保存対象PlayerID
+  uint32 formation_id = 2; // 使用するフォーメーションID
+  repeated game.publicapi.GuildBattlePartyCharacter characters = 3; // 編成キャラクター情報
+}
+
+message GetGuildsForBattleMatchingRequest {
+  uint64 target_date = 1; // 対象日. JSTの日付部分を使用する
+  game.model.GuildBattleStartTime start_time = 2; // 対象となる固定開戦時刻
+}
+
+message GetGuildsForBattleMatchingResponse {
+  repeated GuildBattleMatchCandidate candidates = 1; // 対象開始時刻を設定している騎士団と現在所属人数の一覧
+}
+
+message GuildBattleMatchCandidate {
+  uint64 guild_id = 1; // 対象騎士団ID
+  uint32 member_count = 2; // 現在の所属プレイヤー数
+}
+
+message SaveGuildBattleExcludedGuildsRequest {
+  uint64 target_date = 1; // 対象日. JSTの日付部分を使用する
+  game.model.GuildBattleStartTime start_time = 2; // 固定開戦時刻
+  repeated uint64 guild_id = 3; // 所属0人のため除外したGuildID一覧. GuildID昇順
+}
+
+message SaveGuildBattleExcludedGuildsResponse {
+}
+
+message GetGuildBattleExcludedGuildsRequest {
+  uint64 target_date = 1; // 対象日. JSTの日付部分を使用する
+  game.model.GuildBattleStartTime start_time = 2; // 固定開戦時刻
+}
+
+message GetGuildBattleExcludedGuildsResponse {
+  repeated uint64 guild_id = 1; // 所属0人のため除外されたGuildID一覧. GuildID昇順
+}
+
+message ClearGuildBattleExcludedGuildsRequest {
+  uint64 target_date = 1; // 対象日. JSTの日付部分を使用する
+  game.model.GuildBattleStartTime start_time = 2; // 固定開戦時刻
+}
+
+message ClearGuildBattleExcludedGuildsResponse {
+}
+
+message SaveScheduledGuildBattlesRequest {
+  uint64 target_date = 1; // 対象日. JSTの日付部分を使用する
+  game.model.GuildBattleStartTime start_time = 2; // 固定開戦時刻
+  repeated ScheduledGuildBattle battles = 3; // GuildBattleCoordinatorが生成した保存対象の騎士団戦一覧
+}
+
+message SaveScheduledGuildBattlesResponse {
+  repeated ScheduledGuildBattle battles = 1; // 保存済み騎士団戦一覧. 同一TargetDate・StartTimeの既存データがある場合は既存データを返す
+}
+
+message ScheduledGuildBattle {
+  uint64 guild_battle_id = 1; // 騎士団戦ID
+  repeated uint64 guild_id = 2; // 対戦する2騎士団のID
+}
+
+message GetScheduledGuildsRequest {
+  uint64 target_date = 1; // 対象日を表す日時. JSTの日付部分を使用する
+  game.model.GuildBattleStartTime start_time = 2; // 固定開戦時刻
+}
+
+message GetScheduledGuildsResponse {
+  repeated ScheduledGuildBattle battles = 1; // 指定時刻に開戦予定の騎士団戦一覧
+}
+
+message GetGuildBattleCoordinationStateRequest {
+}
+
+message GetGuildBattleCoordinationStateResponse {
+  repeated GuildBattleCoordinationState battles = 1; // `status=scheduled`の騎士団戦生成・割当状態一覧. `StartAt`, GuildBattleID昇順
+}
+
+message GuildBattleCoordinationState {
+  ScheduledGuildBattle battle = 1; // 対象騎士団戦IDと対戦GuildID
+  uint64 start_at = 2; // Database上の開戦予定時刻
+  uint64 end_at = 3; // Database上の終了予定時刻
+  game.model.GuildBattleStatus status = 4; // Database上の現在状態. 本レスポンスでは`scheduled`
+  bool has_assignment = 5; // `game_server_instance_id`がNULLでない場合true
+  string game_server_instance_id = 6; // `HasAssignment=true`の場合の割当先GameServer Instance ID
+}
+
+message GetGuildBattleFormationRequest {
+  uint64 player_id = 1; // 編成情報を取得するPlayerID
+}
+
+message GetGuildBattleFormationResponse {
+  uint32 max_bp = 1; // 対象プレイヤーの最大BP. 騎士団戦開始時の現在BP初期値にも使用する
+  uint32 formation_id = 2; // 使用するフォーメーションID
+  repeated game.publicapi.GuildBattlePartyCharacter characters = 3; // 騎士団戦パーティ情報
+}
+
+message PlayerItemData {
+  uint32 item_id = 1; // アイテムID
+  uint32 quantity = 2; // 所持数
+}
+
+message GetPlayerItemsRequest {
+  uint64 player_id = 1; // 対象プレイヤーID
+}
+
+message GetPlayerItemsResponse {
+  repeated PlayerItemData items = 1; // 所持アイテム一覧
+}
+
+message UpdatePlayerItemRequest {
+  uint64 player_id = 1; // 対象プレイヤーID
+  uint32 item_id = 2; // 更新対象アイテムID
+  uint32 quantity = 3; // 更新後の所持数
+}
+
+message GetAllPlayerIDsResponse {
+  repeated uint64 player_id = 1; // Database上でArenaParty登録済みの通常PlayerID一覧. ArenaParty未登録PlayerおよびシステムダミーPlayerID `0`は含めず, PlayerID昇順で返す
+}
+
+message GetGuildMembersRequest {
+  uint64 guild_id = 1; // 対象騎士団ID
+}
+
+message GetGuildMembersResponse {
+  repeated uint64 player_id = 1; // 所属プレイヤーID一覧. PlayerID昇順で返す
+}
+
+message GuildLevelData {
+  uint64 guild_id = 1; // 騎士団ID
+  uint32 castle_level = 2; // 城レベル
+  uint32 armory_level = 3; // 武器庫レベル
+  uint32 food_storage_level = 4; // 食糧庫レベル
+  uint32 smithy_level = 5; // 鍛冶屋レベル
+  uint32 strategy_office_level = 6; // 兵法所レベル
+  uint32 tavern_level = 7; // 酒場レベル
+}
+
+message GetGuildDataRequest {
+  uint64 guild_id = 1; // 対象騎士団ID
+}
+
+message GetGuildDataResponse {
+  GuildLevelData guild = 1; // 騎士団レベル情報
+}
+
+message MarkGuildBattlePreloadFailedRequest {
+  uint64 guild_battle_id = 1; // `scheduled -> preload_failed`へ遷移する騎士団戦ID
+  string game_server_instance_id = 2; // 遷移を要求する所有GameServer. Database上の割当と一致必須
+}
+
+message StartGuildBattleRequest {
+  string game_server_instance_id = 1; // 開戦を要求する所有GameServer. Database上の割当と一致必須
+  game.guildbattle.replay.GuildBattleCreateLogPayload create_log = 2; // InitialSeed, 対戦Guild, 開戦時Snapshot, Versionを含む作成Replay情報
+}
+
+message BeginGuildBattleResolvingRequest {
+  uint64 guild_battle_id = 1; // `in_progress -> resolving`へ遷移する騎士団戦ID
+  string game_server_instance_id = 2; // 遷移を要求する所有GameServer. Database上の割当と一致必須
+}
+
+message RematchPreloadFailedGuildBattlesRequest {
+  repeated uint64 guild_battle_id = 1; // 再抽選対象の`PRELOAD_FAILED`騎士団戦ID一覧. GuildBattleID昇順
+  repeated ScheduledGuildBattle battles = 2; // GuildBattleCoordinatorが再抽選したペア一覧. GuildBattleIDは対象IDを再利用する
+}
+
+message RematchPreloadFailedGuildBattlesResponse {
+  repeated ScheduledGuildBattle battles = 1; // 保存後の再抽選済み騎士団戦一覧
+}
+
+message RetryPreloadFailedGuildBattleRequest {
+  uint64 guild_battle_id = 1; // 同一ペアで再開する`PRELOAD_FAILED`騎士団戦ID
+  uint64 restart_at = 2; // 再開後の新しい開戦時刻. `end_at`は本時刻+30分で保存する
+}
+
+message RetryPreloadFailedGuildBattleResponse {
+  ScheduledGuildBattle battle = 1; // 同一ペアの新しい`GuildBattleID`で作成した`scheduled`騎士団戦. 元のGuildBattleIDは使用しない
+  uint64 start_at = 2; // 保存後の新しい開戦時刻
+  uint64 end_at = 3; // 保存後の終了時刻
+  uint64 previous_guild_battle_id = 4; // `replaced`として保持した旧ID
+}
+
+message CancelPreloadFailedGuildBattleRequest {
+  uint64 guild_battle_id = 1; // 運営が中止する`PRELOAD_FAILED`対戦のID
+}
+
+message CancelPreloadFailedGuildBattleResponse {
+  uint64 guild_battle_id = 1; // 中止された対戦のID
+  game.model.GuildBattleStatus status = 2; // `GUILD_BATTLE_STATUS_CANCELED`
+}
+
+message RetryUnassignedGuildBattleAssignmentRequest {
+  repeated uint64 guild_battle_id = 1; // GuildBattleCoordinatorへ再割当を要求する未割当騎士団戦ID一覧
+}
+
+message RetryUnassignedGuildBattleAssignmentResponse {
+  repeated uint64 assigned_guild_battle_id = 1; // 空きGameServerへ再割当できた騎士団戦ID一覧
+  repeated uint64 unassigned_guild_battle_id = 2; // 空き容量不足等により未割当のまま残った騎士団戦ID一覧
+}
+
+message DeleteUnassignedGuildBattlesRequest {
+  repeated uint64 guild_battle_id = 1; // 削除する未割当騎士団戦ID一覧
+}
+
+message DeleteUnassignedGuildBattlesResponse {
+  repeated uint64 deleted_guild_battle_id = 1; // 実際に削除した騎士団戦ID一覧
+}
+
+message SaveErrorLogRequest {
+  uint64 time = 1; // GameServerの受信時刻
+  uint64 guild_battle_id = 2; // 騎士団戦に紐づく場合の騎士団戦ID. 騎士団戦未生成の時間帯エラー等では`0`を指定し, Database保存時はNULLとして扱う
+  string error_log = 3; // 追記するエラーログ文字列
+}
+
+message CompleteGuildBattleRequest {
+  uint64 guild_battle_id = 1; // `resolving -> completed`へ遷移する騎士団戦ID
+  string game_server_instance_id = 2; // 完了を要求する所有GameServer. Database上の割当と一致必須
+  repeated GuildBattleFinalGuildResult guild_results = 3; // 対戦2Guildの最終スコア・勝敗. GuildID集合はDatabase上の対戦Guildと一致必須
+  repeated GuildBattlePlayerRecordUpdate player_records = 4; // 1回以上出撃成立した通常PlayerとDummy PlayerID `0`の勝敗数更新情報. PlayerID重複不可
+}
+
+message GuildBattleFinalGuildResult {
+  uint64 guild_id = 1; // 最終結果を保存する騎士団ID
+  uint64 score = 2; // 最終スコア
+  game.model.GuildBattleResult result = 3; // 勝敗結果
+}
+
+message GuildBattlePlayerRecordUpdate {
+  uint64 player_id = 1; // 更新対象PlayerID
+  game.model.GuildBattleResult result = 2; // 当該Playerの勝敗. drawの場合は勝敗数を更新しない
+}
+
+message IssueAuthorizationCodePrivateRequest { bytes refresh_token = 1; string redirect_uri = 2; bytes code_challenge_sha256 = 3; }
+message IssueAuthorizationCodePrivateResponse { bytes authorization_code = 1; }
+message RedeemAuthorizationCodePrivateRequest { bytes authorization_code = 1; string redirect_uri = 2; bytes code_verifier_sha256 = 3; }
+message RedeemAuthorizationCodePrivateResponse { string access_token = 1; uint64 player_id = 2; }
+// API method to payload aliases: CreateAccount uses CreateAccountPrivateRequest/Response;
+// RefreshAccessToken uses RefreshAccessTokenPrivateRequest/Response;
+// Logout uses LogoutPrivateRequest/Response.
+message GetAllPlayerIDsRequest {}
+message UpdateGuildLeadershipPrivateResponse {}
+message ApplyGuildJoinPrivateResponse {}
+message ApproveGuildJoinApplicationPrivateResponse {}
+message SendGuildInvitationPrivateResponse {}
+message AcceptGuildInvitationPrivateResponse {}
+message SaveGuildBattlePartyResponse {}
+message UpdatePlayerItemResponse {}
+message MarkGuildBattlePreloadFailedResponse {}
+message StartGuildBattleResponse {}
+message BeginGuildBattleResolvingResponse {}
+message SaveErrorLogResponse {}
+message CompleteGuildBattleResponse {}
+message SaveGuildBattleJoinLogRequest { game.guildbattle.replay.GuildBattleJoinLogPayload payload = 1; }
+message SaveGuildBattleSortieLogRequest { game.guildbattle.replay.GuildBattleSortieLogPayload payload = 1; }
+message SaveGuildBattleTacticsLogRequest { game.guildbattle.replay.GuildBattleTacticsLogPayload payload = 1; }
+message SaveGuildBattleItemLogRequest { game.guildbattle.replay.GuildBattleItemLogPayload payload = 1; }
+message SaveGuildBattleHealLogRequest { game.guildbattle.replay.GuildBattleHealLogPayload payload = 1; }
+message SaveGuildBattleReviveLogRequest { game.guildbattle.replay.GuildBattleReviveLogPayload payload = 1; }
+message SaveGuildBattleJoinLogResponse {}
+message SaveGuildBattleSortieLogResponse {}
+message SaveGuildBattleTacticsLogResponse {}
+message SaveGuildBattleItemLogResponse {}
+message SaveGuildBattleHealLogResponse {}
+message SaveGuildBattleReviveLogResponse {}

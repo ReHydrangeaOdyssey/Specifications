@@ -1,5 +1,7 @@
 # Public API仕様
 
+Methodごとの通信Pathは`POST /v1/public/{MethodName}`とし、Transportは`design/system/api_transport.md`を正とする。
+
 API全体の分類は「[API仕様](api.md)」を参照する.
 
 - Clientから要求を受ける.
@@ -37,6 +39,10 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 | ログイン | `Login` | 1 | 5 | 25 | LoginID |
 | 新規作成時のみ | `CreateGuild` | 1 | 5 | 10 | PlayerID |
 | アリーナ | `UpdateArenaParty`, `StartArenaBattle` | 2 | 50 | 100 | PlayerID |
+
+### 認可コードのPublic API
+
+`IssueAuthorizationCode`は認証OriginのCookie・Origin・CSRF検証後、Private APIの`IssueAuthorizationCodePrivate`を呼び、60秒以内の単回使用認可コードを返す。`ExchangeAuthorizationCode`はClientからCookieなしで受け付け、Private API `RedeemAuthorizationCodePrivate`が有効なコードを原子的に消費したときだけAccessTokenとPlayerIDを返す。wire型とPathは`design/system/public_api.proto`、`design/system/api_transport.md`に従う。
 
 ## システム
 

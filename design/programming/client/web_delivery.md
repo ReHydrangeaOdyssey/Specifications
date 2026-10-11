@@ -11,6 +11,12 @@ Rust/WASM製Web Clientの静的配布を定義する。
 - HTML、JS、WASM、CSS、Manifest等の参照URLには配布ルートからの相対Pathを使用する。配布ルートはGitHub Pagesのユーザー／組織サイトの`/`とする。各ファイルの配置が変わる場合は、ビルド出力の内部参照も同じ公開ルートを基準にする。
 - 静的Clientは`https://rehydrangeaodyssey.github.io/`で配布する。配布リポジトリは`https://github.com/ReHydrangeaOdyssey/ReHydrangeaOdyssey.github.io`とし, 独自ドメインは採用しない。静的配布先へGameServerの実行処理・ゲーム状態を更新するサーバー処理や認証秘密情報を置かない。Public API ServerのHTTPS Originは静的配布先とは別途定義する。
 
+## 認証Callbackと配布設定
+
+- GitHub Pages公開成果物の`/auth/callback/index.html`にClient起動用HTMLを配置し、直接アクセス時にもCode交換処理を起動する。
+- 静的設定`public_api_origin`は単一のHTTPS Origin文字列のみを許可し、Path・Query・Fragmentや資格情報付きURLを拒否する。未設定時はローカル機能のみを提供する。
+- Public APIと認証Originは同一とし、`/auth/authorize`の画面はPublic API ServerがHTTPSで配信する。
+
 ## ビルドと公開
 
 1. Rustの依存を`Cargo.lock`で固定し、`wasm32-unknown-unknown`ターゲットへReleaseビルドする。
@@ -42,6 +48,10 @@ Rust/WASM製Web Clientの静的配布を定義する。
 - OPFSに書き込む機能では`navigator.storage.getDirectory()`を使用し、必要に応じて`navigator.storage.estimate()`で利用状況の近似値を取得する。quota超過は書き込み失敗として扱い、既存の「Clientが自動削除しない」方針を維持する。
 - ファイル選択はユーザー操作を起点とする。`webkitdirectory`等はSafari 16.3で動作保証できないため、再帰的なフォルダ取り込みの提供方法は実機検証事項として残す。元ファイルの自動削除は行わない。
 - Cookie・Origin・CORSの制約はWASM使用によって回避しない。APIを使用する段階では既存の`design/system/network.md`を優先する。
+
+## オフライン時のクレジット
+
+クレジット画面が参照するライセンス本文はClient静的配布成果物に同梱し、PWAのオフラインキャッシュ対象へ含める。初回取得とキャッシュ成立後はServer未接続でも閲覧できる。Client更新時はHTML/JS/WASMとライセンス本文を同じバージョンとして切り替える。
 
 ## 検証項目
 

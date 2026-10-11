@@ -4,7 +4,7 @@
 
 外部通信はPublic API Serverを唯一のClient向け境界とし、内部処理は責務の正本Componentへ中継します。Private API、GameServer、GuildBattleCoordinator間はPrivate Networkだけを信頼せずmTLSでService Identityを検証します。
 
-HTTP Method、Path、gRPC service定義は現仕様で固定されていないため、本設計でも定義しません。Public APIとPrivate APIを含むComponent間の通信PayloadはProtocol Buffersで表現します。Private APIなど未定義のwire schema・field numberは推定しません。
+RPCのHTTP Method/Pathは`design/system/api_transport.md`、Private APIのwire schemaは`design/system/private_api.proto`に従います。gRPC Serviceは採用せず、Clientは既存のFetch APIを使用します。
 
 ## Public APIのRouting
 
@@ -70,7 +70,7 @@ Public API側のOwner解決Cacheを実装する場合でも、Databaseの`GUILD_
 
 ## GuildBattle通知ストリーム境界
 
-`SubscribeGuildBattleUpdates`は状態参照の認証付き長寿命HTTP/2 Responseストリームです。Public API Serverは認証と所有GameServerへのmTLS中継, 各接続への`GuildBattleScoreUpdate`（チェイン残り時間msを含む）フレーム転送・GameServerからの終了伝達だけを担当し, スコア・チェインを正本として保持しません。購読中のPlayerが当該GuildBattleIDにJoin済みであることはGameServerが判定します。通知フレームはProtocol Buffers varintサイズprefixで区切ります。HTTP Method/Pathは既存方針どおり未確定です。
+`SubscribeGuildBattleUpdates`は状態参照の認証付き長寿命HTTP/2 Responseストリームです。Public API Serverは認証と所有GameServerへのmTLS中継, 各接続への`GuildBattleScoreUpdate`（チェイン残り時間msを含む）フレーム転送・GameServerからの終了伝達だけを担当し, スコア・チェインを正本として保持しません。購読中のPlayerが当該GuildBattleIDにJoin済みであることはGameServerが判定します。通知フレームはProtocol Buffers varintサイズprefixで区切ります。HTTP Method/Pathは`POST /v1/public/SubscribeGuildBattleUpdates`です。
 
 ## Payload
 

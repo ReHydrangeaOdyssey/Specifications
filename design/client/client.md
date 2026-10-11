@@ -48,6 +48,10 @@
 * 「キャッシュクリア」はOPFSの`./cache/`だけを削除する. 「アセット削除」は`./assets/`の任意素材を個別または一括で削除する.
 * 「クレジット」から専用画面へ遷移し, 「戻る」でタイトルへ復帰する. ライセンス情報の閲覧はログイン・Server接続を要しない.
 
+## アセット保存Path
+
+取得辞書の配置先Pathを`./assets/`配下の相対Pathへ限定し、親ディレクトリ参照・絶対Path・URL形式・制御文字を拒否する。一括取込みの途中終了では処理済みファイルを保持し、未処理ファイルを変更しない。削除後は当該素材へのローカル参照を無効化する。
+
 ## クレジット・ライセンス表記
 
 * ゲーム本体・Client配布物に関係するライセンス, 著作権表示, 必要な帰属表記等はすべて専用のクレジット画面に掲載する. 内容は縦スクロールで閲覧可能とする.
@@ -91,9 +95,9 @@
 * ClientとPublic API Server間の通信方式は「[ネットワーク](../system/network.md)」に従い, HTTP/2 over TLS 1.3とし, API PayloadにはProtocol Buffersを使用する.
 * `SubscribeGuildBattleUpdates`はHTTP/2 Response streamを使用し, `GuildBattleScoreUpdate`をProtocol Buffers varint長prefix付きで順次受信する.
 * Public API通信には`WebSocket`を使用しない.
-* ブラウザ標準の`fetch()`（Rustからは選定済み`web-sys`/`wasm-bindgen-futures`等を使用）をPublic API通信に使用する. 通常のAPIは`fetch()`で送受信し, 通知はResponse Bodyの`ReadableStream`を逐次読み取りProtocol Buffers varint長prefixでフレーム復元する. HTTP/2とTLS 1.3のネゴシエーションはブラウザと接続先が担当し, JavaScriptが直接バージョンを強制しない. ブラウザからのHTTP/2 + TLS 1.3接続成立は配置先で検証する. Rust専用HTTPライブラリの追加は不要とする. HTTP method/pathは未定義のままとする.
+* ブラウザ標準の`fetch()`（Rustからは選定済み`web-sys`/`wasm-bindgen-futures`等を使用）をPublic API通信に使用する. 通常のAPIは`fetch()`で送受信し, 通知はResponse Bodyの`ReadableStream`を逐次読み取りProtocol Buffers varint長prefixでフレーム復元する. HTTP/2とTLS 1.3のネゴシエーションはブラウザと接続先が担当し, JavaScriptが直接バージョンを強制しない. ブラウザからのHTTP/2 + TLS 1.3接続成立は配置先で検証する. Rust専用HTTPライブラリの追加は不要とする. HTTP Method/Pathは`design/system/api_transport.md`を正とする.
 * WebAssemblyはブラウザ内で実行され, Rust/WASMからの通信もブラウザの`fetch()`を介するため, WASMとJavaScriptを静的配布先から取得した後のAPI通信にもOrigin・CORS・Cookieの規則が適用される. `SameSite=Strict` CookieはCross-Site要求へ送信されない. ClientからGameServerへ直接通信せず, Public API Serverへ接続する構成を維持する.
-* 配布OriginがPublic API認証Originと異なるSiteになる場合, Cookieを利用するLogin/Refresh/Logoutは認証Originのトップレベルページ内で実施し, 一度限りの認可コード+PKCE S256でClientへAccessTokenを受け渡す. `SameSite=Strict`を維持し, Third-party Cookieは使用しない. 認証OriginとClient戻り先の実URL, APIのwire契約は未確定とする. 詳細は`design/system/network.md`を正とする.
+* 配布OriginがPublic API認証Originと異なるSiteになる場合, Cookieを利用するLogin/Refresh/Logoutは認証Originのトップレベルページ内で実施し, 一度限りの認可コード+PKCE S256でClientへAccessTokenを受け渡す. `SameSite=Strict`を維持し, Third-party Cookieは使用しない. 認証OriginはPublic API配布設定値、Client戻り先は`https://rehydrangeaodyssey.github.io/auth/callback/`に固定し、認可コード交換のwire契約は`design/system/public_api.proto`を正とする. 詳細は`design/system/network.md`を正とする.
 
 ## 参照資料
 

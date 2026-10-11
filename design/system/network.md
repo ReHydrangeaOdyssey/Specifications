@@ -61,7 +61,7 @@ flowchart TD
 
 ### 通信暗号化要件
 
-* 本システムのComponent間で送受信するすべてのAPI通信Payloadのデータ表現はProtocol Buffersとする. Public API, Private API, GameServerおよびGuildBattleCoordinatorとの通信を含む. 通信の認証・Transport・HTTP Headerは既存の規則に従う. 各APIの未定義HTTP Method/PathやProtocol Buffers field numberは本規則から推定しない.
+* 本システムのComponent間で送受信するすべてのAPI通信Payloadのデータ表現はProtocol Buffersとする. Public API, Private API, GameServerおよびGuildBattleCoordinatorとの通信を含む. 通信の認証・Transport・HTTP Headerは既存の規則に従う. 各APIのHTTP Method/Pathは`api_transport.md`, Public APIのwire schemaは`public_api.proto`, Private/Control APIのwire schemaは`private_api.proto`を正とする.
 * ClientとPublic API Server間のPublic API transportはHTTP/2 over TLS 1.3とし, API PayloadはProtocol Buffersを使用する. Public API Payloadのwire schemaは「[public_api.proto](public_api.proto)」を正とする. `SubscribeGuildBattleUpdates`のみ長寿命のServer->Client HTTP/2 Response streamとし, 個々の`GuildBattleScoreUpdate`（チェイン残り時間msを含む）をProtocol Buffers varint長prefixでフレーム化する. ストリームは開戦後30:00で終了するが, 30:00までに受理された要求が当該購読Playerについてキュー待ちの場合は処理完了直後までそのPlayerのストリームだけ維持する. そのストリームはPublic API Serverから所有GameServerへmTLSで中継し, 購読者のGuildBattleIDと所属Guildに基づく情報だけを返す.
 * ClientとPublic API Server間の通信はTLS 1.3を必須とする. `LoginID`, `Password`, `AccessToken`, `RefreshToken`, `DiscordAuthorizationToken`を平文transportで送信しない.
 * Public API Serverは接続を可能な限り再利用し, API要求ごとにTLS接続を新規作成する方式とはしない.
@@ -71,12 +71,9 @@ flowchart TD
 * 静的ClientのOriginは`https://rehydrangeaodyssey.github.io`とし, 公開URLは`https://rehydrangeaodyssey.github.io/`, 配布リポジトリは`https://github.com/ReHydrangeaOdyssey/ReHydrangeaOdyssey.github.io`とする. 独自ドメインは採用しない. GameServerはClientから直接アクセスできる公開Endpointを持たず, ClientのAPI通信はPublic API Serverへ送信する. Public APIのHTTPS Originは別途定義する. 異なるSite上のPublic APIと接続する場合は下記のトップレベル認証画面・一度限りの認可コード方式を用い, `SameSite=Strict` CookieをCross-Site要求へ送る方式を採用しない. HTTP/2/TLS 1.3はブラウザとServerがネゴシエーションし, 接続結果を検証する.
 ## 静的Clientと認証Originが異なる場合の認証手順
 
-* GitHub Pagesの静的ClientとPublic API ServerがCross-Siteになる構成では、`__Host-RefreshToken`をCross-Site `fetch()`で送受信しない。Cookieの`Secure`, `HttpOnly`, `SameSite=Strict`, `Path=/`, Domain属性なしを維持する。静的Clientが直接送る通常API要求は従来どおりAccessTokenを認証情報として使用する。
-* アカウント作成・Login・SessionからのAccessToken再取得・LogoutなどRefresh Sessionを操作する画面処理は、HTTPSのPublic API認証Originをトップレベルのブラウザページとして開き、当該認証Originのページから同一Originで既存の`CreateAccount`, `Login`, `RefreshAccessToken`, `Logout`を呼ぶ。クロスサイトから認証Originへ最初に遷移した要求に`SameSite=Strict` Cookieが付くことは期待せず、認証Originの画面を開いた後の同一Site要求でSessionを確認する。
-* 静的ClientへのAccessToken受け渡しは一度限りの短寿命「認可コード」経由とする。Clientは遷移前に暗号学的乱数による`state`・PKCE `code_verifier`を生成し、S256の`code_challenge`と登録済みの正確なClient戻り先URIを認証Originへ渡す。認証Originは認証・Session検証成功後、使用済みにできる認可コード（有効期限60秒以内）を発行し、そのコードを当該`state`とともに登録済み戻り先URIへ返す。AccessToken/RefreshToken/Password/DiscordAuthorizationTokenをURLへ載せない。
-* 静的Clientは戻り後に`state`の一致を検証してから、認可コードと`code_verifier`をCookieなしのCross-Origin Protocol Buffers APIへ送信する。Public APIは認可コードの未使用・有効期限・戻り先URI・S256照合を一度の原子的処理で検証し、使用済みにした場合に限りAccessTokenを返す。AccessTokenは既存どおりClientプロセスメモリにのみ保持する。Clientは戻り時のコードをURLから速やかに除去する。
-* 認証コードの保管先、認証用画面の具体Path、認可コード交換のHTTP Method/Path・Protocol Buffers field number、認証Origin/戻り先の運用値は追加の実装契約として未確定とする。認可コードには推測可能な値を使用せず、再利用を許可しない。Client戻り先URIは完全一致の許可リストとし、任意URIへのリダイレクトを許可しない。`state`・PKCE verifierはタブ内の遷移を跨いで照合できる形で一時保持し、AccessTokenやRefreshTokenをWeb Storageへ保存しない。
-* Cookieを伴う認証Origin内の状態変更Requestは既存の正確なOrigin検証とCSRF対策を適用する。認可コード交換APIのCORSは許可した静的Client Originだけに限定し、Cookie Credentialsは許可しない。HTTPSを必須とする。Public API ServerをClientから直接IPアドレスで指定できることは、この認証方式の成立条件とはしない（HTTPS証明書・Originの確定が必要）。
+* 認証画面はPublic API Originの`/auth/authorize`からHTTPSで提供する。Session Cookieは認証Originの第一者ページからだけ送信する。`SameSite=Strict`のCookieをCross-Site fetchで送信しない。
+* ClientのCallback URIは`https://rehydrangeaodyssey.github.io/auth/callback/`とし、AccessTokenは60秒以内・単回使用の認可コードとPKCE S256検証後にだけ渡す。認証コード発行・交換のMethod、Path、wire型、CSRF・CORSの詳細は`api_transport.md`を正とする。
+* 認証Originは配布時の`public_api_origin`を使用し、認証情報を静的配布URLのQueryに載せない。GameServerはClientから直接アクセスさせない。
 
 根拠: [RFC 9700 OAuth 2.0 Security BCP](https://www.rfc-editor.org/rfc/rfc9700.html), [MDN Cookie SameSite](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Set-Cookie), [MDN Third-party cookies](https://developer.mozilla.org/en-US/docs/Web/Privacy/Guides/Third-party_cookies)。
 

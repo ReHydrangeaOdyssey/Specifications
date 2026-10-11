@@ -35,6 +35,17 @@ erDiagram
         SessionExpiresAt expires_at
     }
 
+    AUTHORIZATION_CODE {
+        Bytes32 code_hash PK
+        AccountID account_id FK
+        SessionID session_id
+        PlayerID player_id FK
+        String redirect_uri
+        Bytes32 challenge_hash
+        DateTime expires_at
+        DateTime consumed_at
+    }
+
     DISCORD_AUTHORIZATION_TOKEN_USAGE {
         DiscordAuthorizationTokenID token_id PK
         DiscordUserID discord_user_id
@@ -75,6 +86,7 @@ erDiagram
 
     ACCOUNT ||--|| PLAYER : owns
     ACCOUNT ||--o| ACCOUNT_SESSION : has
+    ACCOUNT ||--o{ AUTHORIZATION_CODE : issues
     GUILD ||--o{ GUILD_MEMBER : has
     PLAYER ||--o| GUILD_MEMBER : belongs_to
     GUILD ||--o{ GUILD_JOIN_APPLICATION : receives
@@ -84,6 +96,8 @@ erDiagram
 
     PLAYER ||--o| GUILD : leader
 ```
+
+`AUTHORIZATION_CODE`は認証コード32byteのSHA-256値を`code_hash`へ格納し、コード自体はDBに保存しない。登録済みRedirect URI、PKCE S256 digest、発行元SessionID・PlayerID、期限、消費時刻を保持する。Private APIはRefreshTokenのHashから有効Sessionを検索して発行し、コード交換はコード行の排他Lock・Session有効性・URI完全一致・S256照合・未消費・60秒以内の全条件を単一Transactionで検証して一度だけ成立させる。
 
 `ACCOUNT.login_id`は一意制約を設定する. Passwordの平文は保存せず, Argon2idのパラメータ, Passwordごとの16byte以上の暗号学的乱数Salt, Hashを含む`password_hash`だけを保存する.
 `ACCOUNT.discord_user_id`はNULLを許可する. `DiscordAuthorizationRequired=true`でAccountを作成した場合は`DiscordAuthorizationToken.sub`のDiscordUserIDを保存し, Login時の追加認可Bindingに使用する. `DiscordAuthorizationRequired=false`で作成したAccountではNULLを許可する.

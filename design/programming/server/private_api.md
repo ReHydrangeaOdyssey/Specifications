@@ -45,7 +45,7 @@ classDiagram
 
 ## Service Identity認可
 
-mTLSで確定した呼び出し元Service IdentityをAPI Allowlistへ照合してから業務処理を実行します。Private APIのRequest/Response PayloadはProtocol Buffersを使用します。field number・wire schemaおよびHTTP Method/Pathは未定義のため, 現段階では生成型やEndpointを推定しません。
+mTLSで確定した呼び出し元Service IdentityをAPI Allowlistへ照合してから業務処理を実行します。Private APIは`design/system/private_api.proto`のProtocol Buffersを用います。Method/PathとTransportは`design/system/api_transport.md`を正とします。
 
 主な呼び出し元は以下です。
 
