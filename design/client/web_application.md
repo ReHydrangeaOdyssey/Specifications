@@ -4,7 +4,7 @@
 
 ClientはRust/WebAssemblyをブラウザ上で実行する静的Webアプリケーションとする。描画にはWebGL 2を使用する。
 
-対応OS下限は2021年4月30日時点の安定版に基づきiOS 14.5 / Android 11とする。対象ブラウザの既定下限はiOS Safari 16.3以降、Android Chrome 120以降とする。iOS 14.5とiOS Safari 16.3は併存できないため、実質的なiOS動作対象はSafari 16.3を使用できるiOS 16.3以降となる。iOS 14.5の実動作をサポートするにはブラウザ要件の再決定が必要であり、現時点では未解決とする。
+対象ブラウザの下限はiOS Safari 16.3以降, Android Chrome 120以降とする。対応OS下限はブラウザの対応要件からiOS 16.3 / Android 8.0とする。OS下限はブラウザを利用可能な条件を示し, WebGL 2・OPFS・HCA等を含めたゲーム全体の動作保証を意味しない。
 
 ## 画面方向と可変レイアウト
 
@@ -22,7 +22,7 @@ ClientはRust/WebAssemblyをブラウザ上で実行する静的Webアプリケ�
 
 - Canvasをブラウザ表示領域へ適合させ、CSS上の表示サイズとWebGL描画バッファのピクセル数を分けて管理する。`devicePixelRatio`を考慮し、描画バッファは必要に応じた上限と端末性能を考慮して確保する。具体的な上限値は初期実測に基づき確定する。
 - ゲーム操作入力はタッチ入力とマウス入力を`PointerEvent`で共通化し、画面拡縮後も表示座標から論理座標への変換を一致させる。ゲームCanvas上で操作に必要な既定タッチジェスチャーの制御を行うが、文書全体のブラウザ操作まで無効化しない。
-- OS標準のファイル選択、初期ロード・エラー表示には必要最小限のHTML要素を利用できる。既定の「追加UI Frameworkを採用しない」方針は維持する。
+- OS標準のファイル選択、初期ロード・エラー表示, クレジット画面のスクロール可能なライセンス本文表示には必要最小限のHTML要素を利用できる。既定の「追加UI Frameworkを採用しない」方針は維持する。
 - WASM・WebGL 2・OPFS等の初期化に失敗した場合は、白画面で放置せず、失敗した機能と再読込手段を表示する。対応しない機能を利用可能と表示しない。
 
 ## 音声・保存に関するブラウザ制約
@@ -37,7 +37,7 @@ ClientはRust/WebAssemblyをブラウザ上で実行する静的Webアプリケ�
 - 静的配布は`https://github.com/ReHydrangeaOdyssey/ReHydrangeaOdyssey.github.io`を使用するGitHub Pagesを予定する。独自ドメインの採否と最終公開URLは未決定とする。GitHub ActionsでReleaseビルド・検証・HTTPS静的配布を実行する。静的資源は相対Pathで参照する。
 - JavaScriptのES Moduleと`wasm-bindgen --target web`による生成物をブラウザから読み込む。WASMロード処理の成功後に描画初期化する。
 - PWA用Manifestは配布できる構成とする。`start_url`と`scope`は公開ルート内の相対URLで指定する。
-- PWAインストールの操作案内はiOS Safariでは共有メニューの「ホーム画面に追加」、Android Chromeではメニューの「アプリをインストール」または「ホーム画面に追加」とする。実際の項目名称・表示可否は端末やブラウザバージョンによって変わるため実機で検証する。アプリ名・アイコン素材は正式名称の確定後に指定する。
+- PWAインストールの操作案内はiOS Safariでは共有メニューの「ホーム画面に追加」、Android Chromeではメニューの「アプリをインストール」または「ホーム画面に追加」とする。インストール・ホーム画面からの起動等の検証はプロトタイプ段階で実施済みとする（開発者申告）。検証端末・OS・ブラウザ・試験記録の具体情報は未提示であり、アルファ/ベータ版およびブラウザ要件の下限については対象別に再確認する。アプリ名・アイコン素材は正式名称の確定後に指定する。
 - 公開する試験データは再配布可能なものだけを含め、Token、個人データ、秘密鍵を同梱しない。
 
 ## 検証条件
@@ -50,7 +50,7 @@ ClientはRust/WebAssemblyをブラウザ上で実行する静的Webアプリケ�
 
 - Clientのソースリポジトリは`https://github.com/ReHydrangeaOdyssey/Client.git`、純粋なゲームロジックは`https://github.com/ReHydrangeaOdyssey/GameLogic.git`、Serverは`https://github.com/ReHydrangeaOdyssey/Server.git`とする。
 - 配布リポジトリは上記GitHub Pagesを予定する。独自ドメイン、Public APIのHTTPS Originおよび認証画面の正式URLは未確定とする。静的配布OriginとAPI Originが異なる場合の認証は`design/system/network.md`の第一者Cookie・認可コード方式に従う。
-- iOS 14.5とSafari 16.3の動作下限不整合、実測による描画解像度上限、音声・保存容量の実機検証結果は別途確定する。
+- 最低対応OS・ブラウザの組合せにおけるゲーム動作, 実測による描画解像度上限, 音声・保存容量の実機検証結果は別途確定する。
 
 ## 参照資料
 

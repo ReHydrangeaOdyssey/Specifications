@@ -122,6 +122,13 @@
 | **Discord Bot** | `tokio`, `serenity`, `reqwest`, `rustls`, `serde`, `jsonwebtoken`, `getrandom`, `uuid`, `time` |
 | **Public API / Coordinator 本番追加** | `kube`, `k8s-openapi` |
 
+## 配布物のライセンス一覧生成
+
+- ClientのRust依存関係（採用済みcrateと推移的依存）については`cargo-about`をビルド用ツールとして使用し, `Cargo.lock`で固定したバージョンのライセンス一覧・必要な本文を生成する。`cargo-about`はゲーム実行時のClient crate依存ではなく, Release成果物作成時のツールである。
+- 生成した表記をClient配布成果物に同梱し, タイトルから開く専用クレジット画面へ表示する。Rust以外の同梱配布物・ゲーム本体の必要表記も同じ画面に追加する。実際の同梱対象・ライセンス条件は採用時に確認し, 生成だけで適法性の確認が完了したと見なさない。
+- ユーザーが自身の端末に取り込むPNG/HCAはClientの配布物とは別扱いとし, 自動ライセンス審査の対象としない。
+- `cargo-about`公式: https://embarkstudios.github.io/cargo-about/
+
 ## 参照資料
 
 ### 添付仕様書・設計書

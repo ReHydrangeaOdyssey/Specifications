@@ -15,8 +15,9 @@ Rust/WASM製Web Clientの静的配布を定義する。
 
 1. Rustの依存を`Cargo.lock`で固定し、`wasm32-unknown-unknown`ターゲットへReleaseビルドする。
 2. Rust crateの`wasm-bindgen`と対応するCLIのバージョンを揃え、`--target web`形式のJavaScript glueとWASMを生成する。
-3. HTML、JS、WASM、CSS、およびその段階で利用するManifest・静的ファイルを1つの公開ディレクトリへ収集する。GitHub Pagesを採用する場合は`.nojekyll`も配置する。
-4. GitHub Pages向けのGitHub Actionsビルド・静的参照検証、Pages向けArtifact Upload、`actions/deploy-pages`によるHTTPS配信を使用する。
+3. Clientの`Cargo.lock`で固定したRust依存関係を対象に`cargo-about`を実行し, ライセンス情報をHTML形式で生成する。Client配布物に含まれるRust依存ライブラリの必要表記と, 自動生成の対象外となる同梱物・ゲーム本体の必要表記をクレジット画面に組み込む。表示用の生成結果がない状態ではRelease配布しない。
+4. HTML、JS、WASM、CSS、Manifestに加え, クレジット画面で読むライセンス情報を配布ディレクトリへ同梱する。GitHub Pagesを採用する場合は`.nojekyll`も配置し, 公開後のクレジット画面から同梱した情報を閲覧可能にする。
+5. GitHub Pages向けのGitHub Actionsビルド・静的参照検証、Pages向けArtifact Upload、`actions/deploy-pages`によるHTTPS配信を使用する。
 
 ## リポジトリ
 
@@ -51,7 +52,8 @@ Rust/WASM製Web Clientの静的配布を定義する。
 | 回転 | 起動時の横画面設定を試み、端末が許可しない場合も案内画面を表示せず、縦画面表示およびリサイズで描画領域と入力を再計算する |
 | タッチ | タップとマウスクリックが同じ論理位置を指定できる |
 | 異常 | WASMロード失敗・WebGL 2初期化失敗を検知し、再読込操作が可能 |
-| 対応環境 | iOS Safari 16.3以上、Android Chrome 120以上の実機試験結果を記録する |
+| 対応環境 | iOS 16.3以上のSafari 16.3以上、Android 8.0以上のChrome 120以上で実機試験結果を記録する（ブラウザを導入可能なOS下限であり, ゲーム動作保証とは区別する） |
+| クレジット | タイトルから開いてスクロール閲覧し, 戻るとタイトルへ復帰する。オフラインでも必要なライセンス情報を閲覧できる。生成ファイルの同梱漏れと手動追加分の記載漏れがないか検証する |
 
 ## 参照資料
 
@@ -60,6 +62,9 @@ Rust/WASM製Web Clientの静的配布を定義する。
 - `design/programming/client/client.md`
 - `design/programming/directory_structure.md`
 - `https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site`
+- `https://embarkstudios.github.io/cargo-about/`
+- `https://developer.apple.com/documentation/safari-release-notes/safari-16_3-release-notes`
+- `https://support.google.com/chrome/thread/243346420/sunsetting-chrome-support-for-android-7-0-nougat?hl=en`
 - `https://wasm-bindgen.github.io/wasm-bindgen/examples/without-a-bundler.html`
 - `https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/WebGL_best_practices`
 - `https://developer.mozilla.org/en-US/docs/Web/API/HTMLInputElement/webkitdirectory`

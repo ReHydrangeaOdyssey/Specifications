@@ -53,7 +53,7 @@ classDiagram
 
 ## Web Client実行方式とブラウザ境界
 
-- ClientはRust/WASM（`wasm32-unknown-unknown`）を対象とし, iPhone Safari/PWAおよびAndroid Chrome/PWA上で動作させます。配布は`https://github.com/ReHydrangeaOdyssey/ReHydrangeaOdyssey.github.io`のGitHub Pagesを予定します。iOS 14.5 / Android 11をOS下限としますが, ブラウザ下限iOS Safari 16.3 / Android Chrome 120との間でiOSは要件不整合があり, 実質的な対応下限はiOS 16.3以降です。独自ドメインは未決定です。
+- ClientはRust/WASM（`wasm32-unknown-unknown`）を対象とし, iPhone Safari/PWAおよびAndroid Chrome/PWA上で動作させます。配布は`https://github.com/ReHydrangeaOdyssey/ReHydrangeaOdyssey.github.io`のGitHub Pagesを予定します。ブラウザ下限をiOS Safari 16.3 / Android Chrome 120, 対応するOS下限をiOS 16.3 / Android 8.0とします。OS下限はブラウザの導入可能条件に基づくものであり, 該当OSでの全機能・性能の合格判定には実機試験を要します。PWAインストール・ホーム画面からの起動等はプロトタイプで検証済み（開発者申告）ですが, 下限環境での個別試験記録は未提示です。
 - ブラウザとの接続には`wasm-bindgen`, `web-sys`, `js-sys`, `wasm-bindgen-futures`を使用します。Browser APIのPromiseは`wasm-bindgen-futures`を用いてRustの`Future`と連携させます。
 - 描画基盤として汎用2Dエンジンを追加せず, WebGL 2を`web-sys`経由で使用する独自スプライトバッチレンダラーとします。UI Frameworkも使用しません。
 - 戦闘計算は`game-core`、Protocol Buffers生成型は`protocol`、符号化・復号は`prost`を使用する。
@@ -77,9 +77,16 @@ OPFSのPNG → File / Blob → createImageBitmap() → WebGL 2 texImage2D()
 - HCAからPCMへ変換した音声をWeb Audio APIへ渡します。短いSE/ボイスでは必要に応じて全体を`AudioBuffer`へデコードして再利用します。
 - 長いBGM/ボイスはOPFSから必要な圧縮ブロックを読み, 小容量PCMバッファへ逐次デコードします。`AudioWorkletNode`へ`MessagePort`経由でPCMチャンクを供給し, `AudioWorkletProcessor`の小容量キューから再生します。
 - `AudioWorkletProcessor.process()`内でHCAデコードや大容量のメモリ確保を行いません。制御側または専用Workerが先読みし, 音声出力側と役割を分離します。
-- HCAは22,050Hz・非暗号化とし, 辞書で指定された音源だけ指定ループ区間を再生します。SEの同時再生上限は5です。チャンネル数は各HCAのメタデータから読み, 利用可能なチャンネル数の上限は実機検証で定めます。長尺音声のPCM先読みは初期500ms, 残り250ms到達前に補充する暫定設定を採用し, 欠音・メモリ使用・I/O遅延から調整します。`SharedArrayBuffer`は初期実装では使用しません。
+- HCAは22,050Hz・非暗号化とし, 辞書で指定された音源だけ指定ループ区間を再生します。SEの同時再生上限は5です。ステレオ2チャンネル（左・右）を再生対象とし, HCAの左右音声を保持したPCMをWeb Audio APIへ供給します。1チャンネル音源の扱いは未確定です。ステレオの実機動作は別途検証します。長尺音声のPCM先読みは初期500ms, 残り250ms到達前に補充する暫定設定を採用し, 欠音・メモリ使用・I/O遅延から調整します。`SharedArrayBuffer`は初期実装では使用しません。
 - HCAのiPhone Safari/WASMでのコンパイル・正しい再生・ピークメモリは未検証です。`cridecoder`は検証合格を最終採用条件とする候補であり, 動作確認済みとは記載しません。
-- `cridecoder`リポジトリはMIT Licenseを掲示していますが, バージョン固定した配布物に含まれる全ての推移的依存ライセンスの確認と, 音源・HCAフォーマットの権利関係は別途確認します。単にデコード可能であることを再配布許諾の根拠としません（参照: https://github.com/seiunx-dev/cridecoder）。
+- `cridecoder`リポジトリはMIT Licenseを掲示していますが, Client配布物に含める当該ライブラリと推移的依存ライブラリのライセンスを確認します。一方, PNG/HCAの音源・画像ファイルは各ユーザーが用意して自端末へ取り込むため, 個別素材のライセンスをClientが自動審査する機能は設けません。ユーザー持ち込み素材の権利と, Clientが配布するソフトウェア/同梱素材の権利は区別します（参照: https://github.com/seiunx-dev/cridecoder）。
+
+### クレジット画面・依存ライセンス組み込み
+
+- タイトル画面に「クレジット」を配置し, 専用画面へ遷移します。ゲーム本体とClient配布物に必要なライセンス・著作権・帰属情報を集約してスクロール表示し, 「戻る」ボタンでタイトルへ戻ります。閲覧にログイン・Server接続を要求しません。
+- Rust依存ライブラリのライセンス情報は`cargo-about`でClientの依存関係を対象として生成し, `Cargo.lock`で確定したバージョンの必要表記を配布成果物へ同梱します。生成結果はクレジット画面内で表示し, 同梱した配布物としてオフラインでも読めるようにします。Serverだけで利用する依存をClient向けライセンス一覧へ混同しません。
+- Rust以外の配布依存物, 同梱素材やゲーム本体の必要な表示は, `cargo-about`の自動生成範囲外として同じクレジット画面へ手動で組み込みます。生成内容・手動追加分をReleaseビルド時に確認し, 未生成のまま公開しません。個々のライセンス名や著作権者の値は実際に同梱する依存物の確定情報に従います。
+- ユーザーが端末から持ち込むPNG/HCAはClientの配布物に含まないため, 個々のユーザー素材の許諾監査機能やクレジットへの自動追加は設けません。
 
 ### OPFSアセット管理
 
@@ -87,8 +94,8 @@ OPFSのPNG → File / Blob → createImageBitmap() → WebGL 2 texImage2D()
 - OPFSの基本構造は`./game_info.json`（現在・前回のバージョン）, `./assets/<something>`, `./cache/<something>`とします。通常のアセットPathは維持し, 配置変更が必要なバージョンでだけ`game_info.json`を照合して差分移行を実行します。`game_info.json`の検証・必要な差分処理でエラーがなければ更新成功と判定します。中断時の自動再開は要件としません。
 - OPFSでは非同期APIと`FileSystemSyncAccessHandle`を利用可能な処理で選択します。非同期のほうが効率的な処理には非同期APIを使い, 同期APIはWorker内でのアクセスに限定します。用途別の性能・互換性測定は継続します。
 - 圧縮HCAファイル全体と全体PCMを同時に常駐させません。デコード済みPCM, GPU資源, WASMメモリは用途別に管理し, 不要な`AudioBuffer`の参照を解除します。
-- アセット取り込みでは拡張子付きファイル名UTF-8のSHA-256と, 必要な場合の内容SHA-256を辞書に照合し, 一致する辞書Pathへ保存します。一致しない場合はユーザー素材として区分「BGM」「SE」「Voice」「Character」「SD Character」「Character Icon」の選択を求めます。カテゴリと配置先Pathの対応は未確定です。既存Pathへの上書きはユーザー確認を必須とし, 一括上書き/一括キャンセルを選択できます。Unicode正規化方式は未確定です。
-- PNG/HCAは辞書Pathに基づきOPFSの`./assets/`へ保存・復元します。タイトル画面からのアセット削除では任意の素材を個別・一括で削除できます。自動的な容量調整削除はせず, 容量不足時はゲームを利用不可にして削除操作を有効にします。キャッシュクリアは`./cache/`のみです。辞書のファイルURL・形式, ユーザー素材のPath, Unicode正規化は未確定です。
+- アセット取り込みでは拡張子付きファイル名UTF-8のSHA-256と, 必要な場合の内容SHA-256を辞書に照合し, 一致する辞書Pathへ保存します。一致しない場合はユーザー素材として区分「BGM」「SE」「Voice」「Character」「SD Character」「Character Icon」の選択を求めます。カテゴリと配置先Pathの対応は未確定です。既存Pathへの上書きはユーザー確認を必須とし, 一括上書き/一括キャンセルを選択できます。ファイル名は英語表記の運用を前提に, ハッシュ入力のUnicode正規化は行わず, 辞書生成側と同一の元ファイル名文字列をUTF-8化します。
+- PNG/HCAは辞書Pathに基づきOPFSの`./assets/`へ保存・復元します。タイトル画面からのアセット削除では任意の素材を個別・一括で削除できます。自動的な容量調整削除はせず, 容量不足時はゲームを利用不可にして削除操作を有効にします。キャッシュクリアは`./cache/`のみです。辞書のファイルURL・形式およびユーザー素材のPathは未確定です。
 
 ### 依存・ビルド・検証条件
 
@@ -106,7 +113,7 @@ OPFSのPNG → File / Blob → createImageBitmap() → WebGL 2 texImage2D()
 
 ## タイトル画面のキャラクター画像割り当て
 
-- タイトル画面にキャッシュクリア・アセット追加・アセット削除の操作を提供します。容量不足でゲーム操作不可の場合もアセット削除は可能とします。
+- タイトル画面にキャッシュクリア・アセット追加・アセット削除・クレジットの操作を提供します。容量不足でゲーム操作不可の場合もアセット削除は可能とします。
 - アセット追加ではプレイヤーが選択した画像・音声を辞書のPathへ自動割当し, 辞書に一致しない素材は区分選択で配置します。
 - 画像・UVデータはClient側資産とし、Server用`ProcessedMasterData`の対象へ追加しません。
 - PNG以外の画像は受け付けません。画像・音声本体は`./assets/`へ保存し, 既定の二段SHA-256辞書から配置Pathを取得します。辞書と不一致の素材はユーザー区分選択とします。
@@ -217,7 +224,7 @@ Seedが`0`かどうかだけでランダム要素の有無を判定しません�
 - Refresh/Logout/LoginなどCookieを必要とするRequestは認証Originのトップレベルページ内で同一Originとして実行します。GitHub Pages上の静的ClientからCookieを含むCross-Site Fetchは行わず, 一度限りの認可コードとPKCE S256を使用したコード交換でAccessTokenを取得します。詳細は`design/system/network.md`とします。
 - `__Host-RefreshToken`のHost-only/HttpOnly/Secure/SameSite=Strict制約を維持し, 配布Originと認証Originの別Site配置に対応するトップレベル遷移方式を採用します。認証Origin, 戻り先URI, 認可コード交換のwire schemaは未確定です。
 - 個別ファイル・フォルダ一括取り込みに対応するUIを設け, ブラウザの対応APIを判定します。元ファイルの削除権限を取得できた場合のみ「移動」を提供します。SafariではブラウザAPI制約により元ファイル削除の提供ができない場合があり, その場合はコピーを利用します。
-- `cridecoder`の採否は`wasm32-unknown-unknown`ビルド、iPhone Safariでの22,050Hz非暗号化HCA・ループ再生・SE5音同時再生・長時間再生時の欠音・メモリ、および依存ライセンス検証の結果で決定します。
+- `cridecoder`の採否は`wasm32-unknown-unknown`ビルド、iPhone Safariでの22,050Hz・ステレオ2チャンネルの非暗号化HCA・ループ再生・SE5音同時再生・長時間再生時の欠音・メモリ、およびClient配布物に含まれる依存ライセンス検証の結果で決定します。
 
 ### 外部情報源
 

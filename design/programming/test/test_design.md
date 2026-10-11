@@ -79,16 +79,19 @@ IEEE-754 32bit浮動小数点として、仕様に記載された演算順を変
 
 ### ブラウザ実装・アセット・音声の検証
 
-対象端末で以下を検証し、結果を記録します。
+PWAのインストール・ホーム画面からの起動等はプロトタイプで検証済み（開発者申告）です。試験端末・OS・ブラウザ・結果記録の詳細は未提示です。アルファ/ベータ版では対象環境における回帰試験を実施し、以下の機能も検証・記録します。
 
+- iOS 16.3 / Safari 16.3, Android 8.0 / Chrome 120を下限の組合せとして扱います。OSはブラウザを利用できる条件に基づいています。PWAのインストールとホーム画面起動はプロトタイプで確認済み（開発者申告）として記録し, 下限端末のゲーム動作・回帰試験は別途検証します。
 - `wasm32-unknown-unknown`を対象に依存を解決し, `Cargo.lock`固定後に`cargo tree --target wasm32-unknown-unknown`および`cargo build --target wasm32-unknown-unknown --release --locked`を確認します。
 - iPhone Safari/PWAおよびAndroid Chrome/PWAで, PNG/HCAの個別・一括取り込み, 辞書取得（Login完了時）, 上書き確認と一括操作, `./assets/`の個別/一括削除, `./cache/`のみの消去, `game_info.json`のバージョン差分移行結果を検証します。元ファイル削除の「移動」は削除APIと権限があるブラウザに限定し, Safari等の未対応環境ではコピーのみ提供することを確認します。
 - PNGが`File` / `Blob`から`createImageBitmap()`で読み込め, WebGL 2テクスチャ化・描画できることを確認します。表示終了時の`ImageBitmap.close()`と`deleteTexture()`による資源解放を確認します。
 - 40キャラクターと代表的エフェクトをWebGL 2で描画し, 開始10秒をウォームアップとして除外した連続60秒の平均FPSが30以上かを実機で検証します。GPU利用率と全RAM消費は統一ブラウザ計測値が得られないため合否判定に使用せず, 可能な場合に参考値として記録します。
 - `cridecoder`によるHCAのWASM向けビルドとiPhone Safariでの音声再生が可能か確認します。採用確定は合格後とします。
 - 短いSE・ボイスの`AudioBuffer`再利用と, 長いBGM・ボイスのPCM逐次供給（`AudioWorklet` / `MessagePort`）を確認します。長い音声を全体PCM展開せず再生することを確認します。
-- HCA22,050Hz, 非暗号化, 辞書指定素材だけのループ, チャンネル数, SE同時最大5, 欠音と再生遅延を確認します。長尺音声のPCM先読み初期500ms/残量250msを用い, `AudioWorklet.process()`内でHCAデコードや大容量確保を行わないことを検証します。
+- HCA22,050Hz, 非暗号化, 辞書指定素材だけのループ, 左右2チャンネルのステレオ再生, SE同時最大5, 欠音と再生遅延を確認します。長尺音声のPCM先読み初期500ms/残量250msを用い, `AudioWorklet.process()`内でHCAデコードや大容量確保を行わないことを検証します。
 - GPUテクスチャ, デコード済みPCM, WASMヒープ, ブラウザ一時メモリを分けて観測します。iOS端末で長時間の騎士団戦を行い, 強制再読み込みの有無を確認します。
+- タイトルのクレジットボタン, クレジット画面のライセンス全文のスクロール表示, 戻る操作によるタイトルへの復帰, Server未接続でも閲覧できることを検証します。`cargo-about`でClient依存のライセンス情報が生成され, 配布成果物に組み込まれ, Rust以外の配布物の必要表記も表示されることをビルド・配信試験で確認します。
+- ファイル名ハッシュは英語表記の運用規則に従い, 元の拡張子付きファイル名の文字列をUnicode正規化・大小文字変換せずUTF-8化すること, 辞書生成側と同じ入力規則を使用することを検証します。
 - CIで`cargo build --release --locked --target wasm32-unknown-unknown`を実施し, 生成された非圧縮WASMのファイルサイズを確認します。50MB超過は最適化検討の開始条件, 500MB超過は現行のWASMサイズ合否上限として区別します。依存ライセンスも監査します。
 
 ClientとPublic API Server間はHTTP/2 over TLS 1.3およびProtocol Buffersを検証します。`SubscribeGuildBattleUpdates`はHTTP/2 Response streamのvarint長prefix付きMessageを復号します。通知にWebSocketは使用しません。HTTP/2/TLS 1.3の実ネゴシエーションは対象端末で確認します。別SiteのGitHub Pages静的ClientからのLogin/Refresh/Logoutは認証Originをトップレベルで開き, SameSite=Strictを維持した第一者Cookieで処理すること, 一度限りの認可コード・PKCE S256による受け渡しとコード再利用拒否・戻り先URI完全一致・Origin限定CORSを検証します。
