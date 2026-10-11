@@ -177,7 +177,7 @@ Discord追加認可必須時のToken未指定は`ApiErrorResponse(API_ERROR_DISC
 - GuildNameがUTF-8, 最大10文字, 空文字不可のBoundary Validationを満たすことを確認する. GuildNameの重複可否やGuild初期値はPublic API Serverで判定しない.
 - `GuildName`, `DaytimeStartTime`, `NighttimeStartTime`と`AuthenticatedContext`をPrivate API Serverの`CreateGuildPrivate`へ中継する.
 - GuildID, 施設Level, 団長・副団長, 所属, `membership_locked`および開始時刻のDomain Validation・初期化はPrivate API ServerがDatabase上の現在状態を用いて行う.
-- `CreateGuildPrivate`の同一Upstream Requestが処理失敗した場合は同一要求を1回だけ再実行する. 再実行も失敗した場合は`RequiredOperationErrorResponse`で`API_ERROR_REQUIRED_OPERATION_FAILED`と固定文言`必要な処理が実行できませんでした`だけをClientへ返す.
+- 初期Guild作成済みであればCreateGuildの再実行を拒否する。初回呼出しが確定済みかどうかはPrivate APIが`GUILD.id = PlayerID`の有無で判定する。作成失敗時もClientによる同一作成要求の再試行は受け付けない。
 
 #### 要求データ
 
@@ -189,7 +189,7 @@ Discord追加認可必須時のToken未指定は`ApiErrorResponse(API_ERROR_DISC
 
 #### 失敗時レスポンス
 
-GuildNameがBoundary Validationを満たさない場合は`ApiErrorResponse(API_ERROR_INVALID_GUILD_NAME)`を返す. `CreateGuildPrivate`の1回再実行後も処理できない場合は`RequiredOperationErrorResponse`を返す. Private API Serverが返したDomain Errorは対応するPublic API Errorへ変換する.
+GuildNameがBoundary Validationを満たさない場合は`ApiErrorResponse(API_ERROR_INVALID_GUILD_NAME)`を返す. 初期Guild作成済み、または初回要求が成立しない場合は`RequiredOperationErrorResponse`を返す. Private API Serverが返したDomain Errorは対応するPublic API Errorへ変換する.
 
 ### 騎士団役職変更
 
@@ -317,6 +317,29 @@ GuildNameがBoundary Validationを満たさない場合は`ApiErrorResponse(API_
 #### 失敗時レスポンス
 
 所属変更禁止期間の場合は`ApiErrorResponse(API_ERROR_GUILD_MEMBERSHIP_CHANGE_NOT_ALLOWED)`, 団長以外のメンバーが存在するGuildの団長が脱退しようとした場合は`ApiErrorResponse(API_ERROR_GUILD_LEADER_MOVE_NOT_ALLOWED)`を返す.
+
+## 施設強化・検索・編成取得・戦闘参照
+
+下記はすべて既存の認証Bearer Tokenと`PlayerID`一致検証を行い、ClientはPrivate APIへ直接接続しない。Request/Response型は`design/system/public_api.proto`、Privateの対応型は`design/system/private_api.proto`を正とする。
+
+| Method | Private API | 成立条件と応答 |
+|---|---|---|
+| `GetGuildFacilityUpgradeCost` | `GetGuildFacilityUpgradeCostPrivate` | 次Lv必要ゴールド、現Lv・最大Lv到達の状態を取得 |
+| `UpgradeGuildFacility` | `UpgradeGuildFacilityPrivate` | 同Guild所属のPlayerが1Lvだけ強化。必要額以上を提示し、必要額だけ減算。Gold不足と最大Lvは区別したError |
+| `SearchGuilds` | `SearchGuildsPrivate` | 名前prefixのGuildID/名前/所属人数をID昇順で取得 |
+| `SearchPlayers` | `SearchPlayersPrivate` | 名前prefixのPlayerID/名前をID昇順で取得 |
+| `ListGuildJoinApplications` | `ListGuildJoinApplicationsPrivate` | 団長/副団長が対象Guildの未承認申請一覧を取得 |
+| `ListGuildInvitations` | `ListGuildInvitationsPrivate` | 認証Player本人宛ての未承諾招待一覧を取得 |
+| `GetGuildDetail` | `GetGuildDetailPrivate` | Guild名、所属メンバー、役職、施設値、開始時刻を取得 |
+| `UpdateGuildBattleStartTimes` | `UpdateGuildBattleStartTimesPrivate` | 団長のみ。JST翌日0:00から変更を反映し適用時刻を返す |
+| `GetMyGuildBattle` | `GetMyGuildBattlePrivate` | 本人の所属Guildに割り当てられた対戦ID・予定時刻・状態を取得 |
+| `GetGuildBattleResult` | `GetGuildBattleResultPrivate` | 対象対戦の最終Scoreと終了確定状態を取得 |
+| `GetArenaParty` | `GetMyArenaPartyPrivate` | DB上の本人Arena編成・未登録状態を取得 |
+| `GetGuildBattleParty` | `GetMyGuildBattlePartyPrivate` | DB上の本人GuildBattle編成・未登録状態を取得 |
+| `ListMyGuildBattleReplays` | `ListMyGuildBattleReplaysPrivate` | 本人参加分の現行Version Replayから開戦時刻降順・ID降順の最新50件 |
+| `GetMyGuildBattleReplay` | `GetMyGuildBattleReplayPrivate` | 一覧と同じ本人参加・現行Version検証の後、成立順のReplay Envelopeを取得 |
+
+`UpgradeGuildFacility`の`facility_id=GUILD_FACILITY_UNSPECIFIED`を拒否する。最大Lvでは`API_ERROR_GUILD_FACILITY_MAX_LEVEL`、Playerゴールド残高不足・指定額不足では`API_ERROR_INSUFFICIENT_GOLD`を返す。`offered_gold`は最大消費許容額であり、消費額は到達Lvの費用表を正本とする。`GetGuildFacilityUpgradeCost`は最大Lvの際に`is_max_level=true`を返し、次Lvと必要額を0とする。検索の`limit`は1～50、結果はID昇順で`after_*_id`より大きいIDだけを返す。フレンド対戦時は`StartArenaBattle`の既存`OpponentID`を使用する。
 
 ## 編成共通Validation
 
@@ -508,6 +531,8 @@ GuildNameがBoundary Validationを満たさない場合は`ApiErrorResponse(API_
 #### 通知データ
 
 [API Payload](api_payload.md)の「GuildBattleScoreUpdate」を参照する.
+
+`SubscribeGuildBattleUpdates`は既存スコア通知のほか、回復・復活・出撃待機タイマーのServer側終了を検知した場合に限り、そのPlayer向け通知の`timer_update`を設定する。該当フィールドがない通知はスコア専用とする。Client側が先に残時間0を表示した場合は`GetGuildBattleStatus`で現在の残時間を再取得する。タイマーの定期同期は行わない。
 
 ### 出撃要求
 
@@ -789,3 +814,7 @@ GameServer側のチェック.
 #### 完了不可時レスポンス
 
 [API Payload](api_payload.md)の「ApiErrorResponse」を参照する. `API_ERROR_REVIVE_COMPLETE_NOT_ALLOWED`.
+
+## 初期騎士団作成状態の参照
+
+`GetInitialGuildStatus`は認証済み本人の`PlayerID`についてPrivate API `GetInitialGuildStatusPrivate`を呼び出し、`GUILD.id=PlayerID`の存在を返す。初期Guild未作成の場合にも許可する。`CreateGuild`応答が失われた場合は、この参照APIでDBの確定状態を取得し、CreateGuild要求自体は再送しない。

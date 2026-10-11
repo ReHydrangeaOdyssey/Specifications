@@ -122,3 +122,5 @@ Damage乱数は対象・HITごとに個別取得します。
 - `specification/game/skill.md`
 - `specification/game/ability.md`
 - `specification/game/status_abnormality.md`
+
+`EVERY_N_TURNS`はターン数`0`で常に不成立とし、`current_turn >= 1 && current_turn % N == 0`（`N > 0`）を使用する。行動順の速度比較は`SpeedRank`/速度レベルの整数値の昇順とする。

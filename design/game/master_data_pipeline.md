@@ -70,6 +70,8 @@ flowchart TD
 Validationが1件でも失敗した場合は生成物を正式成果物として扱わない.
 警告だけで不正値を自動補正して出力しない.
 
+ClientとGameServerのMasterData整合の判定にはVersionの一致を使用する。内容ハッシュの追加照合は行わない。MasterData/戦闘ロジックの更新は全Server停止中に適用し、進行中Battleに更新を適用しない。
+
 ## 正規化
 
 生成結果の決定性を保つため, 同一入力から同一並び順を生成する.
@@ -77,7 +79,7 @@ Validationが1件でも失敗した場合は生成物を正式成果物として
 ### 共通
 
 * IDで識別するトップレベルMasterDataはID昇順へ並べる.
-* Characterの`skill_ids`, `ability_ids`, `tactics_ids`は原本でゲーム上の順序意味が定義されている場合を除き, 生成規則を固定する.
+* Characterの`skill_ids`, `ability_ids`, `tactics_ids`は、当該配列にゲーム上の順序意味が定義されている場合を除き、数値ID昇順で生成する。順序意味が仕様で定義されている配列に限り、その順序を維持する。
 * Protocol Buffersのrepeated順序にゲーム上の意味があるデータは仕様の順序を維持する.
 * 浮動小数点値は生成過程で不要な丸めを行わない.
 

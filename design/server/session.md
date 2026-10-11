@@ -161,7 +161,7 @@ sequenceDiagram
     Database-->>PrivateAPIServer: 保存完了
     PrivateAPIServer-->>PublicAPIServer: CreateAccountPrivateResponse(PlayerID)
     PublicAPIServer-->>Client: CreateAccountResponse(PlayerID)
-    Client->>Client: PlayerID保存・新規プレイヤーフラグ保持
+    Client->>Client: PlayerIDを保持。初期Guild作成要否はDBを正本として取得
 ```
 
 * `LoginID`はDatabase上で一意とする.
@@ -217,18 +217,15 @@ sequenceDiagram
             PublicAPIServer->>PublicAPIServer: RefreshTokenをHttpOnly Cookieへ設定
             PublicAPIServer-->>Client: LoginResponse(PlayerID, AccessToken)
             Client->>Client: AccessTokenをメモリへ保持
-            opt 新規プレイヤーフラグあり
+            opt 初期GuildがDatabaseに存在しない場合
                 Client->>Client: 初期騎士団作成画面でGuildName・昼夜開始時刻を確定
                 Client->>PublicAPIServer: CreateGuild(AccessToken, PlayerID, GuildName, DaytimeStartTime, NighttimeStartTime)
                 PublicAPIServer->>PrivateAPIServer: CreateGuildPrivate(GuildName, DaytimeStartTime, NighttimeStartTime, AuthenticatedContext)
-                alt 初回CreateGuildPrivate失敗
-                    PublicAPIServer->>PrivateAPIServer: 同一CreateGuildPrivate要求を1回再実行
-                end
-                alt 再実行後も失敗
+                alt Guild作成失敗・重複作成要求
                     PublicAPIServer-->>Client: RequiredOperationErrorResponse(API_ERROR_REQUIRED_OPERATION_FAILED, 必要な処理が実行できませんでした)
                 else 初期騎士団作成成功
                     PublicAPIServer-->>Client: CreateGuildResponse
-                    Client->>Client: 新規プレイヤーフラグ解除
+                    Client->>Client: Guild作成済み状態に更新
                 end
             end
         else 認証失敗
@@ -246,6 +243,8 @@ sequenceDiagram
 * Login成功時に既存`ACCOUNT_SESSION`を削除してから新しいSessionを保存する.
 * Login成功後, 旧RefreshTokenは使用できない.
 * 旧AccessTokenは自身の`exp`到達まで最大5分間有効である.
+
+初期騎士団の作成要否は、Databaseの`GUILD.id = PlayerID`の有無を正本として判定する。作成完了まで、Clientは初期Guild作成フローに必要な認証済みAPI以外を実行しない。Private APIは該当Playerによる他のゲーム操作を拒否する。作成済みGuildへの重複CreateGuildは拒否し、同一要求の再作成は行わない。
 
 ## AccessToken更新
 
@@ -315,3 +314,5 @@ sequenceDiagram
 * GameServerは騎士団戦参加条件を満たした場合, `AuthenticatedContext.SessionID`を使用してPrivate APIの`ValidateAccountSession`を要求する.
 * `ACCOUNT_SESSION`が存在しない, またはLogin成功時刻から24時間の期限を過ぎている場合は騎士団戦へ参加させない.
 * 本処理ではRefresh Sessionの期限を延長しない.
+
+CreateGuildへの応答が失われた場合、Clientは`GetInitialGuildStatus`でDB上の作成完了を照会し、作成済みなら通常フローへ、未作成なら初期Guild作成画面へ戻る。CreateGuild要求そのものは再試行しない。

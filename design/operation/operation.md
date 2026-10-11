@@ -308,3 +308,5 @@ PlayerIDやGuildBattleID等の高Cardinality値をMetric Labelへ使用しない
 | 結果 | 成功, 再失敗, 継続調査等 |
 
 大規模なチケット管理システムを必須としない. 個人開発ではMarkdown, Issue等の追跡可能な方法でよい.
+
+`CompleteGuildBattle`が自動再試行後も保存に失敗した場合、運営担当者がGameServerに直接アクセスし、Databaseの現在状態を確認して同じ結果の再保存を試みる。再保存できない場合はその対戦を未確定のまま維持する。成功していない処理を`completed`として扱わない。

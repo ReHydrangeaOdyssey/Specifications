@@ -20,6 +20,18 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 - `GuildBattleLifecycleService`による状態変更および騎士団戦中にDatabase状態を変更する要求は共通HTTP Header `X-Operation-ID`を必須とする. 値は128bit UUIDとし, 同一論理操作の初回送信, 1回再試行, Recovery再送で同じ値を使用する. Private API ServerはDatabaseトランザクション内でOperation IDの重複を検査し, 処理済みの場合は更新を再適用せず初回成功時レスポンスを返す.
 - `CompleteGuildBattle`は専用の失敗処理を使用し, 1回再試行しても失敗した場合はErrorLogを保存し, `DiscordNotificationEnabled=true`の場合はBot通知を行った後, 運営による手動復旧対象とする.
 
+## 騎士団施設・検索・編成・Replay読み取り
+
+- `UpgradeGuildFacilityPrivate`は認証済み`PlayerID`の`GUILD_MEMBER`所属・残高・施設Lv・費用表をDBトランザクション内で再確認し、必要額だけを`PLAYER.gold`から減額して対象施設Lvを1加算する。`offered_gold`が必要額未満、Player残高不足、施設最大Lvの場合は更新しない。1回のAPIで2Lv以上上がらない。重複する同一論理操作の更新を二重適用しない。要求額が必要額を超える分は徴収しない。
+- `GetGuildFacilityUpgradeCostPrivate`は対象Guildの現在Lvと次Lv必要Gold、最大Lvかどうかを返す。`GetGuildDetailPrivate`はGuild情報・所属Player・役職・施設値をDBから取得する。
+- `UpdateGuildBattleStartTimesPrivate`は要求者が現在団長であることと昼夜の許容値を確認し、翌JST 0:00適用の保留設定を更新する。マッチング済み対戦は変更しない。
+- `SearchGuildsPrivate`および`SearchPlayersPrivate`は名前prefix照合で通常Guild/PlayerだけをID昇順・指定Limit以内で返す。`ListGuildJoinApplicationsPrivate`はAuthenticatedContextにより対象Guildの団長/副団長のみ受け付け、`ListGuildInvitationsPrivate`は招待された本人向けに未処理行だけを取得する。Public APIの認証済みCaller Identityを必須とする。
+- `GetMyArenaPartyPrivate`, `GetMyGuildBattlePartyPrivate`は呼出元本人のDB保存編成を返す。未登録の場合は`registered=false`とする。`GetMyGuildBattlePrivate`は所属Guildへの対戦割当をDBから取得し、`GetGuildBattleResultPrivate`は確定済み対戦結果を取得する。
+- `ListMyGuildBattleReplaysPrivate`は本人参加記録が確認できる現行Versionの対戦を開始時刻降順・ID降順で50件まで返す。`GetMyGuildBattleReplayPrivate`は同じアクセス条件を再検証し、当該対戦の成立順に記録したEnvelopeを返す。過去VersionのReplayをプレイヤーへ返さない。
+
+
+開始時刻変更の適用時刻は要求を受け付けたJST日付の翌日00:00とする。`GetGuildsForBattleMatching`は対象のJST日付に有効な昼夜時刻を使用し、適用前に生成済みの`GUILD_BATTLE`には遡って変更を加えない。
+
 ## 認証コードの永続化
 
 `IssueAuthorizationCodePrivate`では第一者認証OriginのCookieから渡されたRefreshTokenをPrivate APIが検証してSessionを識別する。`RedeemAuthorizationCodePrivate`ではコード未使用、60秒期限、Session有効、URI完全一致、PKCE S256一致を原子的に判定し、成立した場合だけコードを消費してAccessTokenを発行する。`design/system/private_api.proto`を正とする。
@@ -163,6 +175,8 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 #### 要求・レスポンス
 
 [API Payload](api_payload.md)の「CreateGuildPrivateRequest」「CreateGuildPrivateResponse」を参照する.
+
+初期Guild作成の前に`GUILD.id=AuthenticatedContext.PlayerID`の存在を確認し、存在する場合は重複作成として拒否する。作成前のPlayerからは認証および初期Guild作成フローに必要な要求だけを許可する。CreateGuildのDB COMMIT後にResponseが失われても再作成を行わない。
 
 ### 騎士団役職変更
 
@@ -340,7 +354,7 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 
 #### 処理内容
 
-- Database上でArenaParty登録済みの通常PlayerIDだけをPlayerID昇順で取得し, GameServerのアリーナ抽選候補キャッシュ同期に使用する. ArenaParty未登録PlayerおよびシステムダミーPlayerID `0`は返さない.
+- Random Arenaの対戦要求の都度、Database上でArenaParty登録済みの通常PlayerIDをPlayerID昇順で取得する. GameServerには候補キャッシュを持たせない. ArenaParty未登録PlayerおよびシステムダミーPlayerID `0`は返さない.
 
 #### レスポンス
 
@@ -868,3 +882,5 @@ ReplayQueueおよびDatabase送信失敗時の扱いは「[ログ仕様](../syst
 #### 要求データ
 
 [API Payload](api_payload.md)の「CompleteGuildBattleRequest」を参照する.
+
+`GetInitialGuildStatusPrivate`は通常Player本人について`GUILD.id=PlayerID`の存在を読み取り、作成済みなら`initial_guild_created=true`と当該GuildID、未作成ならfalseと`guild_id=0`を返す。初期Guild未作成で許可する限定参照APIに含める。

@@ -80,6 +80,8 @@ flowchart TD
 
 復元時は現在のDB可変値を初期状態として使用しません。
 
+Replay file末尾の不完全なlength-delimited Envelopeは、同一GuildBattleIDのDB保存済みReplay Eventで欠損範囲を特定・復元できる場合だけ補完する。DB側にも必要なデータがなければ、当該Replayを破損データとして扱い再生しない。出撃の成功Response後のClient通信状態はServer上の成立済み操作を巻き戻す条件としない。同一出撃の重複適用は既存のRequestSequenceとOperation IDの規則に従う。
+
 ## Credential Redaction
 
 以下はSystem Logへ出しません。

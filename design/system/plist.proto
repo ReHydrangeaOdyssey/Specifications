@@ -1,0 +1,39 @@
+// Character sprite atlas structure for the Client.
+// Image pixels and animation timelines are stored separately.
+syntax = "proto3";
+
+package asset_schema.plist;
+
+message PlistRoot {
+  Frames frames = 19; // frames
+  Metadata metadata = 25; // metadata
+  Texture texture = 57; // texture
+  optional string textureFileName = 58; // textureFileName
+}
+
+message Frames {
+  map<string, FramesFrame> entries = 1;
+}
+
+message FramesFrame {
+  optional sint64 height = 1; // height
+  optional double offsetX = 2; // offsetX
+  optional double offsetY = 3; // offsetY
+  optional sint64 originalHeight = 4; // originalHeight
+  optional sint64 originalWidth = 5; // originalWidth
+  optional sint64 width = 6; // width
+  optional sint64 x = 7; // x
+  optional sint64 y = 8; // y
+}
+
+message Metadata {
+  optional sint64 format = 1; // format
+  optional string realTextureFileName = 2; // realTextureFileName
+  optional string size = 3; // size
+  optional string textureFileName = 4; // textureFileName
+}
+
+message Texture {
+  optional sint64 height = 1; // height
+  optional sint64 width = 2; // width
+}

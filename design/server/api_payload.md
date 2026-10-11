@@ -159,7 +159,7 @@ PublicAPIで失敗レスポンスが必要な場合は, 個別に別構造が定
 
 ### RequiredOperationErrorResponse
 
-Account作成後の初期騎士団作成等, 必須の後続処理を1回再実行しても完了できない場合に使用する.
+Account作成後の初期騎士団作成等, 必須の後続処理が成立しなかった場合に使用する. 初期Guildの重複作成要求は拒否し、自動で再作成しない.
 
 | 項目 | 型 | 内容 |
 |---|---|---|
@@ -1399,3 +1399,6 @@ Private APIは再抽選を行わない. `GuildBattleID[]`と`Battles[]`のID集�
 | PlayerID | `PlayerID` | 対象PlayerID |
 | ReviveState | `ReviveState` | 復活状態 |
 
+## 施設・Guild参照・Replay取得Payload
+
+施設強化・次Lv費用・Guild/Player検索・招待/申請・Guild詳細・開始時刻変更・本人編成取得・Battle割当/結果・Replay一覧/取得・初期Guild作成状態の型とfield numberは、それぞれ`design/system/public_api.proto`・`design/system/private_api.proto`の対応`Request`/`Response`を正とする。業務条件と権限は`design/server/public_api.md`および`design/server/private_api.md`を正とする。

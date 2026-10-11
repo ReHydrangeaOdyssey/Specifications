@@ -134,6 +134,8 @@ flowchart TD
 出撃計算式はすべて`f32`で評価し, 出撃の最終`SortieScore`が負数・NaN・正負Infinityの場合は0.0へ正規化してからResponseとPlayerの`acquired_score`へ反映する. 出撃Responseの`Score`およびPlayerの`acquired_score`は`SortieScore`（`f32`）で保持する. 騎士団合計ptだけ, 1出撃ごとに小数点以下を切り捨てて`Score`（`u64`）へ加算する. `u64`へ変換する値と合計値には`u64::MAX`を上限とする飽和変換・飽和加算を使用する.
 
 
+回復・復活・出撃待機がServer上で先に終了した場合は、そのPlayer宛て`SubscribeGuildBattleUpdates`の`GuildBattleScoreUpdate.timer_update`へ終了対象と残り0秒を設定して通知する。Client側が先に0と判断した場合は`GetGuildBattleStatus`で現在値を取得する。タイマーの定期通知は行わない。
+
 ## 通知購読とチェイン残り時間
 
 `SubscribeGuildBattleUpdates`はJoin済みPlayerの認証済みHTTP/2 Response streamで, `RequestSequence`を使用しない. 初回と出撃後処理確定時の`GuildBattleScoreUpdate`には, 受信者の所属騎士団基準の`AllyScore`, `EnemyScore`, `Chain`と`ChainRemainingMilliseconds`を含める. 送信時点の現在状態を正本として確定し, `ChainRemainingMilliseconds`は0～300000の`uint32`で表す.
@@ -204,6 +206,8 @@ stateDiagram-v2
 - 出撃を同じ受付Queueで直列に扱い, Response先行後の更新も次の出撃より前に完了する.
 - Replay Eventは成立順で追加し, LiveとReplayで状態が一致する.
 - 30:00以降は新規受付を増やさず, それ以前の受付済みQueueを最後まで解決する.
+
+酒場使用回数の正本キーは`PlayerID`とJST日付とする。Guild全体で回数を共有しない。`GetGuildBattleStatus.tavern_remaining_uses`は呼出元Playerの残回数を返す。
 
 ## 参照資料
 

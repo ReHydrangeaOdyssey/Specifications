@@ -75,6 +75,7 @@ OPFSのPNG → File / Blob → createImageBitmap() → WebGL 2 texImage2D()
 
 - アニメーションデータは`design/system/sprite_animation.proto`に定義する`SpriteAnimationData`を使用します。骨格・ボーン・表示データ、モーション・ボーンタイムライン・フレーム、テクスチャ参照をそれぞれ保持し、`repeated`フィールドの要素順を維持します。
 - ボーンおよびフレームの座標・拡縮・傾き、表示Index、補間・色・ブレンド情報をスプライトのアニメーション描画に使用します。PNGの画像本体・アトラスファイル本体は別アセットとし、既定のOPFS読込み・WebGL 2テクスチャ描画の経路を使用します。
+- スプライトのアトラスデータは`design/system/plist.proto`の`PlistRoot`・`Frames`・`FramesFrame`・`Metadata`・`Texture`で表現します。フレームのキーと切り出し矩形・元画像サイズ・オフセットを保持し、アニメーションの`DisplayData`・`TextureData`が持つ画像参照情報と区別します。
 - アニメーションはClientのイベントキューに連動した表示処理とし、画像・UV・アニメーションデータをGameServerの`ProcessedMasterData`に含めません。
 
 ### HCAデコード・音声パイプライン
@@ -139,7 +140,7 @@ Clientが扱う認証情報は以下です。
 - `AccessToken`は通常Public APIのAuthorizationに使用します。
 - `RefreshToken`はResponse Bodyへ返されず、`__Host-RefreshToken` HttpOnly CookieとしてPublic API Serverが設定します。
 - RefreshTokenをClient JavaScriptから読み取る前提の実装にはしません。
-- AccessToken失効後またはClient起動・再読込時のSession更新はRefresh APIを使用します。
+- AccessToken失効が判明した場合はログアウト状態にし、サーバー未接続として動作します。失効直後にRefresh APIを自動実行しません。Client起動・再読込時にログインを行う場合は既存の認証Origin・Refresh API・PKCEの経路を使用します。
 - Logout後も発行済みAccessTokenは`exp`までは暗号学的には有効であるため、Client側だけでSession失効を正本化しません。
 
 ## Cross-Site認証と通信復帰

@@ -18,8 +18,6 @@
 - [U-29] Discord Botの本番配置先（保留）.
 - [U-30] Coordinator運営用APIのListener/Portおよび操作ごとの運営Payload. 通信方式とPath形式は`design/system/api_transport.md`に従う.
 - [U-31] `design/operation/operation.md`の推奨初期値の最終運用値.
-- [U-34] 酒場最大3回の集計主体.
-- [U-38] 施設レベルアップの操作権限・更新API/処理.
 - [U-44] 進行中GuildBattleのGameServer異常終了後の別GameServerへの自動復旧方式.
 
 

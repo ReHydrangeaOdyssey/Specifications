@@ -185,6 +185,8 @@ enum ApiErrorCode {
   API_ERROR_ACCOUNT_CREATION_FAILED = 40;
   API_ERROR_REQUIRED_OPERATION_FAILED = 41;
   API_ERROR_TAVERN_RECOVERY_NOT_AVAILABLE = 42;
+  API_ERROR_GUILD_FACILITY_MAX_LEVEL = 43;
+  API_ERROR_INSUFFICIENT_GOLD = 44;
 }
 
 enum SpeedRank {
@@ -640,7 +642,11 @@ message GuildBattleScoreUpdate {
   uint64 enemy_score = 3;
   uint32 chain = 4; // Subscriber's guild chain.
   uint32 chain_remaining_milliseconds = 5; // Remaining time from server snapshot, 0..300000; no reset-only event.
+  GuildBattleTimerUpdate timer_update = 6; // Caller own timer when Server confirmed an early completion. No field means score-only event.
 }
+
+enum GuildBattleTimerKind { GUILD_BATTLE_TIMER_UNSPECIFIED = 0; GUILD_BATTLE_TIMER_HEAL = 1; GUILD_BATTLE_TIMER_REVIVE = 2; GUILD_BATTLE_TIMER_SORTIE_WAIT = 3; }
+message GuildBattleTimerUpdate { GuildBattleTimerKind kind = 1; uint32 remaining_seconds = 2; }
 
 message UseTacticsRequest {
   string access_token = 1;
@@ -762,3 +768,54 @@ message IssueAuthorizationCodeRequest { string redirect_uri = 1; bytes code_chal
 message IssueAuthorizationCodeResponse { bytes authorization_code = 1; }
 message ExchangeAuthorizationCodeRequest { bytes authorization_code = 1; string redirect_uri = 2; string code_verifier = 3; }
 message ExchangeAuthorizationCodeResponse { string access_token = 1; uint64 player_id = 2; }
+
+// Guild facilities: every accepted upgrade raises exactly one level.
+enum GuildFacilityID {
+  GUILD_FACILITY_UNSPECIFIED = 0;
+  GUILD_FACILITY_CASTLE = 1;
+  GUILD_FACILITY_ARMORY = 2;
+  GUILD_FACILITY_FOOD_STORAGE = 3;
+  GUILD_FACILITY_SMITHY = 4;
+  GUILD_FACILITY_STRATEGY_OFFICE = 5;
+  GUILD_FACILITY_TAVERN = 6;
+}
+message GetGuildFacilityUpgradeCostRequest { string access_token = 1; uint64 player_id = 2; uint64 guild_id = 3; GuildFacilityID facility_id = 4; }
+message GetGuildFacilityUpgradeCostResponse { uint32 current_level = 1; uint32 next_level = 2; uint32 required_gold = 3; bool is_max_level = 4; }
+message UpgradeGuildFacilityRequest { string access_token = 1; uint64 player_id = 2; uint64 guild_id = 3; GuildFacilityID facility_id = 4; uint32 offered_gold = 5; }
+message UpgradeGuildFacilityResponse { uint32 new_level = 1; uint32 consumed_gold = 2; uint32 remaining_player_gold = 3; }
+
+message SearchGuildsRequest { string access_token = 1; uint64 player_id = 2; string name_prefix = 3; uint32 limit = 4; uint64 after_guild_id = 5; }
+message GuildDirectoryEntry { uint64 guild_id = 1; string name = 2; uint32 member_count = 3; }
+message SearchGuildsResponse { repeated GuildDirectoryEntry guilds = 1; }
+message SearchPlayersRequest { string access_token = 1; uint64 player_id = 2; string name_prefix = 3; uint32 limit = 4; uint64 after_player_id = 5; }
+message PlayerDirectoryEntry { uint64 player_id = 1; string name = 2; }
+message SearchPlayersResponse { repeated PlayerDirectoryEntry players = 1; }
+message ListGuildJoinApplicationsRequest { string access_token = 1; uint64 player_id = 2; uint64 guild_id = 3; }
+message ListGuildJoinApplicationsResponse { repeated PlayerDirectoryEntry applicants = 1; }
+message ListGuildInvitationsRequest { string access_token = 1; uint64 player_id = 2; }
+message ListGuildInvitationsResponse { repeated GuildDirectoryEntry guilds = 1; }
+message GetGuildDetailRequest { string access_token = 1; uint64 player_id = 2; uint64 guild_id = 3; }
+message GuildFacilityLevels { uint32 castle = 1; uint32 armory = 2; uint32 food_storage = 3; uint32 smithy = 4; uint32 strategy_office = 5; uint32 tavern = 6; }
+message GetGuildDetailResponse { uint64 guild_id = 1; string name = 2; uint64 leader_player_id = 3; uint64 subleader_player_id = 4; repeated PlayerDirectoryEntry members = 5; GuildFacilityLevels levels = 6; GuildBattleStartTime daytime_start_time = 7; GuildBattleStartTime nighttime_start_time = 8; }
+message UpdateGuildBattleStartTimesRequest { string access_token = 1; uint64 player_id = 2; uint64 guild_id = 3; GuildBattleStartTime daytime_start_time = 4; GuildBattleStartTime nighttime_start_time = 5; }
+message UpdateGuildBattleStartTimesResponse { uint64 effective_at = 1; }
+
+message GetMyGuildBattleRequest { string access_token = 1; uint64 player_id = 2; }
+message MyGuildBattleEntry { uint64 guild_battle_id = 1; uint64 start_at = 2; uint64 end_at = 3; uint64 ally_guild_id = 4; uint64 enemy_guild_id = 5; uint32 status = 6; }
+message GetMyGuildBattleResponse { repeated MyGuildBattleEntry battles = 1; }
+message GetGuildBattleResultRequest { string access_token = 1; uint64 player_id = 2; uint64 guild_battle_id = 3; }
+message GetGuildBattleResultResponse { uint64 guild_battle_id = 1; uint64 ally_guild_id = 2; uint64 enemy_guild_id = 3; uint64 ally_score = 4; uint64 enemy_score = 5; bool is_completed = 6; }
+message GetArenaPartyRequest { string access_token = 1; uint64 player_id = 2; }
+message GetArenaPartyResponse { bool registered = 1; uint32 formation_id = 2; repeated ArenaPartyCharacter characters = 3; }
+message GetGuildBattlePartyRequest { string access_token = 1; uint64 player_id = 2; }
+message GetGuildBattlePartyResponse { bool registered = 1; uint32 formation_id = 2; repeated GuildBattlePartyCharacter characters = 3; }
+
+message ListMyGuildBattleReplaysRequest { string access_token = 1; uint64 player_id = 2; }
+message GuildBattleReplayListEntry { uint64 guild_battle_id = 1; uint64 start_at = 2; }
+message ListMyGuildBattleReplaysResponse { repeated GuildBattleReplayListEntry battles = 1; }
+message GetMyGuildBattleReplayRequest { string access_token = 1; uint64 player_id = 2; uint64 guild_battle_id = 3; }
+message GetMyGuildBattleReplayResponse { repeated bytes envelopes = 1; } // Serializable GuildBattleReplayEnvelope in established-event order.
+
+// 初期Guild作成の完了状態を問い合わせる。初期Guildが未作成でも呼出可能。
+message GetInitialGuildStatusRequest { string access_token = 1; uint64 player_id = 2; }
+message GetInitialGuildStatusResponse { bool initial_guild_created = 1; uint64 guild_id = 2; }

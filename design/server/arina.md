@@ -44,7 +44,11 @@ sequenceDiagram
         GameServer->>GameServer: AuthenticatedContext・PlayerID等を検証
         GameServer->>GameServer: ClientVersion == GameServer Versionを検証
         GameServer->>GameServer: 共通内部API GenerateTimeBasedSeed で時刻ベースSeedを生成
-        GameServer->>GameServer: PlayerID昇順の候補一覧へ生成したSeedを使用して対戦相手を抽選
+        GameServer->>PrivateAPIServer: GetAllPlayerIDs（対戦要求ごと）
+        PrivateAPIServer->>Database: ArenaParty登録済みPlayerID取得
+        Database-->>PrivateAPIServer: PlayerID昇順
+        PrivateAPIServer-->>GameServer: 候補PlayerID一覧
+        GameServer->>GameServer: 自身のPlayerIDを除外しSeedで対戦相手抽選
         alt 候補プレイヤーが0人
             GameServer-->>PublicAPIServer: ArenaBattleErrorResponse
             PublicAPIServer-->>Client: ArenaBattleErrorResponse
@@ -112,6 +116,6 @@ sequenceDiagram
 ```
 
 
-## ランダム対戦候補同期
+## ランダム対戦候補の取得
 
-GameServerはPrivateAPIの`GetAllPlayerIDs`を使用してDatabase上でArenaParty登録済みのPlayerIDだけをPlayerID昇順で取得し, その順序を維持してランダムアリーナ候補のPlayerIDキャッシュを初期化する. ArenaParty未登録Playerは候補へ含めない. `SaveArenaParty`のDatabase更新が確定した時点で, 変更対象のPlayerIDと登録状態だけを各GameServerの候補キャッシュへ同期し, 他PlayerIDのキャッシュ要素を再取得・更新しない. 同期済み候補は次のランダム対戦候補選択から反映する. 抽選時は自身のPlayerIDを候補から除外し, 残りの候補もPlayerID昇順のまま「抽選」へ渡す.
+Random Arenaの対戦相手抽選では、要求ごとにPrivate API `GetAllPlayerIDs`を呼び、Database上にArenaPartyが登録されている通常PlayerのIDをPlayerID昇順で取得する。GameServerは候補一覧を保持・同期するキャッシュを設けない。要求元PlayerIDとシステムダミーPlayerID `0`を除いて、既存のSeedを用いた抽選を実行する。

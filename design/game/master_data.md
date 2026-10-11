@@ -4,7 +4,7 @@
 加工済みマスターデータの正規表現はProtocol Buffersとし, 各フィールドの論理型・列挙型は「[型定義](../shared/types.md)」を参照する.
 この定義の実際のProtocol Buffersファイルは`design/system/master_data.proto`とし, 共通型には`design/system/game_types.proto`を使用する. ファイルと本書のfield number・型を一致させる.
 本リポジトリにはマスターデータの実データを配置しない. 実データが存在しないこと自体は未定義仕様として扱わない.
-画像・UVデータおよびキャラクターのスプライトアニメーションデータはClientが保持し、Serverでは保管しない. アニメーションデータの構造は`design/system/sprite_animation.proto`に従う.
+画像・UVデータ、キャラクターのスプライトアニメーションデータおよびスプライトアトラスデータはClientが保持し、Serverでは保管しない. アニメーションデータの構造は`design/system/sprite_animation.proto`、アトラスデータの構造は`design/system/plist.proto`に従う.
 
 ## 加工済みマスターデータ構造
 

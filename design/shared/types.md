@@ -557,7 +557,10 @@ enum ApiErrorCode {
   API_ERROR_INVALID_GUILD_LEADERSHIP_TARGET = 38; // 団長・副団長候補が対象Guild所属ではない, または団長と副団長が同一PlayerIDである.
   API_ERROR_GUILD_LEADER_MOVE_NOT_ALLOWED = 39; // 団長以外のメンバーが存在する騎士団の団長が加入申請または招待によって別Guildへ移動しようとした.
   API_ERROR_ACCOUNT_CREATION_FAILED = 40; // Accountを作成できなかった. LoginID重複を含むDatabase上のAccount作成失敗理由はClientへ区別して返さない.
-  API_ERROR_REQUIRED_OPERATION_FAILED = 41; // Account作成後などに必須の後続処理を再試行しても完了できなかった.
+  API_ERROR_REQUIRED_OPERATION_FAILED = 41; // 必須の後続処理を完了できなかった.
+  API_ERROR_TAVERN_RECOVERY_NOT_AVAILABLE = 42; // 酒場の利用が許可されない.
+  API_ERROR_GUILD_FACILITY_MAX_LEVEL = 43; // 施設が最大Lvに到達済み.
+  API_ERROR_INSUFFICIENT_GOLD = 44; // 指定額またはPlayer保有ゴールドが足りない.
 }
 ```
 

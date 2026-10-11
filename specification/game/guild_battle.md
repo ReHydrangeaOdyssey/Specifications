@@ -100,6 +100,10 @@
 * 再抽選結果はPrivate APIの`RematchPreloadFailedGuildBattles`で保存し, 対象対戦を`scheduled`かつ未割当へ戻す. 再抽選後は通常の割当処理と開戦前Preloadを改めて実行する.
 * 運営が中止すると判断した場合は, 専用の`CancelPreloadFailedGuildBattle`で対象対戦を`preload_failed -> canceled`へ遷移させ, 対象2Guildの`membership_locked=false`を同一トランザクションで確定する. 同じマッチング対象日・固定開始時刻の全対戦（後継対戦を含む）が終端状態になった場合のみ, 除外Guildの所属ロックを解除して除外一覧を削除する.
 
+酒場の1日最大3回の制限はPlayer単位であり、他Playerが使用しても自身の残回数は減らない。
+
+プレイヤー向けリプレイ一覧は、本人が参加した騎士団戦に限定する。対戦開始時刻の降順、同時刻の場合は`GuildBattleID`降順で並べ、現行Versionと一致する最新50件だけを閲覧対象とする。過去VersionのReplayはDBから削除せず、一覧・再生取得には含めない。
+
 ## リプレイ閲覧
 
 プレイヤーが閲覧できる騎士団戦のリプレイは過去50件までとし, 現行Versionと異なる旧Versionのリプレイは視聴できない. 旧Versionの保存済みデータはDatabaseに保持する. ゲームロジック・MasterDataの更新時には全Serverを停止し, 進行中の騎士団戦にVersion更新を適用しない.

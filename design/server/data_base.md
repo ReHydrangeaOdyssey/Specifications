@@ -67,6 +67,9 @@ erDiagram
         Count tavern_level
         GuildBattleStartTime daytime_start_time
         GuildBattleStartTime nighttime_start_time
+        GuildBattleStartTime pending_daytime_start_time
+        GuildBattleStartTime pending_nighttime_start_time
+        DateTime pending_start_time_effective_at
     }
 
     GUILD_MEMBER {
@@ -116,6 +119,8 @@ Discord Botから`RevokeDiscordSessions`を受信した場合は, 指定DiscordU
 `PLAYER.max_bp`の新規プレイヤー作成時初期値は`200`とする.
 `PLAYER.gold`は通常Playerごとのゴールド残高の正本とし, `0..4294967295`の整数だけを保存する. 新規Player作成時は`0`で初期化する.
 
+
+初期Guild作成フローの完了判定の正本は、通常Playerに対応する`GUILD.id=PLAYER.id`行の有無とする。専用の「新規プレイヤーフラグ」を別途永続化しない。作成済みの場合は同じ初期Guildの再作成を拒否する。
 
 ## GUILD / GUILD_MEMBER 制約
 
@@ -501,6 +506,12 @@ erDiagram
 ```
 
 `SaveArenaParty`は対象PlayerIDのアリーナ編成を上記テーブルへ保存する. 既存編成がある場合は同一PlayerIDの編成を置換する.
+
+酒場使用回数は`PlayerID`と使用JST日付を区別する。永続化する際にGuildIDを使用回数の共有キーとはしない。
+
+騎士団戦開始時刻の変更要求は、昼・夜の設定値と適用開始JST日付を保留値として保持する。翌日JST 0:00以降に対象日でマッチングする際は保留値を有効値として使用する。すでに作成済みの対戦を変更しない。
+
+施設レベルアップは`GUILD`対象行とCallerの`PLAYER.gold`を同一Databaseトランザクションで排他更新する。必要額は更新後レベルの費用表を使用する。`offered_gold >= required_gold`かつ`PLAYER.gold >= required_gold`の場合だけ`PLAYER.gold -= required_gold`、対象施設Lvを1加算してCOMMITする。Lv150なら状態を変更せず最大Lvの専用Errorを返す。強化権限は`GUILD_MEMBER`所属全員が持つ。
 
 ## 騎士団戦編成
 
