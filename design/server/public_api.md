@@ -336,8 +336,10 @@ GuildNameがBoundary Validationを満たさない場合は`ApiErrorResponse(API_
 | `GetGuildBattleResult` | `GetGuildBattleResultPrivate` | 対象対戦の最終Scoreと終了確定状態を取得 |
 | `GetArenaParty` | `GetMyArenaPartyPrivate` | DB上の本人Arena編成・未登録状態を取得 |
 | `GetGuildBattleParty` | `GetMyGuildBattlePartyPrivate` | DB上の本人GuildBattle編成・未登録状態を取得 |
-| `ListMyGuildBattleReplays` | `ListMyGuildBattleReplaysPrivate` | 本人参加分の現行Version Replayから開戦時刻降順・ID降順の最新50件 |
-| `GetMyGuildBattleReplay` | `GetMyGuildBattleReplayPrivate` | 一覧と同じ本人参加・現行Version検証の後、成立順のReplay Envelopeを取得 |
+| `ListMyGuildBattleReplays` | `ListMyGuildBattleReplaysPrivate` | 現段階ではClientへ公開しない。将来公開時は本人参加分・現行Versionの最新50件 |
+| `GetMyGuildBattleReplay` | `GetMyGuildBattleReplayPrivate` | 現段階ではClientへ公開しない。将来公開時は本人・現行Versionを検証 |
+
+現段階では`ListMyGuildBattleReplays`/`GetMyGuildBattleReplay`への一般Playerからの要求をHTTP 403で拒否する。内部Replay保存・運営保全には影響しない。
 
 `UpgradeGuildFacility`の`facility_id=GUILD_FACILITY_UNSPECIFIED`を拒否する。最大Lvでは`API_ERROR_GUILD_FACILITY_MAX_LEVEL`、Playerゴールド残高不足・指定額不足では`API_ERROR_INSUFFICIENT_GOLD`を返す。`offered_gold`は最大消費許容額であり、消費額は到達Lvの費用表を正本とする。`GetGuildFacilityUpgradeCost`は最大Lvの際に`is_max_level=true`を返し、次Lvと必要額を0とする。検索の`limit`は1～50、結果はID昇順で`after_*_id`より大きいIDだけを返す。フレンド対戦時は`StartArenaBattle`の既存`OpponentID`を使用する。
 

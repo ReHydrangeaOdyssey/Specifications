@@ -134,7 +134,7 @@ GuildBattleID
 
 ## Replay保存
 
-`GUILD_BATTLE_REPLAY_LOG.payload`には`GuildBattleReplayEnvelope`をProtocol Buffers Serializeしたbinaryを保存します。検索用`process_type`とEnvelope内`process_type`を一致させます。
+`GUILD_BATTLE_REPLAY_LOG.payload`には`GuildBattleReplayEnvelope`をProtocol Buffers Serializeしたbinaryを保存します。検索用`process_type`とEnvelope内`process_type`を一致させます。 `event_index`もEnvelopeと一致させ、`(guild_battle_id,event_index)`を一意に保存します。同番号同内容の再送は冪等成功、同番号異内容は拒否します。出撃の成功Responseより前に非同期Workerによる`SaveGuildBattleSortieLog`のCOMMIT確認を必須とします。
 
 Replayの完全再現性を保つため、DB保存用に別内容へ変換しません。
 
@@ -153,4 +153,4 @@ Replayの完全再現性を保つため、DB保存用に別内容へ変換しま
 - `design/shared/types.md`
 - `design/test/test_policy.md`
 
-`CompleteGuildBattle`の確定Transactionは、参加済みPlayerの`guild_battle_participation_count`および`guild_battle_total_score`更新も含む。更新対象はJoin済み通常Playerで、出撃0回の参加者も含む。同じ`GuildBattleID`の再送時に二重計上しない。
+`CompleteGuildBattle`の確定Transactionは、参加済みPlayerの`guild_battle_participation_count`および`guild_battle_total_score`更新も含む。Join済み通常Playerの個人Scoreは出撃0回も含めて計上し、参加回数は出撃3回以上、勝敗数は出撃1回以上に限る。個人累計Scoreは`u64::MAX`で飽和加算する。同じ`GuildBattleID`の再送時に二重計上しない。出撃回数はGameServerで確定した`sortie_count`を`PlayerRecords`と`Participants`へ設定し、通常Playerの両値一致を検査する。

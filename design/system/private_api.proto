@@ -67,8 +67,8 @@ message RevokeDiscordSessionsResponse {
 
 message CreateGuildPrivateRequest {
   string guild_name = 1; // 作成する騎士団名. UTF-8, 最大10文字, 空文字不可, 重複可
-  game.model.GuildBattleStartTime daytime_start_time = 2; // 昼開始時刻.11:30 / 12:15 / 13:00のいずれか
-  game.model.GuildBattleStartTime nighttime_start_time = 3; // 夜開始時刻.21:00 / 22:00 / 23:00のいずれか
+  optional game.model.GuildBattleStartTime daytime_start_time = 2; // 昼開始時刻.11:30 / 12:15 / 13:00のいずれか
+  optional game.model.GuildBattleStartTime nighttime_start_time = 3; // 夜開始時刻.21:00 / 22:00 / 23:00のいずれか
 }
 
 message CreateGuildPrivateResponse {
@@ -110,7 +110,7 @@ message UpdateGuildLeadershipPrivateRequest {
 
 message SetGuildMembershipLockRequest {
   repeated uint64 guild_id = 1; // 所属変更禁止状態を更新する騎士団ID一覧
-  bool locked = 2; // `true`で所属変更禁止, `false`で解除
+  optional bool locked = 2; // `true`で所属変更禁止, `false`で解除
 }
 
 message SetGuildMembershipLockResponse {
@@ -191,7 +191,7 @@ message SaveGuildBattlePartyRequest {
 
 message GetGuildsForBattleMatchingRequest {
   uint64 target_date = 1; // 対象日. JSTの日付部分を使用する
-  game.model.GuildBattleStartTime start_time = 2; // 対象となる固定開戦時刻
+  optional game.model.GuildBattleStartTime start_time = 2; // 対象となる固定開戦時刻
 }
 
 message GetGuildsForBattleMatchingResponse {
@@ -205,7 +205,7 @@ message GuildBattleMatchCandidate {
 
 message SaveGuildBattleExcludedGuildsRequest {
   uint64 target_date = 1; // 対象日. JSTの日付部分を使用する
-  game.model.GuildBattleStartTime start_time = 2; // 固定開戦時刻
+  optional game.model.GuildBattleStartTime start_time = 2; // 固定開戦時刻
   repeated uint64 guild_id = 3; // 所属0人のため除外したGuildID一覧. GuildID昇順
 }
 
@@ -214,7 +214,7 @@ message SaveGuildBattleExcludedGuildsResponse {
 
 message GetGuildBattleExcludedGuildsRequest {
   uint64 target_date = 1; // 対象日. JSTの日付部分を使用する
-  game.model.GuildBattleStartTime start_time = 2; // 固定開戦時刻
+  optional game.model.GuildBattleStartTime start_time = 2; // 固定開戦時刻
 }
 
 message GetGuildBattleExcludedGuildsResponse {
@@ -223,7 +223,7 @@ message GetGuildBattleExcludedGuildsResponse {
 
 message ClearGuildBattleExcludedGuildsRequest {
   uint64 target_date = 1; // 対象日. JSTの日付部分を使用する
-  game.model.GuildBattleStartTime start_time = 2; // 固定開戦時刻
+  optional game.model.GuildBattleStartTime start_time = 2; // 固定開戦時刻
 }
 
 message ClearGuildBattleExcludedGuildsResponse {
@@ -231,7 +231,7 @@ message ClearGuildBattleExcludedGuildsResponse {
 
 message SaveScheduledGuildBattlesRequest {
   uint64 target_date = 1; // 対象日. JSTの日付部分を使用する
-  game.model.GuildBattleStartTime start_time = 2; // 固定開戦時刻
+  optional game.model.GuildBattleStartTime start_time = 2; // 固定開戦時刻
   repeated ScheduledGuildBattle battles = 3; // GuildBattleCoordinatorが生成した保存対象の騎士団戦一覧
 }
 
@@ -246,7 +246,7 @@ message ScheduledGuildBattle {
 
 message GetScheduledGuildsRequest {
   uint64 target_date = 1; // 対象日を表す日時. JSTの日付部分を使用する
-  game.model.GuildBattleStartTime start_time = 2; // 固定開戦時刻
+  optional game.model.GuildBattleStartTime start_time = 2; // 固定開戦時刻
 }
 
 message GetScheduledGuildsResponse {
@@ -400,8 +400,8 @@ message CompleteGuildBattleRequest {
   uint64 guild_battle_id = 1; // `resolving -> completed`へ遷移する騎士団戦ID
   string game_server_instance_id = 2; // 完了を要求する所有GameServer. Database上の割当と一致必須
   repeated GuildBattleFinalGuildResult guild_results = 3; // 対戦2Guildの最終スコア・勝敗. GuildID集合はDatabase上の対戦Guildと一致必須
-  repeated GuildBattlePlayerRecordUpdate player_records = 4; // Join済み通常Player（出撃0回を含む）およびDummy PlayerID `0`の勝敗数更新情報. PlayerID重複不可
-  repeated GuildBattlePlayerParticipation participants = 5; // Join済みの通常Player（出撃0回を含む）。PlayerID重複不可
+  repeated GuildBattlePlayerRecordUpdate player_records = 4; // Join済み通常PlayerおよびDummy PlayerID `0`の勝敗情報。通常Playerの勝敗加算は出撃1回以上、Dummyは従来仕様による。重複不可
+  repeated GuildBattlePlayerParticipation participants = 5; // Join済み通常Playerの個人Scoreと出撃回数。参加回数の加算は出撃3回以上。重複不可
 }
 
 message GuildBattleFinalGuildResult {
@@ -413,11 +413,13 @@ message GuildBattleFinalGuildResult {
 message GuildBattlePlayerRecordUpdate {
   uint64 player_id = 1; // 更新対象PlayerID
   game.model.GuildBattleResult result = 2; // 当該Playerの勝敗. drawの場合は勝敗数を更新しない
+  uint32 sortie_count = 3; // 当該対戦で成立した出撃回数。通常Playerは1回以上で勝敗数対象
 }
 
 message GuildBattlePlayerParticipation {
   uint64 player_id = 1;
   uint64 acquired_score = 2; // 対戦終了時に未切り捨ての個人取得Score合計を切り捨ててu64へ変換した値
+  uint32 sortie_count = 3; // 当該対戦で成立した出撃回数。3回以上で参加回数を1加算
 }
 
 message IssueAuthorizationCodePrivateRequest { bytes refresh_token = 1; string redirect_uri = 2; bytes code_challenge_sha256 = 3; }
@@ -440,12 +442,12 @@ message StartGuildBattleResponse {}
 message BeginGuildBattleResolvingResponse {}
 message SaveErrorLogResponse {}
 message CompleteGuildBattleResponse {}
-message SaveGuildBattleJoinLogRequest { game.guildbattle.replay.GuildBattleJoinLogPayload payload = 1; }
-message SaveGuildBattleSortieLogRequest { game.guildbattle.replay.GuildBattleSortieLogPayload payload = 1; }
-message SaveGuildBattleTacticsLogRequest { game.guildbattle.replay.GuildBattleTacticsLogPayload payload = 1; }
-message SaveGuildBattleItemLogRequest { game.guildbattle.replay.GuildBattleItemLogPayload payload = 1; }
-message SaveGuildBattleHealLogRequest { game.guildbattle.replay.GuildBattleHealLogPayload payload = 1; }
-message SaveGuildBattleReviveLogRequest { game.guildbattle.replay.GuildBattleReviveLogPayload payload = 1; }
+message SaveGuildBattleJoinLogRequest { game.guildbattle.replay.GuildBattleJoinLogPayload payload = 1; uint64 event_index = 2; }
+message SaveGuildBattleSortieLogRequest { game.guildbattle.replay.GuildBattleSortieLogPayload payload = 1; uint64 event_index = 2; }
+message SaveGuildBattleTacticsLogRequest { game.guildbattle.replay.GuildBattleTacticsLogPayload payload = 1; uint64 event_index = 2; }
+message SaveGuildBattleItemLogRequest { game.guildbattle.replay.GuildBattleItemLogPayload payload = 1; uint64 event_index = 2; }
+message SaveGuildBattleHealLogRequest { game.guildbattle.replay.GuildBattleHealLogPayload payload = 1; uint64 event_index = 2; }
+message SaveGuildBattleReviveLogRequest { game.guildbattle.replay.GuildBattleReviveLogPayload payload = 1; uint64 event_index = 2; }
 message SaveGuildBattleJoinLogResponse {}
 message SaveGuildBattleSortieLogResponse {}
 message SaveGuildBattleTacticsLogResponse {}
@@ -467,7 +469,7 @@ message ListGuildInvitationsPrivateRequest { uint64 player_id = 1; }
 message ListGuildInvitationsPrivateResponse { repeated game.publicapi.GuildDirectoryEntry guilds = 1; }
 message GetGuildDetailPrivateRequest { uint64 guild_id = 1; }
 message GetGuildDetailPrivateResponse { game.publicapi.GetGuildDetailResponse detail = 1; }
-message UpdateGuildBattleStartTimesPrivateRequest { uint64 player_id = 1; uint64 guild_id = 2; game.model.GuildBattleStartTime daytime_start_time = 3; game.model.GuildBattleStartTime nighttime_start_time = 4; }
+message UpdateGuildBattleStartTimesPrivateRequest { uint64 player_id = 1; uint64 guild_id = 2; optional game.model.GuildBattleStartTime daytime_start_time = 3; optional game.model.GuildBattleStartTime nighttime_start_time = 4; }
 message UpdateGuildBattleStartTimesPrivateResponse { uint64 effective_at = 1; }
 message GetMyGuildBattlePrivateRequest { uint64 player_id = 1; }
 message GetMyGuildBattlePrivateResponse { repeated game.publicapi.MyGuildBattleEntry battles = 1; }

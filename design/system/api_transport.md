@@ -19,7 +19,7 @@ Private API: `CreateAccount`, `AuthenticateAccount`, `RefreshAccessToken`, `Logo
 Control APIは`GetGameServerCapacity`と`StartGuildBattlePreload`のみをCoordinatorのService Identityに許可する。運営APIは既存の操作名を使用し、運営用Service Identityだけに許可する。RPCのPath形式は固定するが、個別の運営操作のPayloadは元の運営設計が正本とする。
 
 ## Wire schemaと入力検証
-- すべてのAllowlist RPCで、それぞれの定義済みRequest Messageを必須とし、各フィールドを該当する論理Payloadの制約で検証する。Request Bodyを省略した呼出しを許可しない。値`0`や`false`が正常な意味を持つフィールドでは、その値だけを理由に欠落と判定しない。省略と既定値の区別を要するフィールドは、Protocol Buffersの`optional`または`oneof`でPresenceを表現する。
+- すべてのAllowlist RPCで、それぞれの定義済みRequest Messageを必須とし、各フィールドを「[入力フィールド検証契約](api_request_validation.md)」および該当する論理Payloadの制約で検証する。Request Bodyを省略した呼出しを許可しない。値`0`や`false`が正常な意味を持つフィールドでは、その値だけを理由に欠落と判定しない。省略と既定値の区別を要するフィールドは、Protocol Buffersの`optional`または`oneof`でPresenceを表現する。
 
 
 - Publicの正本は`design/system/public_api.proto`、PrivateおよびControlの正本は`design/system/private_api.proto`とする。固定長配列の個数、予約ID、enum許容値、文字列の長さ、数値の上下限は`design/server/api_payload.md`と`design/shared/types.md`を用いてDeserialize後に検証する。

@@ -117,11 +117,14 @@ flowchart TD
     K -->|殲滅| T[相手選択と戦闘計算 初期状態とSeedを保存]
     CB --> RS[Player RequestSequence加算]
     T --> RS
-    RS --> RESP[要求元へ出撃結果Response]
+    RS --> DUR[作業状態のRequestSequence仮加算 専用Workerへ出撃Replay Event保存要求]
+    DUR --> ACK{DB COMMIT確認?}
+    ACK -->|成功| RESP[要求元へ出撃結果Response]
+    ACK -->|失敗| ERR[出撃を不成立としてエラー 応答]
     RESP --> B[出撃完了BattleSpecial BP/TP回復]
     B --> SC[acquired_score加算]
     SC --> CH[両Guild Score Chain確定]
-    CH --> RP[成立Replay Event追加]
+    CH --> RP[既にDB確定済みの同一EventをReplayQueueへ渡しFileへ追記]
     RP --> N[購読中Playerへスコア チェイン 残り時間通知]
     N --> END[当該出撃処理完了 次の受付済み要求へ]
 ```
@@ -130,8 +133,8 @@ flowchart TD
 
 殲滅では`GuildBattleAnnihilationResponse`に戦闘開始時点の`OwnCharacters`, `EnemyCharacters`, `EnemyPlayerID`, `EnemyFormationID`, 戦闘に関係する`BattleTacticsEffects`, `Seed`を格納する. ClientはJoin時同期済み自身の編成とこの入力で同一`game-core`を実行する. 表示済みの古いHPやTacticsを流用せず, 関係しない継続効果・最終HP・行動履歴を追加送信しない.
 
-出撃結果Responseは要求元へ先に送るが, その後のBattle Special回復, `acquired_score`, スコア・チェイン確定, Replay Event追加まで同一出撃の直列実行範囲とする. GameServerにおける騎士団合計スコアの正本はResponseの未切り捨て`SortieScore`ではなくRuntimeの確定済み`Score`である. 送信通知の失敗によって出撃を巻き戻さない.
-出撃計算式はすべて`f32`で評価し, 出撃の最終`SortieScore`が負数・NaN・正負Infinityの場合は0.0へ正規化してからResponseとPlayerの`acquired_score`へ反映する. 出撃Responseの`Score`およびPlayerの`acquired_score`は`SortieScore`（`f32`）で保持する. 騎士団合計ptだけ, 1出撃ごとに小数点以下を切り捨てて`Score`（`u64`）へ加算する. 個人累計戦績へ加算する値は騎士団戦終了時点の未切り捨て`acquired_score`を1回だけ小数点以下切り捨てして`u64`に変換する. `u64`へ変換する値と合計値には`u64::MAX`を上限とする飽和変換・飽和加算を使用する.
+出撃EventはGameServerが非同期I/O Workerを使ってPrivate APIの`SaveGuildBattleSortieLog`でDBへ先行永続化し、WorkerのCOMMIT確認後に成功Responseを返す。保存結果のTimeoutなど確定不明時は同一`X-Operation-ID`でPrivate APIの冪等記録を再照合し、DB確定を確認した場合は成立済みとして処理を進める。保存不成立を確認するまで作業状態を破棄せず、確定不明の間は当該GuildBattleの後続状態変更要求を保留する。成功確定前は次の騎士団戦操作を適用しない。出撃のPRNG計算と状態遷移は未確定の作業状態で算出し、保存成功時にだけRuntimeの正本へ反映する。DBへの未保存が確定した場合は作業状態を破棄し、PRNG・RequestSequence・攻撃回数を進めず要求を失敗とする。出撃結果Responseはこの耐久化より後で、以下の後処理より先に送るが, その後のBattle Special回復, `acquired_score`, スコア・チェイン確定, Replay Event追加まで同一出撃の直列実行範囲とする. GameServerにおける騎士団合計スコアの正本はResponseの未切り捨て`SortieScore`ではなくRuntimeの確定済み`Score`である.  先行保存した出撃Eventは後処理完了後のReplayQueueで同じ`event_index`を用い、Private APIでは既保存として重複書込みをしない。GameServer再起動時は保存済みEventを順にReplay適用してResponse後の未適用BP/TP・Score・Chain等を復元する。送信通知の失敗によって出撃を巻き戻さない.
+出撃計算式はすべて`f32`で評価し, 出撃の最終`SortieScore`が負数・NaN・正負Infinityの場合は0.0へ正規化してからResponseとPlayerの`acquired_score`へ反映する. 出撃Responseの`Score`およびPlayerの`acquired_score`は`SortieScore`（`f32`）で保持する. 騎士団合計ptだけ, 1出撃ごとに小数点以下を切り捨てて`Score`（`u64`）へ加算する. 出撃成立回数`attack_count`を勝敗・参加判定へ渡す。通常Playerの勝敗数は出撃1回以上、参加回数は出撃3回以上を条件とする。個人累計戦績へ加算する値は騎士団戦終了時点の未切り捨て`acquired_score`を1回だけ小数点以下切り捨てして`u64`に変換する. `u64`へ変換する値と合計値には`u64::MAX`を上限とする飽和変換・飽和加算を使用する.
 
 
 回復・復活・出撃待機がServer上で先に終了した場合は、そのPlayer宛て`SubscribeGuildBattleUpdates`の`GuildBattleScoreUpdate.timer_update`へ終了対象と残り0秒を設定して通知する。同一処理時点で複数種類が終了した場合は1種類につき1つの`GuildBattleScoreUpdate`を発行し、`HEAL`→`REVIVE`→`SORTIE_WAIT`の順とする。各通知に含めるスコア・チェイン情報は同一の確定済みスナップショットとする。Clientは`timer_update.kind`が示すタイマーだけを更新する。Client側が先に0と判断した場合は`GetGuildBattleStatus`で現在値を取得する。タイマーの定期通知は行わない。

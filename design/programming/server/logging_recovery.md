@@ -2,7 +2,7 @@
 
 ## 概要
 
-System Log、GuildBattle Replay、DB Recoveryは目的と耐欠損性が異なるため、Queue・Worker・保存形式を分離します。GuildBattle Hot Pathは同期I/Oを行わず、Replayだけは欠損禁止としてQueue満杯時にBackpressureを許容します。
+System Log、GuildBattle Replay、DB Recoveryは目的と耐欠損性が異なるため、Queue・Worker・保存形式を分離します。GuildBattle Hot Pathは自身では同期I/Oを行わず、Replayだけは欠損禁止としてQueue満杯時にBackpressureを許容します。出撃は専用WorkerによるDB先行保存の完了通知を成功Responseの条件とします。
 
 ## 3系統の分離
 
@@ -46,7 +46,7 @@ flowchart LR
 - 追加順は処理成立順と一致させます。
 - Eventを破棄しません。
 - Queue満杯時だけ、空きができるまで要求処理を待機します。
-- Replay WorkerがSerialize、file追記、Private API保存を担当します。
+- Replay WorkerがSerialize、file追記、Private API保存を担当します。出撃Eventは成功Responseより前に同Worker経由でDB保存を完了し、後続の通常QueueではDBを重複書込みせずFile追記だけを行います。
 
 System Log Queueの大量発生でReplayを阻害しないよう、Queueを共有しません。
 
@@ -61,9 +61,10 @@ System Log Queueの大量発生でReplayを阻害しないよう、Queueを共�
 Formatは`GuildBattleReplayEnvelope`のlength-delimited Protocol Buffers列です。
 
 - 各Message前にprotobuf varint長を付与します。
+- DBへのEvent先行確定が済んでもFile未追記の場合は、起動後にDBの`event_index`順に不足Eventを補完します。
 - JSONへ変換しません。
 - `process_type`と`oneof payload`を対応させます。
-- 最初のEventはCreate Eventです。
+- 最初のEventは`event_index=1`のCreate Eventです。以降はGuildBattleIDごとにEvent番号を1ずつ増やし、DB/Fileへ同じ番号を記録します。
 - Create EventにInitialSeed、Guild、`GuildBattleInitialSnapshot`、Versionを含めます。
 
 ## Replay復元
@@ -80,7 +81,7 @@ flowchart TD
 
 復元時は現在のDB可変値を初期状態として使用しません。
 
-Replay file末尾の不完全なlength-delimited Envelopeは、同一GuildBattleIDのDB保存済みReplay Eventで欠損範囲を特定・復元できる場合だけ補完する。DB側にも必要なデータがなければ、当該Replayを破損データとして扱い再生しない。出撃の成功Response後のClient通信状態はServer上の成立済み操作を巻き戻す条件としない。同一出撃の重複適用は既存のRequestSequenceとOperation IDの規則に従う。
+Replay fileは`event_index`を1から連続する順番で検証する。欠落・重複・順序異常・末尾の不完全なlength-delimited Envelopeは、DB側の同一GuildBattleID・同一番号のEventを照合して復元可能な場合だけ復旧する。DBとFile双方に該当番号がない場合は破損扱いとし、再生しない。DBとFileの同一番号でPayloadが異なれば自動採用せず破損扱いとする。DB側にも必要なデータがなければ、当該Replayを破損データとして扱い再生しない。出撃の成功Response後のClient通信状態はServer上の成立済み操作を巻き戻す条件としない。同一出撃の重複適用は既存のRequestSequenceとOperation IDの規則に従う。
 
 ## Credential Redaction
 

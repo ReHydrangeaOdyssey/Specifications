@@ -340,7 +340,7 @@ GameServerが受信するあらゆる要求は先に到達した順に処理す�
 #### ログ・Metric
 
 騎士団戦のログ・Metric・Trace処理は「[ログ仕様](../system/log.md)」に従う.
-正常に成立した各操作は状態反映および`RequestSequence`更新後にReplay EventをReplayQueueへ追加する. Replay Workerによるファイル書き込み・Private API Server送信・Database保存は要求処理スレッドと非同期に行う.
+通常操作では状態反映とRequestSequence更新後にReplay Eventを成立順にReplayQueueへ追加し、Replay WorkerがFileとDBへ保存する。出撃だけは例外とし、非同期Workerによる`SaveGuildBattleSortieLog`のDB COMMIT完了を成功Response前に確認し、その同じEventを後続Fileへ成立順で追記する。DB保存に失敗した出撃を成功扱いにしない。
 正常なゲームルール拒否は要求単位のApplication Logへ出力せずMetricへ集約する. `RequestSequence`不一致, 不正CharacterID, 不正TacticsID等は要求ごとに同期ログ出力せずMemory上で集約する.
 
 

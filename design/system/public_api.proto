@@ -438,8 +438,8 @@ message CreateGuildRequest {
   string access_token = 1;
   uint64 player_id = 2;
   string guild_name = 3;
-  GuildBattleStartTime daytime_start_time = 4;
-  GuildBattleStartTime nighttime_start_time = 5;
+  optional GuildBattleStartTime daytime_start_time = 4;
+  optional GuildBattleStartTime nighttime_start_time = 5;
 }
 
 message CreateGuildResponse {
@@ -525,7 +525,7 @@ message ArenaBattleRequest {
   string access_token = 1;
   uint64 player_id = 2;
   string client_version = 3;
-  ArenaMode mode = 4;
+  optional ArenaMode mode = 4;
   uint64 opponent_id = 5;
   uint32 local_formation_id = 6;
   repeated ArenaPartyCharacter local_characters = 7; // 1..5 elements.
@@ -810,7 +810,7 @@ message GetGuildDetailResponse {
   optional GuildBattleStartTime pending_nighttime_start_time = 10; // Present only before effective_at.
   optional uint64 pending_start_time_effective_at = 11; // UNIX epoch seconds; absent if no pending change.
 }
-message UpdateGuildBattleStartTimesRequest { string access_token = 1; uint64 player_id = 2; uint64 guild_id = 3; GuildBattleStartTime daytime_start_time = 4; GuildBattleStartTime nighttime_start_time = 5; }
+message UpdateGuildBattleStartTimesRequest { string access_token = 1; uint64 player_id = 2; uint64 guild_id = 3; optional GuildBattleStartTime daytime_start_time = 4; optional GuildBattleStartTime nighttime_start_time = 5; }
 message UpdateGuildBattleStartTimesResponse { uint64 effective_at = 1; }
 
 message GetMyGuildBattleRequest { string access_token = 1; uint64 player_id = 2; }

@@ -78,7 +78,7 @@ Database, Public API Server, Private API Server, GameServer, GuildBattleCoordina
 * `MarkGuildBattlePreloadFailed`による`scheduled -> PRELOAD_FAILED`遷移と所有GameServer不一致時の拒否.
 * `StartGuildBattle`でInitialSeed保存, Create Replay保存, `scheduled -> in_progress`が同一トランザクションで確定すること.
 * `BeginGuildBattleResolving`による`in_progress -> resolving`以外の遷移拒否.
-* `CompleteGuildBattle`で最終結果, Join済みPlayerの参加回数・個人累計スコア・勝敗数（出撃0回を含む）, `completed`, membership lock解除, 除外一覧削除が同一トランザクションで確定すること.
+* `CompleteGuildBattle`で最終結果, Join済みPlayerの個人累計スコア・出撃3回以上の参加回数・出撃1回以上の勝敗数, `completed`, membership lock解除, 除外一覧削除が同一トランザクションで確定すること.
 * `CompleteGuildBattle`で対戦外Player, PlayerID重複, Guild結果とPlayer結果の不一致, 最終Scoreと不整合な2Guild勝敗組み合わせを拒否すること.
 * Lifecycle APIで定義されていない`GuildBattleStatus`遷移を拒否すること.
 * `RetryPreloadFailedGuildBattle`による同一ペア再Preload.
@@ -167,7 +167,7 @@ GuildBattle Replayは「[リプレイProtocol Buffers定義](../system/guild_bat
 
 以下を確認する.
 
-* ログイン不可またはServer未接続の場合, Server通信を必須とする機能だけを利用不可とする. 通信不要の機能はすべて使用可能であることを合格条件とする. タイトル・ホーム間の遷移, 保存済みアセットの利用・削除, キャッシュクリア, クレジット画面表示・復帰を対象に含め（新規取り込みはログイン成功後だけ許可し）, OPFS容量不足時にもアセット削除を利用可能とする. 必要なブラウザAPIの非対応・保存域の障害はServer未接続とは別条件として検証する.
+* ログイン不可またはServer未接続の場合, Server通信を必須とする機能だけを利用不可とする. 通信不要の機能はすべて使用可能であることを合格条件とする. タイトル・ホーム間の遷移, 保存済みアセットの利用・削除, キャッシュクリア, クレジット画面表示・復帰を対象に含め（新規取り込みもログインなしで手動区分指定により許可し、ログイン後は辞書と照合し）, OPFS容量不足時にもアセット削除を利用可能とする. 必要なブラウザAPIの非対応・保存域の障害はServer未接続とは別条件として検証する.
 * 必要な認証とServer接続が復帰すると, 接続状態と同じすべての機能を使用可能に戻す.
 * タイトル画面にキャッシュクリア, アセット追加, アセット削除, クレジットボタンがある.
 * タイトル画面のログインボタンから認証画面へ遷移し, 成功時はホーム, キャンセル・失敗時はタイトルへ戻る. ログインしなくてもタイトルからホームへ遷移でき, Server不要機能を使用できる.
@@ -412,3 +412,7 @@ HCA 22,050Hz・非暗号化・左右2チャンネルのステレオ・辞書指�
 ## Clientライブラリ選定の情報源
 
 * 添付`rust_wasm_png_hca_library_selection(1).md`（2026-10-09）, 第1～7節.
+
+* 出撃は非同期Worker経由でDB Replay Event保存を確定した後にだけ成功応答を返し、出撃後処理より前の障害で再起動してもDB確定Eventから復元できることを確認する。
+* Replay Eventは同一GuildBattleID内でCreate=1から連番になり、DB/File間の欠損・同番号異内容を検出する。
+* プレイヤー向けReplayの一覧・取得は現段階で拒否し、内部Replayの保存・保全を継続する。

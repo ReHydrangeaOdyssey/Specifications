@@ -48,7 +48,7 @@ stateDiagram-v2
 2. `game_server_instance_id`が要求`GameServerInstanceID`と一致することを確認する.
 3. 要求`GuildID[2]`がDatabase上の`guild_a_id` / `guild_b_id`と一致することを確認する.
 4. `initial_seed`がNULLであることを確認して要求`InitialSeed`を保存する.
-5. `GuildBattleCreateLogPayload`をReplay作成ログとして保存する.
+5. `GuildBattleCreateLogPayload`を`GuildBattleReplayEnvelope(event_index=1)`に格納してReplay作成ログとして保存する。以降の確定Eventは同GuildBattleID内で2から連番採番する。Create Eventと`GUILD_BATTLE_REPLAY_LOG.event_index=1`の保存は同一トランザクションで行う。
 6. `status=in_progress`へ更新する.
 
 InitialSeedだけ保存済み, Create Replayだけ保存済み, `in_progress`だけ更新済みという中間状態を作らない.
@@ -61,8 +61,8 @@ InitialSeedだけ保存済み, Create Replayだけ保存済み, `in_progress`だ
 2. `game_server_instance_id`が要求`GameServerInstanceID`と一致することを確認する.
 3. `GuildResults`がDatabase上の対戦2Guildと一対一で一致し, 勝敗組み合わせが最終Scoreと整合することを確認する. Scoreが異なる場合は高い側`WIN`・低い側`LOSE`, 同値の場合は両側`DRAW`だけを許可する.
 4. 2Guildの最終スコア・勝敗を`GUILD_BATTLE_RESULT`へ保存する.
-5. `PlayerRecords`はJoin済みのPlayer（出撃0回の通常Playerを含む）を持つ。通常PlayerのID集合は`Participants`のPlayerID集合と一致させ、双方の重複を拒否する。 PlayerID `0`以外は対戦2Guildのいずれかへの所属を確認し, 指定Resultが所属Guildの最終結果と一致することを確認した上で, 勝利なら`guild_battle_win_count+1`, 敗北なら`guild_battle_lose_count+1`, 引き分けなら更新なしとする.
-6. `Participants`はJoin済みの通常Playerを対象とし、PlayerID重複・対戦2Guildの所属不一致を拒否する。各Playerの`guild_battle_participation_count`を1加算し、`guild_battle_total_score`へ、騎士団戦終了時点の個人`acquired_score`（未切り捨て）を小数点以下切り捨てで`u64`に変換した値を加算する。参加だけで出撃していないPlayerも対象に含める。同一`GuildBattleID`の二重完了は既存冪等化により重複計上しない。累計値が各論理型の上限を超える更新は成立させない。
+5. `PlayerRecords`はJoin済み通常PlayerとDummy PlayerID `0`の勝敗情報を持つ。通常PlayerのID集合は`Participants`のPlayerID集合と一致させ、双方の重複を拒否する。通常Playerの`sortie_count`が1以上の場合だけ、所属Guildの最終結果と一致する勝敗数を更新する。出撃0回は勝敗数を更新しない。Dummy PlayerID `0`は出撃回数にかかわらず更新対象とする。引き分けの場合は更新しない。各通常Playerの`PlayerRecords.sortie_count`と`Participants.sortie_count`は一致必須とする。
+6. `Participants`はJoin済み通常Playerを対象とし、PlayerID重複・対戦2Guildの所属不一致を拒否する。`sortie_count`が3以上のPlayerに限り`guild_battle_participation_count`を1加算する。`guild_battle_total_score`はJoin済み各Playerの対戦終了時`acquired_score`を小数点以下切り捨てた`u64`値だけ加算し、上限超過時は`u64::MAX`に飽和させる。出撃0回でもJoin済みなら個人累計スコア計上対象には含める。同一`GuildBattleID`の二重完了は既存冪等化により防ぐ。
 7. `status=completed`へ更新する.
 8. 対戦2Guildの`GUILD.membership_locked=false`へ更新する. 複数Guildを更新する場合はGuildID昇順でLock・更新する.
 9. `start_at`ではなく`matching_target_date`と`matching_start_time`で同一マッチング枠を識別する. 先に取得した同一枠のトランザクション単位排他を保持し, 同一枠の`GUILD_BATTLE`（旧ID・新IDの後継対戦を含む）をID昇順で行ロックする.

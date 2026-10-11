@@ -1273,8 +1273,8 @@ Private APIは再抽選を行わない. `GuildBattleID[]`と`Battles[]`のID集�
 | GuildBattleID | `GuildBattleID` | `resolving -> completed`へ遷移する騎士団戦ID |
 | GameServerInstanceID | `GameServerInstanceID` | 完了を要求する所有GameServer. Database上の割当と一致必須 |
 | GuildResults | `GuildBattleFinalGuildResult[2]` | 対戦2Guildの最終スコア・勝敗. GuildID集合はDatabase上の対戦Guildと一致必須 |
-| PlayerRecords | `GuildBattlePlayerRecordUpdate[]` | Join済み通常Player（出撃0回を含む）とDummy PlayerID `0`の勝敗数更新情報. PlayerID重複不可 |
-| Participants | `GuildBattlePlayerParticipation[]` | Join済み通常Playerの参加実績と今回獲得した個人Score（u64）。出撃0回も含む。PlayerID重複不可 |
+| PlayerRecords | `GuildBattlePlayerRecordUpdate[]` | Join済み通常PlayerとDummy PlayerID `0`の勝敗・出撃成立回数。通常Playerは出撃1回以上のみ勝敗計上。重複不可 |
+| Participants | `GuildBattlePlayerParticipation[]` | Join済み通常Playerの出撃成立回数と今回獲得した個人Score（u64）。出撃3回以上で参加回数を計上。出撃0回も個人Score計上対象として保持。重複不可 |
 
 ### GuildBattleFinalGuildResult
 

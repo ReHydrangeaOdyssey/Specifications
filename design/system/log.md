@@ -50,12 +50,13 @@ GameServerはシステムログ用Queueと騎士団戦リプレイログ用Repla
 ### ReplayQueue
 
 * 騎士団戦で処理が成立した場合, GameServerは状態反映および`RequestSequence`更新後に対応Replay EventをReplayQueueへ追加する.
-* Replay Event追加順は騎士団戦処理成立順と一致させる.
-* GameServerの騎士団戦処理スレッドはReplay EventのProtocol Buffers Serialize, ファイル書き込み, Private API Server送信, Database保存完了を待機しない.
+* Replay Event追加順は騎士団戦処理成立順と一致させる。`GuildBattleReplayEnvelope.event_index`はGuildBattleIDごとにCreateを1として成立順に連番採番し、同じ番号をDBとFileに保存する。
+* GameServerの騎士団戦処理スレッドはReplay EventのSerializeや同期ファイルI/Oを実行しない。出撃Eventに限り非同期WorkerによるPrivate APIのDB保存完了通知を待って成功Responseを返す。COMMIT結果が不明な場合は同一Operation IDの冪等性記録を照合し、確定したEventを失敗として破棄しない。その他の成立EventのReplay保存は非同期とする。
 * Replay WorkerはReplayQueueを成立順に読み出し, リプレイログファイルへの追記およびPrivate API Server経由のDatabase保存を行う.
 * Replay Logは完全再現に使用するためReplay Eventを破棄しない.
 * ReplayQueueはbounded queueとし, 高水位到達をMetricへ記録する. Queue上限へ到達し新しいReplay Eventを格納できない場合だけ, Replay Eventを破棄せず空きができるまで要求処理を待機する.
 * ReplayQueueとシステムログ用Queueは独立させ, システムログの大量発生によってReplay Event保存を阻害しない.
+* 成功Responseを返した出撃の先行DB保存イベントは後続File書込み時に同一番号を使用し、DBには二重登録しない。
 * 騎士団戦作成ログは開戦時初期状態の正本となるため例外として, `GUILD_BATTLE_REPLAY_LOG`への保存完了後に`GUILD_BATTLE.status=in_progress`へ遷移する.
 
 ## システムログ
@@ -163,7 +164,7 @@ Server側処理時間がSlow Request判定閾値を超えた要求はSampling Ra
 Public API ServerからGameServer, 必要な場合はPrivate API Serverまでの粗い処理単位をTrace対象とする.
 Trace Exportは騎士団戦処理スレッドから同期実行しない.
 
-Player向けのReplay閲覧は現行Versionと一致する保存済み履歴だけに制限する. 旧VersionのReplayログはDatabaseから削除せず保持するが, Playerからは視聴不可とする. 各Playerへ提供する履歴は過去50件を上限とする.
+現段階ではPlayer向けReplay一覧・再生は公開しない。将来公開する場合は現行Versionと一致する保存済み履歴だけに制限する。 旧VersionのReplayログはDatabaseから削除せず保持するが, Playerからは視聴不可とする. 各Playerへ提供する履歴は過去50件を上限とする.
 
 ## 騎士団戦リプレイログ
 
@@ -172,7 +173,7 @@ Player向けのReplay閲覧は現行Versionと一致する保存済み履歴だ�
 ファイルは`GuildBattleReplayEnvelope`をProtocol BuffersでSerializeし, 各Messageの前へprotobuf varintのMessage長を付与したlength-delimited Message列として処理成立順に追記する.
 JSONへ変換して保存しない. Databaseの`GUILD_BATTLE_REPLAY_LOG.payload`にも同じ`GuildBattleReplayEnvelope`のSerialize済みバイナリを保存する.
 `GuildBattleReplayEnvelope.process_type`と`oneof payload`は必ず対応する組み合わせを設定する. 施設BP回復成立は`GUILD_BATTLE_REPLAY_TAVERN_RECOVERY`と`tavern_recovery`で記録する.
-処理が成立した場合のみReplay Eventを生成する(失敗は含まれない).
+処理が成立した場合のみReplay Eventを生成する(失敗は含まれない)。`event_index=1`はCreate Eventに予約し、以降は連続した番号であることを検証する。
 成立した処理はReplayQueueへ追加し, Replay Workerが本リプレイログへ書き出すとともに, Private API Server経由でDatabaseへ保存する.
 ログの最初から辿ることで特定地点まで完全に再現可能にする.
 騎士団戦作成ログには, 開戦時点で確定した騎士団レベル, 所属メンバー一覧, GameServerが当該騎士団戦の騎士団戦データとして保持するプレイヤーの最大BP・編成・所持アイテム等の可変初期状態を`GuildBattleInitialSnapshot`として保存する.

@@ -27,7 +27,7 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 - `UpdateGuildBattleStartTimesPrivate`は要求者が現在団長であることと昼夜の許容値を確認し、翌JST 0:00適用の保留設定を更新する。マッチング済み対戦は変更しない。
 - `SearchGuildsPrivate`および`SearchPlayersPrivate`は名前prefix照合で通常Guild/PlayerだけをID昇順・指定Limit以内で返す。`ListGuildJoinApplicationsPrivate`はAuthenticatedContextにより対象Guildの団長/副団長のみ受け付け、`ListGuildInvitationsPrivate`は招待された本人向けに未処理行だけを取得する。Public APIの認証済みCaller Identityを必須とする。
 - `GetMyArenaPartyPrivate`, `GetMyGuildBattlePartyPrivate`は呼出元本人のDB保存編成を返す。未登録の場合は`registered=false`とする。`GetMyGuildBattlePrivate`は所属Guildへの対戦割当をDBから取得し、`GetGuildBattleResultPrivate`は確定済み対戦結果を取得する。
-- `ListMyGuildBattleReplaysPrivate`は本人参加記録が確認できる現行Versionの対戦を開始時刻降順・ID降順で50件まで返す。`GetMyGuildBattleReplayPrivate`は同じアクセス条件を再検証し、当該対戦の成立順に記録したEnvelopeを返す。過去VersionのReplayをプレイヤーへ返さない。
+- `ListMyGuildBattleReplaysPrivate`は現段階でPlayer向けに公開しない。将来公開する場合、本人参加記録が確認できる現行Versionの対戦を開始時刻降順・ID降順で50件まで返す。`GetMyGuildBattleReplayPrivate`は同じアクセス条件を再検証し、当該対戦の`event_index`昇順に、1から連続することを検証してEnvelopeを返す。過去VersionのReplayをプレイヤーへ返さない。
 
 
 開始時刻変更の適用時刻は要求を受け付けたJST日付の翌日00:00とする。`GetGuildsForBattleMatching`は対象のJST日付に有効な昼夜時刻を使用し、適用前に生成済みの`GUILD_BATTLE`には遡って変更を加えない。
@@ -778,9 +778,9 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 ### 騎士団戦ログ送信
 
 騎士団戦中の成立した各種処理について, GameServerのReplay WorkerからPrivate API Serverへリプレイログ送信が行われる. 各論理Payloadは「[guild_battle_replay.proto](../system/guild_battle_replay.proto)」の`GuildBattleReplayEnvelope`へ変換してProtocol BuffersでSerializeし, `GUILD_BATTLE_REPLAY_LOG.payload`へバイナリ保存する.
-通常の騎士団戦要求処理スレッドはPrivate API Serverへのリプレイログ保存完了を待機しない. 処理成立時はReplay EventをReplayQueueへ追加し, Replay Workerが成立順に送信する.
+通常の騎士団戦要求処理スレッドはPrivate API Serverへのリプレイログ保存完了を待機しない。ただし出撃は非同期Worker経由の`SaveGuildBattleSortieLog` COMMIT完了を成功Responseの条件とする。Workerへの依頼と完了確認は非同期で行う。 処理成立時はReplay EventをReplayQueueへ追加し, Replay Workerが成立順に送信する.
 騎士団戦作成ログだけは`StartGuildBattle`のDatabaseトランザクション内で同期保存し, InitialSeed保存と`GUILD_BATTLE.status=in_progress`遷移を同時に確定する.
-ReplayQueueおよびDatabase送信失敗時の扱いは「[ログ仕様](../system/log.md)」および「騎士団戦DB送信失敗時」に従う.
+ReplayQueueおよびDatabase送信失敗時の扱いは「[ログ仕様](../system/log.md)」および「騎士団戦DB送信失敗時」に従う. `SaveGuildBattle*LogRequest.event_index`は1より大きい番号を要求し、Create Eventは番号1とする。各保存処理は`(guild_battle_id,event_index)`の一意制約で同番号・同Payloadだけ冪等とし、異なるPayloadの同番号保存は拒否する。
 
 #### 参加
 
@@ -874,8 +874,8 @@ ReplayQueueおよびDatabase送信失敗時の扱いは「[ログ仕様](../syst
 - 対象`GuildBattleID`の所有GameServerが要求`GameServerInstanceID`と一致することを確認する.
 - 最終結果2Guild分の保存, 参加Playerの参加回数・勝敗数・累計騎士団スコア更新, `status=completed`, 当該対戦2Guildの`membership_locked=false`を同一Databaseトランザクションで実行する. 同一`matching_target_date`・`matching_start_time`の全騎士団戦（後継対戦含む）が`completed`・`canceled`・`replaced`の終端状態となった場合に限り, 同一トランザクションで除外Guildも`membership_locked=false`へ更新し, `GUILD_BATTLE_EXCLUDED_GUILD`を削除する. 並行するComplete・Cancel・Retryはマッチング枠単位排他とGuildBattleID昇順の行Lockで終了判定と後継対戦追加を直列化する.
 - `GuildResults`のGuildID集合がDatabase上の対戦2Guildと一致し, 2件の勝敗組み合わせが最終Scoreと整合することを確認する. Scoreが異なる場合は高い側`WIN`・低い側`LOSE`, 同値の場合は両側`DRAW`だけを許可する.
-- `PlayerRecords`にJoin済み通常Player（出撃0回を含む）の全員を含め、`Participants`の通常PlayerID集合と一致させる。`PlayerRecords`と`Participants`で同一PlayerIDを重複指定できない. PlayerID `0`以外はDatabase上で対戦2Guildのいずれかに所属していることを確認し, 指定`Result`が所属Guildの`GuildResults.Result`と一致することを確認する.
-- `Participants`の各通常Playerの参加回数を1加算し、騎士団戦終了時点の各Playerの未切り捨て`acquired_score`を小数点以下切り捨てして`u64`へ変換した値を累計騎士団スコアへ加算する。勝利の場合は対象Playerの`guild_battle_win_count`を1加算し, 敗北の場合は`guild_battle_lose_count`を1加算する. 引き分けの場合は更新しない.
+- `PlayerRecords`にはJoin済み通常Playerの全員とDummy PlayerID `0`を含め、`Participants`の通常PlayerID集合と一致させる。通常Playerの勝敗計上は`sortie_count>=1`の場合に限る。`PlayerRecords`と`Participants`で同一PlayerIDを重複指定できない. PlayerID `0`以外はDatabase上で対戦2Guildのいずれかに所属していることを確認し, 指定`Result`が所属Guildの`GuildResults.Result`と一致することを確認する.
+- `Participants`のうち`sortie_count>=3`の通常Playerに限り参加回数を1加算し、騎士団戦終了時点の各Playerの未切り捨て`acquired_score`を小数点以下切り捨てして`u64`へ変換した値を累計騎士団スコアへ加算する。勝利・敗北による勝敗数加算は`PlayerRecords.sortie_count>=1`の通常Playerだけに適用する。 引き分けの場合は更新しない.
 - いずれかの処理が失敗した場合はトランザクション全体をRollbackし, `completed`へ遷移しない.
 - 初回失敗時は同一`X-Operation-ID`で1回だけ再試行する. 再試行も失敗した場合はError Logを保存し, `DiscordNotificationEnabled=true`の場合はBot通知後に運営による手動復旧対象とする.
 

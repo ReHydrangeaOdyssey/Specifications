@@ -137,6 +137,7 @@ message GuildBattleTavernRecoveryLogPayload {
 
 message GuildBattleReplayEnvelope {
   GuildBattleReplayProcessType process_type = 1;
+  uint64 event_index = 10; // GuildBattleIDごとに1から採番する確定Event番号。Create=1、以後は連続増加。0は禁止。
   oneof payload {
     GuildBattleCreateLogPayload create = 2;
     GuildBattleSortieLogPayload sortie = 3;

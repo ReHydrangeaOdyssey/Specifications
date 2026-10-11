@@ -586,6 +586,7 @@ erDiagram
         GuildBattleID guild_battle_id FK
         GameServerTime time
         GuildBattleReplayProcessType process_type
+        uint64 event_index
         BinaryData payload
     }
 
@@ -602,12 +603,12 @@ erDiagram
 
 `ERROR_LOG.guild_battle_id`はNULLを許可する. 騎士団戦自体がまだ生成されていない時間帯単位のエラーではNULLとして保存する.
 
-`GUILD_BATTLE_REPLAY_LOG.payload`には, 「[騎士団戦リプレイProtocol Buffers定義](../system/guild_battle_replay.proto)」の`GuildBattleReplayEnvelope`をProtocol BuffersでSerializeしたバイナリを`bytea`として保存する. `GUILD_BATTLE_REPLAY_LOG.process_type`は検索用の索引値とし, Serialize済みEnvelopeの`process_type`と必ず一致させる.
+`GUILD_BATTLE_REPLAY_LOG.payload`には, 「[騎士団戦リプレイProtocol Buffers定義](../system/guild_battle_replay.proto)」の`GuildBattleReplayEnvelope`をProtocol BuffersでSerializeしたバイナリを`bytea`として保存する. `GUILD_BATTLE_REPLAY_LOG.process_type`は検索用の索引値とし, Serialize済みEnvelopeの`process_type`と必ず一致させる. `event_index`もEnvelope内の番号と一致させ、`UNIQUE(guild_battle_id, event_index)`を適用する。`event_index=1`をCreateとし、後続Eventは同一GuildBattleIDで欠番なく1ずつ増加する。再送で同一番号・同一Payloadなら冪等成功とし、同一番号で異なるPayloadは拒否する。
 
 
 ## 騎士団戦DB送信失敗時
 
-騎士団戦中のDatabase更新・ログ保存要求が失敗した場合は, 同一要求を1回だけ再試行する. リプレイログ保存要求はReplay Workerから非同期送信し, 騎士団戦処理スレッドはDatabase保存完了を待機しない. 再試行も失敗した場合, GameServerはDB障害発生状態へ移行し, それ以降の騎士団戦中DB送信を停止して送信予定データをローカル保存する.
+騎士団戦中のDatabase更新・ログ保存要求が失敗した場合は, 同一要求を1回だけ再試行する. 通常のリプレイログ保存要求はReplay Workerから非同期送信する。出撃に限り、成功応答前に専用非同期Workerから同一Replay EventをPrivate APIへ保存し、DB COMMITの完了通知を受けてから成功を返す。騎士団戦実行スレッド自身は同期I/Oを実行しない。保存結果が不明な場合は同じ`X-Operation-ID`で照合し、DB確定済みの出撃を取り消さない。未保存を確認できた場合のみ出撃を失敗扱いにする。 再試行も失敗した場合, GameServerはDB障害発生状態へ移行し, それ以降の騎士団戦中DB送信を停止して送信予定データをローカル保存する.
 ローカル保存は`/var/lib/game-server/recovery`配下のUTF-8 JSONファイルとして行う. 本番Kubernetes環境では同PathをGameServer専用Persistent Volumeへmountし, GameServer再起動後も保持する.
 Recoveryファイル名は`guild_battle_<GuildBattleID>_<GameServerInstanceID>.json`とする. ファイル内には元のPrivate API名, Operation ID, 要求Payload, 保存順序を保持する.
 騎士団戦終了時にローカル保存データを保存順にDatabaseへ再送する. GameServer起動時にもRecoveryディレクトリを走査し, 残存ファイルを保存順に再送する. 再送中に1件でも失敗した場合はファイルを残し, 全件成功した場合だけ対応ファイルを削除する.
