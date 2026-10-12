@@ -82,7 +82,7 @@ OPFSのPNG → File / Blob → createImageBitmap() → WebGL 2 texImage2D()
 
 ### キャラクター構成セットのClient専用取り込み
 
-アセット追加画面からユーザー提供の骨格ProtoBuf、アトラスProtoBuf、参照PNGをセットで取り込み、セットの検証・原子的な登録・差替え・削除をOPFS内で完結させます。対応するゲームのPublic/Private RPCは作りません。`design/client/local_asset_storage.md`のセットManifestに従い、アニメーション構造検証が失敗したセットは登録せず、既存の検証済みセットを維持します。CharacterID・Actionへの機械生成不能な対応Schemaは追加せず、明示されたユーザーの表示選択をもとに必要な参照を解決します。
+アセット追加画面からユーザー提供の骨格ProtoBuf、アトラスProtoBuf、参照PNGをセットで取り込み、セットの検証・原子的な登録・差替え・削除をOPFS内で完結させます。対応するゲームのPublic/Private RPCは作りません。`design/client/local_asset_storage.md`のファイル単位の取込・ロールバック規則に従い、アニメーション構造検証が失敗したセットは登録せず、既存の検証済みセットを維持します。CharacterID・Actionへの機械生成不能な対応Schemaは追加せず、明示されたユーザーの表示選択をもとに必要な参照を解決します。
 
 ### 表示モーション制御の実装詳細
 

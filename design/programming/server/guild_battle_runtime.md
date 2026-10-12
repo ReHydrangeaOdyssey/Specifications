@@ -187,15 +187,13 @@ sequenceDiagram
 
 `UseTactics`成立時にはUseCondition・TP・残使用回数を確認する. Random要素ありの場合だけGuildBattle本体PRNGから専用Seedを1回生成し, `Random::new(Seed)`のTactics専用PRNGで固有抽選を行う. Random要素なしはResponse Seedを0とするが, Seedの数値からRandom使用有無を判定しない. Active Effectsは`TacticsActiveEffectState`として, 終了時刻・残回数・発動元PlayerID/GuildIDとともに保持する. DURATIONは絶対時刻, COUNTは`remaining_count`と`count_consume_trigger`を使用し, `OPPONENT_PARTY`は各出撃時の現在の対戦相手へ解決する.
 
-Item使用はRuntimeの所持数・条件を仮検証し、1回消費した結果を作業状態に保持する。署名付きWAL耐久化後にRuntime残数・RequestSequenceを確定して成功Responseを返し、`SaveGuildBattleItemLog`からPlayer所持数のDB更新を後追いで冪等に反映する。Private API応答の待機をItem使用成功の条件にしない。 BP50回復薬の日次配布は現段階では実施しない. 酒場の`UseTavernRecovery`は通常のRequestSequence検証・直列処理・成功時Event記録に従う. GameServerは適用される利用回数を`TavernUseCount`（0～3）で管理し, Playerごとの残回数を0～3で保持し、2時間ごとに1回分の時間経過回復を適用する. 成立時はPlayerIDのストック行を排他し、経過補充適用・残回数確認・1回消費・Replay Event保存を同一DB Transactionで処理する。状態参照だけならDB行へ補充結果を保存せず、現在時刻から算出した値を返す。成立時はBPを最大BPへクランプし, 回復量が0でも1回使用として記録する. 回復後BP・残回数・次回回復時刻・RequestSequenceをClientへ返す. 成立操作のPlayerID・GuildID・時刻・回復後BP・使用後残回数・次回回復時刻をReplay Eventに保存し, 復元時は同じイベントを成立順に適用する.
+Item使用は**その対戦のCreate Snapshot**から得たPlayerのItem残数だけを仮検証し、1回消費した結果を作業状態に保持する。署名付きWAL耐久化後にRuntime残数・RequestSequenceを確定して成功Responseを返し、`SaveGuildBattleItemLog`からPlayer所持数のDB更新を後追いで冪等に反映する。Private API応答の待機をItem使用成功の条件にしない。 BP50回復薬の日次配布は現段階では実施しない. 酒場の`UseTavernRecovery`は通常のRequestSequence検証・直列処理・成功時Event記録に従う. GameServerは適用される利用回数を`TavernUseCount`（0～3）で管理し, Playerごとの残回数を0～3で保持し、2時間ごとに1回分の時間経過回復を適用する. 成立時はPlayerIDのストック行を排他し、経過補充適用・残回数確認・1回消費・Replay Event保存を同一DB Transactionで処理する。状態参照だけならDB行へ補充結果を保存せず、現在時刻から算出した値を返す。成立時はBPを最大BPへクランプし, 回復量が0でも1回使用として記録する. 回復後BP・残回数・次回回復時刻・RequestSequenceをClientへ返す. 成立操作のPlayerID・GuildID・時刻・回復後BP・使用後残回数・次回回復時刻をReplay Eventに保存し, 復元時は同じイベントを成立順に適用する.
 
 Heal / Reviveは仕様の状態遷移と待機時間に従う. Start, Cancel, Completeが成立した場合だけRequestSequenceを加算しReplayへ記録する. 出撃待機時間はHeal / Reviveとは独立して保持する. 具体的な状態と時刻処理は`specification/game/guild_battle.md`および`design/server/guild_battle.md`の各APIシーケンスを正本とする.
 
 ### アイテム消費の後追い確定（WAL方式）
 
-- 対戦初回参加時にPrivate `ReserveGuildBattleItems`で各Itemの未予約在庫をBattle専用に確保し、その**確定予約数**をBattle内消費可能残数とする。再接続では予約を増やさない。DB通信不能で予約が確定しない場合はItem使用を受理しない。消費した個数と確定後残数をEventに記録する。同一Playerの未反映消費は同じBattleで受理順に差し引き、DB反映前に残数を巻き戻さない。
-- WALの署名・連続番号・Operation ID・耐久書込が成功した場合だけ消費を成立させ、Private APIのItemログ保存Workerが`PLAYER_ITEM`更新とEvent保存を**同一DB Transaction**で行う。再送時は同じOperation IDに限り二重消費しない。後追いDB更新失敗はWALを保持し、同じ順序で再試行またはRecoveryへ移行する。未検証WALを所持数へ適用しない。
-- 同一Playerのアイテムを他のGuildBattleや通常のアカウント操作から並行消費して残数が負になることを許さない。未確定のBattle消費を含めた利用可能残数を確保できない要求は新規受付を拒否し、既存の成功イベントを無言で取り消さない。DBが別経路の消費競合を検出した場合は当該Eventを隔離し、最終結果確定を保留する。Private APIは全Item変更で`PLAYER_ITEM_BATTLE_RESERVATION`の未使用予約をDB行Lockで考慮し、未予約個数だけを他経路が使用できるようにする。DB反映済み消費は予約消費数と所持数減算を同じTransactionで確定し、Battle終了時に成功WALの全反映を確認して未使用予約を解放する。
+- Itemの初期在庫は開戦時のCreate Snapshotで確定し、Battle内で成立した消費だけをGameServerの対戦状態へ反映する。WAL署名・耐久化失敗時は消費・Sequenceを進めない。DBへの後追い適用はReplay WorkerからEvent番号順に行う。
 - 酒場はPlayer単位のDB共有ストックを即時Transactionで更新する既存仕様のままとし、Itemの後追い方式を酒場に拡張しない。
 
 
@@ -253,3 +251,7 @@ stateDiagram-v2
 ### Replay Event Hash・応答境界の責務
 
 GameServerのGuildBattle直列Sequencerは直前の成立Event Hashと操作IDを保持し、署名済みWAL/JournalまたはDB先行COMMITが完了したEventだけを確定する。Replay WorkerがDB COMMIT結果を後追いで確認しても、既に成立したEventのIndex/Hashを変更しない。DB側は`GUILD_BATTLE_REPLAY_LOG`と`GUILD_BATTLE_REPLAY_ANCHOR`を同じTransactionで前番号から順に更新する。署名Byte列や同一Eventの媒体間重複の検証規則は[ローカルReplay記録v2](../../system/replay_local_record_encoding.md)を正本とする。
+
+## アイテム操作の実行境界
+
+Item使用の正本は`design/server/guild_battle.md`の「アイテム使用の単一Owner・低遅延確定契約」とする。`PlayerRuntimeState`の対戦内残数とCreate Snapshotを使ってBattle単位の要求順序で評価する。Join時にPrivate APIへItem予約を要求せず、Battle中のGameServerキャッシュは対象対戦内の状態だけとする。通常非出撃Eventと同じWAL耐久化後に成功し、`SaveGuildBattleItemLog`によるDB減算はReplay Workerから非同期に冪等実行する。同期ポイントはBattle Owner内のイベント順序とPrivate APIのDB Transactionだけであり、GameServerインスタンス間同期は行わない。

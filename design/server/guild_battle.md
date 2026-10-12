@@ -430,7 +430,7 @@ sequenceDiagram
         PublicAPIServer-->>Client: UseItemResponse
         par 成立済みEventを非同期でDBへ反映
             GameServer->>PrivateAPIServer: SaveGuildBattleItemLog(同じOperation ID/イベント番号)
-            PrivateAPIServer->>Database: PlayerItem残数減算とReplay保存を同一Transactionで冪等確定
+            PrivateAPIServer->>Database: Create Snapshotと使用Eventの連続性確認・PLAYER_ITEM残数減算・Replay保存を同一Transactionで冪等確定
             Database-->>PrivateAPIServer: 更新結果
             PrivateAPIServer-->>GameServer: SaveGuildBattleItemLogResponse
         end
@@ -701,7 +701,7 @@ sequenceDiagram
             PrivateAPIServer-->>GameServer: 再送結果
         end
         alt 全Recoveryレコード再送成功
-            GameServer->>GameServer: Recoveryファイル削除
+            GameServer->>GameServer: DB全件確定・Replay File反映・署名連鎖検証を確認後にRecoveryファイル削除
         else 1件以上再送失敗
             Note over GameServer: 再送不成立。検証可能な記録を保持してresolvingを維持し、CompleteGuildBattleを要求しない
         end
@@ -749,10 +749,19 @@ sequenceDiagram
 
 通常の非出撃操作はGameServerの作業状態で先に計算し、署名付きのローカルReplay WALが耐久書込み済みになってから正本状態・RequestSequenceを確定して成功Responseを返す。Private API経由のDB保存とReplay File書込は非同期Workerで行い、DBの往復を応答の条件としない。出撃と酒場等のDB Transactionが必要な操作は、それぞれのより強い固有確定条件を優先する。WALの形式・再起動検証・冪等性は`design/programming/server/logging_recovery.md`を正本とする。
 
-### 初回参加時のItem予約
+### 対戦内Item残数の初期化
 
-Preload中の`GetPlayerItems`は表示・初期資料の取得であり、他操作からの在庫を排他予約しない。**実際の`JoinGuildBattle`初回成立時に**GameServerがPrivate `ReserveGuildBattleItems(GuildBattleID,PlayerID)`を呼び、DBが未予約分を同Battleへ確保した後にだけBattle内Item使用を許可する。再接続では既存予約を再利用し、Reservationによる所持数の再増加を行わない。予約失敗でもBattleの他の機能の成否まで推測せず、Item使用は予約なしとして拒否する。
+Preloadで取得したItem情報は、開戦時の`StartGuildBattle`で現在DB値と照合した`GuildBattleInitialSnapshot`から初期化する。初回Join・再JoinにItem予約・解放・残数の再取得を伴わない。以降のItem使用はその対戦を処理する単一GameServerの状態を正本とし、当該Battleの直列キュー内でのみ更新する。使用後のDB所持数の減算は検証済みReplay Eventに基づいて非同期で確定する。
 
 ### Replay Event確定と保存媒体の扱い
 
 通常非出撃Eventは署名付きWAL耐久保存後に応答でき、DBの順次COMMITを待たない。GameServerは各Eventの媒体に依存しないEvent Hashを連鎖させる。DBはReplay行とDB確定アンカーを同一Transactionで更新し、既成立EventのIndexを変更しない。同一EventがWALとRecovery Journalに存在しても重複計上せず、署名・Hash・Operation ID・Replay内容を照合してから冪等反映する。署名対象のByte形式と境界は[ローカルReplay記録v2](../system/replay_local_record_encoding.md)に従う。
+
+## アイテム使用の単一Owner・低遅延確定契約
+
+- 各`GuildBattleID`の状態変更は割当済みの**単一GameServer Owner**だけが受理し、対戦内の要求キューを直列処理する。GameServerは**その対戦に属するPlayerのItem残数だけ**をBattle Runtimeに保持し、他GameServerとのItem在庫同期・共有キャッシュ・予約APIを設けない。Clientが送る残数やBPは正本にしない。
+- Preload時の`GetPlayerItems`は開戦用Snapshot候補を取得する。`StartGuildBattle`はCreateの`initial_snapshot.participants[].items`と**開戦時のDB在庫**を同一Transactionで確認し、一致したSnapshotだけをCreate Replayとともに確定する。不一致時は開戦を成立させず既存のPreload失敗経路に移す。Dummy PlayerのItemは空。開戦後の対戦内Item残数はCreate Snapshotを初期値とし、成功したItem Eventだけを順番に減算する。Joinは初期残数の読出しだけで、DBとの予約・更新は行わない。
+- `UseItem`では認証済み`PlayerID`・当該Battle Owner・Join状態・`RequestSequence`・許可されたItemID・対戦内残数1以上・BP回復規則を検証する。Runtimeの作業状態でItem残数を1減らしBPを更新し、`quantity_before/after`を付けたReplay Eventを発行する。署名付きWALの耐久化が完了した場合だけ状態とSequenceを確定し、**DBの応答を待たず**成功を返す。WAL失敗時は作業状態を破棄して不成立とする。重複Sequenceは二重使用を生じさせない。
+- 成功Eventの`SaveGuildBattleItemLog`は既存のReplay Workerから**非同期**に、同一Event Index・Operation IDで順序どおりPrivate APIへ送る。Private APIは当該BattleのCreate Snapshotと直前のItem Eventから`quantity_before/after`の連続性を検証し、`PLAYER_ITEM.quantity >= 1`を確認した上で、当該Player/ItemのDB残数減算とReplay Event追加を**同一Transaction**で冪等に確定する。再送による二重減算、同番号別Payload、負の在庫を拒否する。反映不能な成功Eventは検証済みWAL/Journalを保持して当該Battleの結果確定を保留する。Client成功Responseは巻き戻さない。
+- この再現段階では騎士団戦進行中・結果確定待ちのPlayerに対する、Battle Item Event**以外**の`PLAYER_ITEM`書込みはPrivate APIで拒否する。`UpdatePlayerItem`を含む全DB更新経路に同じ条件を適用し、DBへの書込権限はPrivate APIに限定する。異なるGameServer間の同期を増やすのではなく、**DB正本への競合書込みを禁止**する規則であり、GameServerは他対戦のItem情報を一切保持しない。Battle未成立・開始前の更新は許可されるが、開戦時Snapshotと食い違えば開戦を拒否する。
+- 対戦終了時は全成立済みReplay EventのDB反映（Itemの減算を含む）とReplay File整合性を確認してから既存の`CompleteGuildBattle`へ進む。未使用Itemの解放APIや追加DB減算は不要。GameServerが異常終了してデータが失われた場合の完全復旧は保証しない。署名・連鎖検証に失敗したEventから在庫を推測して減算しない。通常のItem 2種の回復量・使用条件は`specification/game/item.md`から変更しない。

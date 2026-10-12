@@ -843,3 +843,7 @@ GameServer側のチェック.
 - Responseは`provider`、`additional_authorization_required`、`provider_available`を返す。Tokenや秘密情報は返さない。
 - 運営者が選択したProviderが未実装の場合、Serverの起動を拒否する。Client側で勝手に`NONE`へフォールバックしない。
 - 認証Originのログイン/登録画面はこの値を取得して必要な入力を案内する。既存の認可コード・PKCE手順は維持する。
+
+#### Item使用時の確定・低遅延条件
+
+`UseItem`は当該騎士団戦の単一Ownerへ転送する。Clientの残数を正本として受け取らず、Ownerが開戦時Create Snapshotから更新している対戦内数量と要求順序を検証する。署名付きWALを耐久保存した後に即座に成功応答し、DB所持数の減算・Replay登録は非同期で冪等実行する。Join時のItem予約や他GameServerへの数量同期は行わない。

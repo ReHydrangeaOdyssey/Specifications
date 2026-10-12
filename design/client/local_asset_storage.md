@@ -2,7 +2,7 @@
 
 この文書は`design/client/client.md`のデータ規則を端末側の具体的な保存と更新に適用する。ユーザーが取り込む画像・音声の正本と、ゲームが自動取得する辞書/代替画像は区別する。パスはOPFSのRoot相対表記であり、Clientが実際のWeb Host filesystemに自由にアクセスできるという意味ではない。
 
-代替画像は`https://github.com/ReHydrangeaOdyssey/GameAssets/releases`から取得する。Releaseで明示されたAsset名と辞書許可を照合し、既知の検証済み画像へだけ参照を切り替える。実配布Asset名は提供側が公開する実体に合わせ、未提示の名称を固定しない。
+代替画像は`https://github.com/ReHydrangeaOdyssey/GameAssets/releases`から取得する。Releaseで明示されたAsset名・検査値と有効辞書の有無を検証し、既知の検証済み画像へだけ参照を切り替える。代替画像は通常素材と異なるClient管理物だが、ゲーム開始には有効辞書も必須とする。実配布Asset名は提供側が公開する実体に合わせ、未提示の名称を固定しない。
 
 ## Release辞書の取得・原子的更新
 
@@ -22,17 +22,16 @@
 ## キャラクター構成データ（端末内完結）
 
 - ユーザーが用意した骨格・モーション（`SpriteAnimationData`）、アトラス定義（`PlistRoot`）、参照PNGを**一組の構成セット**としてClientのアセット追加画面から選択できる。Clientでのみ検証・登録・入替・削除・再起動後復元を行い、Public API/Private API/GameServer/DBへ素材を送信・保存しない。
-- 各セットにClient内の`asset_set_id`を割り当て、読み込んだ構成のファイル参照・元ファイル名・元内容Hash・OPFS保存Pathを一組のManifestとして記録する。ManifestはClient内部の端末データでありServerとの同期仕様ではない。`SpriteAnimationData`が列挙するアトラス/PNGを参照先と照合し、セット外の任意Pathやディレクトリ脱出を禁止する。検証済みセット全体を一時領域から原子的に登録する。
+- 読み込んだ構成の参照・元ファイル名・内容Hash・保存先Pathは取込処理中に検証するが、永続Manifestは作成しない。`SpriteAnimationData`が列挙するアトラス/PNGを参照先と照合し、セット外の任意Pathやディレクトリ脱出を禁止する。検証済みの入力構成全体を一時領域で検証し、既存ファイルの退避と原子的な置換手順を用いて配置する。
 - 構成セットの登録に必要な入力は既存のProtoBufであり、名称から骨格/Movementを自動生成しない。実データから機械的に作れない`CharacterID × 向き × Action`の全件対応表を別途必須Schemaとして要求しない。ゲーム内の表示対象と使用セットはClient側の明示選択・既存素材参照で決定し、参照不能なCharacterは代替表示を行う。
 - **アセット辞書をRuntime素材使用許可の最上位規則**とする。構成セットに含まれる骨格・モーション・アトラス定義・参照PNGについても、Runtimeで使用する各ファイルの元ファイル名が有効辞書に存在し、辞書で許可されたPathに解決できなければセット全体を使用不可とする。構成セットの端末内登録だけでは使用権限を生じない。辞書登録名でのユーザー素材差替えは`config.cnf`の明示設定とClient仕様の許可Path制限に従う。セット削除時は共有PNGを他セットが参照しているか確認する。
 
 
-### 構成セットManifestと世代切替
+### 構成セットの保存・入替
 
-- OPFS `./character_sets/<asset_set_id>/generations/<generation_id>/`に1世代のManifestとセット管理メタデータを保持し、実行時に使用する素材ファイルは辞書が許可した`./assets/<path>`へ置く。`asset_set_id`/`generation_id`はClient生成の一意な不透明IDとし、PathにUser指定の相対文字列を連結しない。`./character_sets/index.json`を原子的なActive参照台帳とする。
-- 各世代の`manifest.json`はUTF-8 JSON Objectとし、`schema_version: 1`、`asset_set_id`、`generation_id`、`files`（配列）を必須とする。各File要素は`logical_id`（セット内一意）、`kind`（`animation`/`atlas`/`image`）、`original_filename`、`current_path`（辞書が許可した`./assets/<path>`）、`sha256`（小文字16進64桁）、`references`（他の`logical_id`の配列）を必須とする。`animation`は`SpriteAnimationData`、`atlas`は`PlistRoot`、`image`は参照PNGであり、参照の存在・型・一意性・到達範囲を検証する。
-- `index.json`は`schema_version: 1`、`active_sets`（`asset_set_id`から`generation_id`へのObject）を必須とする。構成セットは一時領域で全ファイルHash・ProtoBuf・画像・参照整合・辞書によるファイル名使用許可を検査し、完成世代を保存後に`index.json`を原子的に切替える。失敗時は旧Activeを維持する。再起動後はIndexから世代を復元して各実体とHashを再検証し、欠損・破損なら使用停止して旧検証済み世代へ戻す。構造不正Frameが1件でもあればセット全体を拒否する。
-- 登録・差替え・削除はClientのローカル操作で完結する。GameServer/DB/Public/Private APIへManifestを送信しない。辞書未掲載ファイルをセットに含めて保存してもRuntimeでの使用は禁止する。ローカルManifest/Indexは実行用素材ではないため辞書の列挙対象にはせず、いずれのManifestも許可済み素材ファイルの代わりにならない。
+- 独立した`manifest.json`・`index.json`や`generation_id`台帳は作らない。入力時は選択された`SpriteAnimationData`・`PlistRoot`・PNGの参照関係を**メモリ上だけで一組として**検査し、各ファイルをアセット辞書が許可する`./assets/<path>`に保存する。辞書の一致しないファイルをRuntimeには渡さない。
+- 一括取込みや差替えでは、全入力ファイルのProtoBuf・画像・参照構造・Hash・辞書許可を検証し、変更対象の旧ファイルをOPFSの一時領域へ退避した後に新ファイルを配置する。全件成功時だけ退避を削除し、中断・失敗時には既存の旧ファイルを復元する。処理中マーカーは一時領域に保持し、起動時に未完了処理を検出したらロールバックする。構成セットの永続Manifest・世代管理は必要としない。
+- 次回起動時は辞書Pathと、各ProtoBufに存在する参照から依存ファイルを再解決して再検証する。壊れたFrameや参照が1件でもあれば、その読込対象の構成一式を拒否する。存在しない全件自動対応表・Movement名を推測で補わない。Client以外のAPI/DBへ素材を送信しない。
 
 ## HCAループ指定と鍵探索キャッシュ
 

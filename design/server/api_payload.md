@@ -1425,8 +1425,6 @@ Private APIは再抽選を行わない. `GuildBattleID[]`と`Battles[]`のID集�
 
 `GetAdditionalAuthorizationConfigRequest`は空Messageとし、ログイン前の認証Origin画面がCookie・AccessTokenなしで取得できる。Responseは`provider`（`DISCORD` / `POCKETBASE` / `OTHER` / `NONE`）、`additional_authorization_required`（`provider != NONE`）、`provider_available`（選択Adapterが有効化・検証可能な場合だけ`true`）を返す。`NONE`の場合もLoginID/Passwordは必須であり、匿名ログインを認めない。Clientが方式を要求ごとに変更することはできない。
 
+### Item Event数量の意味
 
-### ReserveGuildBattleItems / ReleaseGuildBattleItems（Private）
-
-- `ReserveGuildBattleItemsRequest`: `guild_battle_id`（正の存在済みID）、`player_id`（認証済み通常PlayerID）を必須とし、`ReserveGuildBattleItemsResponse.reserved_items`は`PlayerItemData`のItemIDごとの予約済み個数を返す。参加時に一度だけ排他Transactionで確保し、同一Battle+Player再送は予約を増やさない。
-- `ReleaseGuildBattleItemsRequest`: 同じ2つのIDを持ち、該当Battleの成立Item EventがすべてDB COMMIT済みのときだけ未消費予約を解放する。応答は空Message。未確定Eventがあれば409（状態競合）として解放しない。
+`GuildBattleItemLogPayload.quantity_before`と`quantity_after`は対戦開始時Create Snapshotから導出するBattle内の数量である。後追いDB保存ではこの数値を`PLAYER_ITEM.quantity`へ直接書き込まない。Private APIはReplayの連続性・Operation IDの冪等性を検証してDB在庫を1減らす。Join時のItem予約Request/Responseは存在しない。

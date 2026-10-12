@@ -445,13 +445,11 @@ erDiagram
     ITEM ||--o{ PLAYER_ITEM : assigned
 ```
 
-### 騎士団戦Item予約の正本
+### 騎士団戦Item在庫の正本と排他境界
 
-`PLAYER_ITEM_BATTLE_RESERVATION`をDBテーブルとして追加する。複合主キーは`(guild_battle_id, player_id, item_id)`、カラムは`reserved_total`（開始時予約数、`u32`）、`consumed_committed`（後追いCOMMIT済み数、`u32`）、`released_at`（nullable timestamp）。予約中未使用個数は`reserved_total - consumed_committed`（未解放のみ）で、常に`0 <= consumed_committed <= reserved_total`とする。`PLAYER_ITEM.quantity >= SUM(active reserved_total - consumed_committed)`をPlayerID+ItemIDごとの更新Invariantとする。
+`PLAYER_ITEM`を永続在庫の正本とし、対戦専用の予約テーブルは設けない。GameServerは開戦時Create Snapshotを当該BattleのItem初期状態として保持する。`StartGuildBattle`はSnapshotに含まれる通常PlayerのItemID・数量をDBの`PLAYER_ITEM`と照合し、一致しない場合は開戦を拒否する（ダミーPlayerのItemは空）。
 
-`ReserveGuildBattleItems`は参加時に`PLAYER_ITEM`の全Item行をID昇順でLockし、各Itemの`quantity - 他Battleの有効予約残数`を当該Battleへ予約する。`(BattleID,PlayerID)`で二重参加しても同じ予約を返し、複数GameServerから同じ在庫を二重予約しない。Item使用時はBattleの未消費予約枠を超えない範囲だけ署名付きWALで即時成立させ、DBの`SaveGuildBattleItemLog`でReplay・Player在庫減算・`consumed_committed`を同一Transactionで確定する。予約枠が無い場合はItem使用を拒否し、後追いDB COMMIT待機の低遅延方針を変えない。
-
-`UpdatePlayerItem`など他のItem変更は、Active予約残数以上の所持数を維持しなければ拒否する。終了後、対応する成立EventがすべてDBへ反映済みの場合に限り未消費の予約を解放する。Owner消失・未確定Eventありの場合は憶測で解放せず、当該予約を保全する。
+対戦`in_progress`または`resolving`の参加対象Playerに対する`UpdatePlayerItem`等の**通常在庫更新**はPrivate APIで拒否し、未確定消費との競合を作らない。Battle専用の`SaveGuildBattleItemLog`だけが署名付きReplayからの検証済み使用分をDBへ反映できる。Private API以外の任意の直接書込みは許可しない。異なるGameServer間のキャッシュ同期・予約・残数共有は行わない。
 
 BP50回復薬の日次配布は現段階では実施しないため, 日次配布実績テーブル`PLAYER_ITEM_DAILY_GRANT`は新規設計の対象外とする.
 
@@ -655,7 +653,7 @@ erDiagram
 騎士団戦中のDatabase更新・ログ保存要求は同一要求を原則1回だけ再試行するが、初回送信開始から合計5秒以内にDB確定を確認できない場合はその時点でDB/NW障害としてRecovery状態へ移行し、当該Battle中はDB送信を再開しない。 通常のリプレイログ保存要求はReplay Workerから非同期送信する。出撃に限り、成功応答前に専用非同期Workerから同一Replay EventをPrivate APIへ保存し、DB COMMITの完了通知を受けてから成功を返す。騎士団戦実行スレッド自身は同期I/Oを実行しない。保存結果が不明な場合は同じ`X-Operation-ID`で照合し、DB確定済みの出撃を取り消さない。未保存を確認できた場合のみ出撃を失敗扱いにする。 Retry失敗または5秒の確定待機上限に達した場合、GameServerはDB障害状態へ移行し、 それ以降の騎士団戦中DB送信を停止して送信予定データをローカル保存する.
 ローカル保存は`/var/lib/game-server/recovery`配下のUTF-8 JSONファイルとして行う. 本番Kubernetes環境では同PathをGameServer専用Persistent Volumeへmountし, GameServer再起動後も保持する.
 Recovery記録は`guild_battle_<GuildBattleID>_<GameServerInstanceID>/event_<EventIndex>_<OperationID>.json`の不変Eventファイルとする。同名の一時ファイルを完全保存した後、renameとディレクトリ同期で確定する。ファイルには元のPrivate API名、Operation ID、Event Index、要求Payload、成立順、検査用SHA-256を保持する。検証に失敗したファイルを成立Eventとして再送しない。
-騎士団戦終了時にローカル保存データをEvent Indexおよび保存順にDatabaseへ一括再送し、全件確定後に最終結果保存を実行する。 GameServer起動時にもRecoveryディレクトリを走査するが、**終了済みGuildBattleだけ**を保存順に再送する。進行中GuildBattleのJournalは検証・保全し、Battle終了までDB送信を再開しない。 再送に失敗したEventファイルは残し、各EventのDB確定後に該当ファイルを削除できる。
+騎士団戦終了時にローカル保存データをEvent Indexおよび保存順にDatabaseへ一括再送し、全件確定後に最終結果保存を実行する。 GameServer起動時にもRecoveryディレクトリを走査するが、**終了済みGuildBattleだけ**を保存順に再送する。進行中GuildBattleのJournalは検証・保全し、Battle終了までDB送信を再開しない。 再送に失敗したEventファイルは残し、各EventのDB確定に加え、Replay Fileへの反映と署名・連鎖検証まで確認した後にだけ該当ファイルを削除できる。
 
 `CompleteGuildBattle`はこの一般規則とは別に, 初回失敗後1回だけ同一`X-Operation-ID`で再試行し, 再試行も失敗した場合はErrorLogを保存し, `DiscordNotificationEnabled=true`の場合はDiscord Botへ通知する. その後の原因調査・復旧は運営が手動で行う. 最終結果保存, Player勝敗数更新, `GUILD_BATTLE.status=completed`, 当該対戦2Guildのmembership lock解除は同一Databaseトランザクションで確定する. 同一`matching_target_date`・`matching_start_time`の全対戦が終端状態（`completed`・`canceled`・`replaced`）となった場合だけ除外Guild解除と除外一覧削除も同一トランザクションに含め, いずれか失敗時は全体をRollbackする.
 
@@ -686,5 +684,8 @@ Private API Serverは更新対象Databaseトランザクション内で`GUILD_BA
 ## Replay確定アンカーとItem後追い更新
 
 - DBの検証済み確定アンカーは`GUILD_BATTLE_REPLAY_ANCHOR.(last_committed_event_index,last_event_hash)`であり、保存媒体に依存しないEvent Hashだけを連鎖する。各Replay行の`operation_id`・`prev_event_hash`・`event_hash`は同一Transactionで確定し、ローカル署名RecordをDBアンカーの代わりとしない。署名検証鍵IDはGameServer側の検証鍵台帳で管理する。Hashまたは署名だけを正本性の唯一の根拠とはせず、DBの既存確定値と異なるEventは隔離する。
-- `SaveGuildBattleItemLog`は`GuildBattleItemLogPayload.quantity_before/quantity_after`の連続減算（1個）とEvent/Operation IDの冪等検証、`PLAYER_ITEM`の非負残数・当該Battleで予約済みの順序・Event Indexを検証して、Item在庫の減算とReplay Event保存を同一Transactionにする。GameServerのItem使用成功応答は署名付きReplay WAL耐久化後とし、本Transactionの完了は後追いでよい。処理待ちEventを含む同一Playerの在庫を別経路で同時消費して二重引落ししないよう、`PLAYER_ITEM_BATTLE_RESERVATION`の未使用予約合計を差し引いて他経路の使用可能在庫を検証する。競合・不正・署名不一致で後追い適用できない場合はWALを残して隔離し、当該GuildBattleの最終確定を禁止する。
 - `CompleteGuildBattle`前に当該Battleで成功応答済みの全WAL・Journal Eventの署名/番号/DB反映とReplay File整合性を検証する。未反映が1件でもあれば`resolving`のままにして結果を確定しない。
+
+### ItemのReplayとDB在庫の関係
+
+`GuildBattleItemLogPayload.quantity_before/after`は**Battle RuntimeのItem残数**であって、各Event時点のDB全体数量を示さない。ReplayのCreate Snapshotを初期値としてEvent Index順に検証し、同一Player/Itemの使用履歴と一致する場合に限り反映する。DB更新では`PLAYER_ITEM`行をLockして`quantity >= 1`を条件に1減算する。Replay Event行・Event Hash・Operation IDの冪等記録・所持数減算を同一Transactionで確定し、元のDB数量をReplayの`quantity_before`で上書きしない。成功応答済みでもDB反映不能ならWAL/Journalを保持し、Battle完了を保留する。

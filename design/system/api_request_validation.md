@@ -18,7 +18,7 @@ HTTP 400は構文/型/許容値の不正、401は認証不成立、403は権限�
 | `CreateGuild` / `daytime_start_time`,`nighttime_start_time` | ProtoBuf `optional`のPresence必須。列挙値0が有効なら明示0を許可 | 400（省略/列挙外） |
 | `RespondFriendRequest` / `approve` | `optional bool`を必須。明示`false`は拒否として有効 | 400（省略） |
 | `UseItem` / `player_id`,`guild_battle_id`,`request_sequence`,`item_id` | 既存ID範囲とOwner/Join/Sequence一致を要求。所持数0のときの使用は不成立。Item残数の変更はWAL受理確定後 | 400（型・範囲）、403（他人）、409（残数・順序・対戦状態） |
-| `SaveGuildBattleItemLog` / `payload`,`event_index` | Payload Message必須、Event番号は2以上、Operation ID Header必須、`quantity_before=quantity_after+1`、元残数は1以上 | 400（構造）、409（同番号異Payload/残数競合） |
+| `SaveGuildBattleItemLog` / `payload`,`event_index` | Payload必須、Event番号2以上、Operation ID必須。数量が差1で、Create Snapshotからの使用順と一致すること。DB在庫は1以上 | 400（構造）、409（同番号異Payload/在庫競合） |
 | `SaveGuildBattleSortieLog` / `payload`,`event_index` | Payload必須、Event番号2以上、Operation ID必須。受付済みの出撃と一意に照合 | 400（欠落/番号）、409（重複不整合） |
 | `SaveGuildBattleTavernRecoveryLog` / `payload`,`event_index` | Payload必須、Event番号2以上、Operation ID必須。`remaining_uses_after`は0..3でDB正本残数と照合 | 400（範囲/欠落）、409（状態競合） |
 | `CompleteGuildBattle` / 対戦ID・結果・記録 | Player/対戦ID一致、全WAL/Journal反映・署名/連鎖・Replay検証完了を要求 | 400（不正）、409（未確定Event） |
@@ -990,7 +990,8 @@ HTTP 400は構文/型/許容値の不正、401は認証不成立、403は権限�
 - 追加認可Tokenは現在選択されたProviderに応じて1系統だけを検証する。`NONE`ならTokenの存在自体を認可成立とは扱わない。未実装Adapterの構成はServerの起動時に拒否し、Clientの自己申告で変えない。
 - `RespondFriendRequest.approve`など、**明示0/falseと省略が業務上異なるフィールドだけ**はProtoBufの`optional`のPresenceも確認する。その他のRPCの完全な値域について未提示のゲームルールを一括補完することはせず、実装に採用するAPIから個別の既存Payload制約を適用する。
 
+### Item使用・保存の確定検証
 
-### Private `ReserveGuildBattleItems` / `ReleaseGuildBattleItems`
-
-- 両Requestの`guild_battle_id`・`player_id`は正整数で存在するIDを必須とする。存在しないPlayer/Battleは404、対象Battleを保持しないCallerは403、二重解放や成立イベント未反映は状態に応じて冪等成功/409とする。Proto3既定値0は無効（通常PlayerIDは0不可）。レスポンスの予約ItemIDは一意、数量は有効な非負整数で、予約データの正本はPrivate API/DBが持つ。
+- Public `UseItem`は認証済みPlayerIDと当該Battleの単一Owner・Join・RequestSequence・ItemID・Battle内数量1以上を必須とし、失敗では状態を変更しない。Client申告の残数は受け取らない。成功はWAL耐久保存後であり、DB減算の完了待ちはしない。
+- Private `SaveGuildBattleItemLog`は`quantity_before >= 1`と`quantity_after=quantity_before-1`、Create Snapshotからの同一Player/Itemの先行Item Event連続性、Event番号・Operation ID・Event Hashの一致、DB在庫1以上を同一Transactionで検証する。同一Operationの再送は同じ結果のみ返し、別内容は409を返す。
+- Private `UpdatePlayerItem`等、Battle Item Eventを介さない在庫書込みは対象Playerが`in_progress`または`resolving`の対戦に含まれる間は409を返す。予約APIは存在しない。

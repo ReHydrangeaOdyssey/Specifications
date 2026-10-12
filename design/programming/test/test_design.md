@@ -412,7 +412,7 @@ Recovery fileからの再送でも同じテストを行います。
 
 - タイトル「設定」から設定UIへ進み、配布`config.cfg`の上書き値とOPFS `config.cnf`の2つのトグルを保存・初期化できること。未登録名のアセットはoverride=trueでも使用できないこと。Hash衝突辞書に記載された候補Pathだけを明示選択できること。
 - Releaseの`asset_dictionary.json`に対して、同Releaseにある小文字SHA-256値をファイル名にした検査値AssetとのRaw Bytes照合を確認する。欠落・曖昧・不一致では旧Generationを保護する。`verify_asset_dictionary_sha256=false`で照合を省略してもSchema/Path検証を行う。
-- ユーザー構成セットManifestのHash/参照ID/原子切替と、辞書未掲載の素材がセットに含まれていてもRuntime使用できないことを確認する。
+- ユーザー構成入力のHash・ProtoBuf参照の一括検証、既存ファイルの退避・切替失敗時ロールバック、再起動時の参照再解決を検証する。永続Manifestは使用せず、辞書未掲載の素材はRuntime使用不可とする。
 - BGMの判定境界は`./assets/sound/bgm/`の大文字小文字・ディレクトリ区切りを区別し、サブフォルダは含める。
 - Replay署名Byte Encoding v1はProtoBufのRaw Payloadを変えず、JSONの順序変更で署名結果が変わらないこと、Byte改変で拒否することを検証する。
 
@@ -426,13 +426,13 @@ Recovery fileからの再送でも同じテストを行います。
 - Replay Recovery記録のPayload改変、署名/連鎖Hash不一致、DB側との同一番号異Payloadは自動適用せず隔離する。
 
 
-- Item予約はPlayerID+ItemIDのDB行Lockにより複数GuildBattleから二重に確保できず、`UpdatePlayerItem`は予約残数未満の上書きを拒否すること。Join再送で予約を増やさず、予約済みItem使用はWALで低遅延に成功し、後追いDB確定で所持数・予約消費数・Replayが同じTransactionで更新されること。未確定Eventがある間は予約解放を拒否すること。
+- Itemは開戦時のCreate Snapshotを単一Ownerの対戦内初期残数として扱い、Join再送で再取得や予約をしないこと。`UseItem`は認証・RequestSequence・ItemID・Battle残数を検証し、WAL確定後に低遅延で成功し、後追いDB Transactionで`PLAYER_ITEM`減算とReplayが一度だけ確定すること。進行中Battle対象Playerの通常`UpdatePlayerItem`は拒否すること。開戦時DB在庫とSnapshotが不一致ならBattle開始を拒否すること。
 
 ## 回答反映後の境界テスト
 
 - Recovery Replayの1件再送が失敗する場合、`CompleteGuildBattle`を発行せず`resolving`を保持すること。全件の署名・Hash鎖・Event Index・DB確定が成功した場合だけ完了要求すること。
 - 通常Eventは受付→仮状態/番号予約→署名付きWALの耐久保存→Runtime/RequestSequence確定→成功応答→DB非同期保存の順となること。WAL書込・fsync・署名/空き容量に失敗した場合、PRNG/残数/RequestSequenceとEvent番号を進めず成功応答しないこと。
-- Item使用では所持数を仮減算し、WAL確定後にのみ表示残数と成功応答を更新すること。Private APIの`SaveGuildBattleItemLog`が後追いTransactionでItem残数・Replay Eventを同時確定し、同じOperation IDのRetryで二重消費しないこと。酒場利用はDB即時Transactionのまま、Recovery中には拒否すること。
+- Item使用では対戦内Snapshotの残数を仮減算し、WAL確定後にのみ表示残数と成功応答を更新すること。`SaveGuildBattleItemLog`がSnapshotと先行Item Eventの数量連続性を再検証し、後追いTransactionでDB残数減算・Replay Eventを同時確定すること。Private APIでのRetryは同じOperation IDで二重消費しないこと。酒場利用はDB即時Transactionのまま、Recovery中には拒否すること。
 - WAL/Journal跨ぎの鍵ID変更・連鎖Anchor不一致・途中Event削除・同一番号異Payload・署名不正を検出し、DBの確定値を上書きせず隔離すること。GameServer異常終了後、未確定Battleを無条件にcompletedへ遷移しないこと。
 - BGM専用フォルダのHCAだけが音源全体ループし、その他の音源は非ループとなること。`hca_config.json`の存在有無で再生方法を変更しないこと。
 - `SpriteAnimationData`・`PlistRoot`・参照PNGの端末内セット取り込みはPublic/Private RPCを呼ばず完結すること。壊れたFrame 1件でセット全体を拒否し、独立した正常セットは維持すること。Armature重複、Skin選択、`content_scale`、Atlas省略値を個別確認すること。
@@ -448,3 +448,11 @@ Recovery fileからの再送でも同じテストを行います。
 - DBの`GUILD_BATTLE_REPLAY_LOG.(event_index,operation_id,prev_event_hash,event_hash)`と`GUILD_BATTLE_REPLAY_ANCHOR`が同一Transactionで更新されること。再送・同一番号/同一Operation IDの冪等成功と、番号欠落/異Payload拒否を検証すること。
 - v2のCanonical Byte順序・長さ・UTF-8・Event Hash・Record Hash・Ed25519署名を検証し、1byte変更・鍵世代不一致・切断・署名不正を拒否すること。DB確定済みAnchorと一致しないローカルRecordは自動DB適用しないこと。
 - 完全に失われた未耐久メモリQueueを「署名が正しい」という理由で復元できると扱わず、GameServer異常終了時の完全復元を必須にしないこと。
+
+### Item使用の単一Owner方式とゲーム開始検証
+
+- Join時にItem予約RPCが発生しないこと、GameServerが当該Battle以外のItem在庫をキャッシュしないこと、異なるGameServer間でItem残数を通信・同期しないことを検証する。
+- Create SnapshotのItem数量を開戦時DBと照合し不一致なら開始拒否。対戦中は外部の`UpdatePlayerItem`を拒否し、Item使用の連続要求をOwnerが直列処理することを検証する。Clientから在庫数やBPを改変してもGameServer結果が変わらないこと。
+- 成功したUseItemのWAL耐久後の応答と、非同期DBのReplay・在庫減算の同一Transaction／冪等なRetryを検証する。WAL失敗なら状態・Sequenceが進まず、同一Sequenceの重複は二重使用しない。DB反映不能時に最終結果を確定しないこと。
+- 有効辞書・代替画像のどちらかが欠ければゲームプレイへ入れず、タイトルの取り込み・削除等は継続できること。未取得状態の空辞書を有効辞書に偽装できないこと。
+- 構成素材の取込みは永続Manifestを要求せず、辞書に許可された既存ファイルの退避・入替・起動後復元を確認する。

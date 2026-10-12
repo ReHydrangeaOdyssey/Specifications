@@ -621,19 +621,17 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 
 #### 処理内容
 
-- 指定PlayerID・ItemIDの所持数をDatabaseへ保存する.
+- 指定PlayerID・ItemIDの所持数をDatabaseへ保存する。ただし当該Playerが`in_progress`または`resolving`の騎士団戦に含まれる場合は、Battle Item Event以外の変更を409で拒否する。
 
 #### 要求データ
 
 [API Payload](api_payload.md)の「UpdatePlayerItemRequest」を参照する.
 
-### 騎士団戦のItem予約・解放
+### 騎士団戦のItem保存制約
 
-Private `ReserveGuildBattleItems`は`guild_battle_id`と`player_id`を受け、`PLAYER_ITEM`行を排他して当該Playerの**未予約個数をすべて**当該Battleへ割り当て、ItemIDごとの予約個数を返す。初回Join時だけ呼び、同一`(BattleID,PlayerID)`の再接続では既存予約を返す（増量・二重予約しない）。他Battle・一般Item操作は未予約残数しか利用できない。通信失敗やDB障害で予約を確定できない場合、そのBattleでのItem使用を成功扱いしない。
+対戦に必要なItem初期数量はPreloadの`GetPlayerItems`から取得し、`StartGuildBattle`で開戦時DB在庫とCreate Snapshotの一致を検証する。`JoinGuildBattle`はItem予約のためのPrivate APIを呼ばない。
 
-Private `ReleaseGuildBattleItems`はBattleの成立済みItem WAL/JournalがすべてDB反映済みであることを検証して未使用予約枠を解放する。同一要求の再送は冪等。Battle/Playerに対応する予約が存在しない、Eventが未確定、あるいは他Ownerからの不正要求である場合は解放しない。Owner消失時は未回収Eventの存在を確認できるまで予約を保持し、失われた状態を推測して自動消費・自動解放しない。
-
-`UpdatePlayerItem`を含むすべてのItem数変更はPlayerID+ItemIDの行ロック下で、更新後のDB所持数が**他Battleを含む未使用予約合計以上**であることを検証してから確定する。消費がDBに反映されたときだけ予約の未使用個数を同時に1減らし、対象`PLAYER_ITEM`を1減らす。`SaveGuildBattleItemLog`と同一Transactionにする。
+`UpdatePlayerItem`等、Battle Item Event以外のItem在庫更新は、対象Playerが開戦中または結果確定待ちの騎士団戦に含まれる場合は409で拒否する。このチェックはPrivate APIのDB Transactionで行い、GameServer間の在庫同期とはしない。DBへの在庫書込みはPrivate API経由に限定する。
 
 ### Preload失敗遷移
 
@@ -923,4 +921,8 @@ GameServerのRecovery記録は専用秘密鍵を使ってEventの正規化Payloa
 
 ### Item使用ログと所持数の後追いTransaction
 
-`SaveGuildBattleItemLog`は通常のItem使用で署名付きWALに耐久化済みとなったEventを、Private APIから後追い送信する。`X-Operation-ID`とEvent Index、PlayerID、ItemID、`quantity_before`・`quantity_after`（差は1）と現在のDB確定残数を検証し、DBの`PLAYER_ITEM`更新と`GUILD_BATTLE_REPLAY_LOG`へのEvent保存を同一Transactionにまとめる。重複Operation IDは既存の確定結果だけを返し、同じEventを再消費しない。異なるPayload・DB残数競合・検証不能の場合は自動上書きせず失敗・隔離対象とする。通常のItem使用成功応答をこの後追いTransactionの完了待機にはしない。酒場は従来どおりDB同一Transactionの完了を条件とする。
+`SaveGuildBattleItemLog`はGameServerがWAL耐久化後に成立させたItem Eventの**非同期・冪等**なDB反映を行う。BattleのCreate Snapshotと先行するItem EventをEvent番号順に参照し、`quantity_before/after`の差1と当該Battle内の数量連続性を検証する。GameServerから送られた残数をDB正本へ直接代入しない。`PLAYER_ITEM`の該当行をLockし、1以上の残数確認→1減算とReplay Event追加を同一TransactionでCOMMITする。`X-Operation-ID`とEvent Hashの重複は同一内容だけ冪等成功とし、改ざん・不一致・負在庫は拒否する。既存のWAL/Journal保全・Replay確定規則を適用する。通常のItem使用ResponseはこのDB完了を待たない。酒場は従来どおりDB同一Transactionの完了を成功条件とする。
+
+### `StartGuildBattle`におけるItem初期在庫
+
+Preload結果のCreate Snapshotに含まれる通常PlayerのItem一覧がDB `PLAYER_ITEM`の開戦時数量・ItemIDと一致することを、Create Event保存と同一Transactionで確定する。食い違う場合は409で開始拒否し、GameServerはPreload失敗として既存手順に従う。`GetPlayerItems`の結果は開戦前の候補値であり、開戦後のBattle内Item状態は確定済みCreate Snapshotを使用する。

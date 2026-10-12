@@ -82,3 +82,7 @@ InitialSeedだけ保存済み, Create Replayだけ保存済み, `in_progress`だ
 - 再抽選: `RematchPreloadFailedGuildBattles`は現行どおり`preload_failed -> scheduled`とし, 再抽選済みのペアを保存する.
 
 同一枠の競合する`CompleteGuildBattle`/`CancelPreloadFailedGuildBattle`/`RetryPreloadFailedGuildBattle`は`pg_advisory_xact_lock(YYYYMMDD, GuildBattleStartTimeEnumValue)`の2つの32bitキーを使用する同一枠排他を先に取得する（`YYYYMMDD`は`matching_target_date`のJST年月日）. 排他取得後に対象行を再確認し, すべての状態更新と解除判定を行う. 再開用IDはPrivate API ServerがDatabaseの専用Sequenceから生成する. Retryの旧IDと新IDは別レコードに保持する.
+
+## 開戦・Item初期数量検証
+
+`StartGuildBattle`はCreate Eventの`GuildBattleInitialSnapshot`内の通常PlayerのItem数量・ItemID一覧と、同時点のDB `PLAYER_ITEM`行を同一Transaction内で一致確認する。不一致なら`StartGuildBattle`を確定せず、所有GameServerは既存の`MarkGuildBattlePreloadFailed`経路を用いる。開始後、当該BattleのGameServerだけがCreate Snapshotを元にItemを直列消費し、Private APIが後追い反映する。Join時のDB Item予約は行わず、終了時も未使用予約の解放は不要である。
