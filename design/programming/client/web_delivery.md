@@ -87,4 +87,6 @@ Web配布ルートに`./config.cfg`をYAMLで設置する。運営は配布フ�
 
 ## 端末側の例外設定
 
-Web配布ルートの`config.cfg`（運営側YAML）とは独立に、ユーザーが端末内OPFSの`./config.cnf`（YAML）で`verify_asset_dictionary_source`と`allow_user_asset_override`を明示設定できる。両者の初期値はそれぞれ`true`・`false`であり、設定の省略や不正時は安全側の初期値とする。Clientが静的配布ファイルをユーザー権限で上書きする経路は設けない。外部配布物の検証を無効化してもPath/Schema等の構造検証は必須とする。
+タイトルの設定画面は静的配布設定を直接編集せず、OPFSに保存した`./settings/config_cfg_override.yaml`にある端末上書きの`update_asset_dictionary`・`asset_dictionary_version`、`config.cnf`の2つのbooleanを表示・検証して原子的に保存する。辞書Hash照合OFF時の警告、設定初期化、オフライン編集を確認する。
+
+Web配布ルートの`config.cfg`（運営側YAML）とは独立に、ユーザーが端末内OPFSの`./config.cnf`（YAML）で`verify_asset_dictionary_sha256`と`allow_user_asset_override`を明示設定できる。両者の初期値はそれぞれ`true`・`false`であり、設定の省略や不正時は安全側の初期値とする。Clientが静的配布ファイルをユーザー権限で上書きする経路は設けない。SHA-256検査値Assetとの照合を無効化してもPath/Schema等の構造検証は必須とする。

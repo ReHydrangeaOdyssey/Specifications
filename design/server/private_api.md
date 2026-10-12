@@ -627,6 +627,14 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 
 [API Payload](api_payload.md)の「UpdatePlayerItemRequest」を参照する.
 
+### 騎士団戦のItem予約・解放
+
+Private `ReserveGuildBattleItems`は`guild_battle_id`と`player_id`を受け、`PLAYER_ITEM`行を排他して当該Playerの**未予約個数をすべて**当該Battleへ割り当て、ItemIDごとの予約個数を返す。初回Join時だけ呼び、同一`(BattleID,PlayerID)`の再接続では既存予約を返す（増量・二重予約しない）。他Battle・一般Item操作は未予約残数しか利用できない。通信失敗やDB障害で予約を確定できない場合、そのBattleでのItem使用を成功扱いしない。
+
+Private `ReleaseGuildBattleItems`はBattleの成立済みItem WAL/JournalがすべてDB反映済みであることを検証して未使用予約枠を解放する。同一要求の再送は冪等。Battle/Playerに対応する予約が存在しない、Eventが未確定、あるいは他Ownerからの不正要求である場合は解放しない。Owner消失時は未回収Eventの存在を確認できるまで予約を保持し、失われた状態を推測して自動消費・自動解放しない。
+
+`UpdatePlayerItem`を含むすべてのItem数変更はPlayerID+ItemIDの行ロック下で、更新後のDB所持数が**他Battleを含む未使用予約合計以上**であることを検証してから確定する。消費がDBに反映されたときだけ予約の未使用個数を同時に1減らし、対象`PLAYER_ITEM`を1減らす。`SaveGuildBattleItemLog`と同一Transactionにする。
+
 ### Preload失敗遷移
 
 #### メソッド名

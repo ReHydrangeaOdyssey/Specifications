@@ -101,7 +101,7 @@ OPFSのPNG → File / Blob → createImageBitmap() → WebGL 2 texImage2D()
 - HCAからPCMへ変換した音声をWeb Audio APIへ渡します。短いSE/ボイスでは必要に応じて全体を`AudioBuffer`へデコードして再利用します。
 - 長いBGM/ボイスはOPFSから必要な圧縮ブロックを読み, 小容量PCMバッファへ逐次デコードします。`AudioWorkletNode`へ`MessagePort`経由でPCMチャンクを供給し, `AudioWorkletProcessor`の小容量キューから再生します。
 - `AudioWorkletProcessor.process()`内でHCAデコードや大容量のメモリ確保を行いません。制御側または専用Workerが先読みし, 音声出力側と役割を分離します。
-- HCAは22,050Hzとし、暗号化されている場合は鍵キャッシュを先に試してから必要に応じて鍵探索します。ループはOPFSのBGM専用フォルダに配置されたHCAに限り音源全体を繰り返し、その他のHCAでは無効にします。`hca_config.json`は使用しません。SEの同時再生上限は5です。ステレオ2チャンネル（左・右）を再生対象とし, HCAの左右音声を保持したPCMをWeb Audio APIへ供給します。1チャンネル入力はPCMを左右に複製して出力します。ステレオの実機動作は別途検証します。長尺音声のPCM先読みは初期500ms, 残り250ms到達前に補充する暫定設定を採用し, 欠音・メモリ使用・I/O遅延から調整します。`SharedArrayBuffer`は初期実装では使用しません。
+- HCAは22,050Hzとし、暗号化されている場合は鍵キャッシュを先に試してから必要に応じて鍵探索します。ループはOPFSの`./assets/sound/bgm/`（ディレクトリ境界と大文字小文字を区別し、配下のサブディレクトリを含む）に配置されたHCAに限り音源全体を繰り返し、その他のHCAでは無効にします。`hca_config.json`は使用しません。SEの同時再生上限は5です。ステレオ2チャンネル（左・右）を再生対象とし, HCAの左右音声を保持したPCMをWeb Audio APIへ供給します。1チャンネル入力はPCMを左右に複製して出力します。ステレオの実機動作は別途検証します。長尺音声のPCM先読みは初期500ms, 残り250ms到達前に補充する暫定設定を採用し, 欠音・メモリ使用・I/O遅延から調整します。`SharedArrayBuffer`は初期実装では使用しません。
 - HCAのiPhone Safari/WASMでのコンパイル・正しい再生・ピークメモリは未検証です。`cridecoder`は検証合格を最終採用条件とする候補であり, 動作確認済みとは記載しません。
 - `cridecoder`リポジトリはMIT Licenseを掲示していますが, Client配布物に含める当該ライブラリと推移的依存ライブラリのライセンスを確認します。一方, PNG/HCAの音源・画像ファイルは各ユーザーが用意して自端末へ取り込むため, 個別素材のライセンスをClientが自動審査する機能は設けません。ユーザー持ち込み素材の権利と, Clientが配布するソフトウェア/同梱素材の権利は区別します（参照: https://github.com/seiunx-dev/cridecoder）。
 
@@ -337,3 +337,5 @@ Seedが`0`かどうかだけでランダム要素の有無を判定しません�
 ### 資産辞書・割当・HCAの正本保存方式
 
 `design/client/local_asset_storage.md`を正本とする。Release Assetは`asset_dictionary.json`を唯一の選択名とし、全件Validation後に`./cache/temp/asset_dictionary/`でGeneration切替する。未一致割当は`./cache/unknown_resouce/assignments.json`にID別に保存し、素材側の存在とHashも確認する。HCAループは保存先のBGM専用フォルダで判定し、鍵は元ファイル名と内容SHA-256の複合識別子で検証済みの値だけを原子的にキャッシュする。
+
+タイトル画面の「設定」では配布`config.cfg`の値はOPFS `./settings/config_cfg_override.yaml`による局所的な上書きとして扱い、`./config.cnf`の辞書SHA-256照合・辞書登録名のみの素材差替えをトグルで変更する。配布ファイルをUser権限で書換えない。辞書のReleaseにある検査値Asset（SHA-256小文字16進ファイル名）と`asset_dictionary.json`のRaw Bytes Hashが一致することを既定の更新条件とし、配布署名・公開鍵は用いない。

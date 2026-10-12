@@ -233,3 +233,5 @@ BP不足等の正常なゲームルール拒否は本ログへ要求単位で保
 ### Recovery記録の認証
 
 通常のSHA-256による破損検出だけでは悪意ある書換えに耐えない。GameServerは回復レコードのEvent番号・操作ID・Payload・前レコードHashを秘密鍵でEd25519署名し、読込時に公開鍵で検証する。署名鍵は記録ファイルやログに同梱しない。署名・連鎖・DB照合に失敗したEventは自動的に成功扱いしない。詳細は`design/programming/server/logging_recovery.md`を正本とする。
+
+ローカルReplay WAL/Journalの署名用Byte列と連鎖Hashは「[ローカルReplay記録v1](replay_local_record_encoding.md)」を正本とする。

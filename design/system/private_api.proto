@@ -288,6 +288,21 @@ message PlayerItemData {
   uint32 quantity = 2; // 所持数
 }
 
+// GuildBattle参加時にDB在庫を対戦単位で排他的に予約する（Public APIではない）。
+message ReserveGuildBattleItemsRequest {
+  uint64 guild_battle_id = 1;
+  uint64 player_id = 2;
+}
+message ReserveGuildBattleItemsResponse {
+  repeated PlayerItemData reserved_items = 1; // 予約確定したItemID/個数
+}
+
+message ReleaseGuildBattleItemsRequest {
+  uint64 guild_battle_id = 1;
+  uint64 player_id = 2;
+}
+message ReleaseGuildBattleItemsResponse {}
+
 message GetPlayerItemsRequest {
   uint64 player_id = 1; // 対象プレイヤーID
 }

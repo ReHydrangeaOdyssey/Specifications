@@ -107,7 +107,7 @@ IEEE-754 32bit浮動小数点として、仕様に記載された演算順を変
 - 40キャラクターと代表的エフェクトをWebGL 2で描画し, 開始10秒を除外した連続60秒の平均FPSが30以上かを測定します。GPU利用率とブラウザ全体のRAM消費は合否判定に使用せず, 可能な場合に参考値として記録します。
 - HCA→PCMデコード後のWeb Audio再生を確認します。選定候補`cridecoder`のWASMビルド, iPhone Safariにおける再生とピークメモリの合格を最終採用条件として個別検証します。
 - 短いSE・ボイスの`AudioBuffer`再利用, 長いBGM・ボイスのPCM逐次供給（`AudioWorklet` / `MessagePort`）, 長尺音声を全体PCM展開せず再生することを確認します。
-- 22,050Hzの対象HCA, BGM専用フォルダHCAの全体ループと非BGMフォルダHCAの非ループ, 左右2チャンネルのステレオ再生, SE同時最大5, 欠音・遅延を検証します。長尺音声のPCM先読み初期500ms/残量250msを用い, `AudioWorklet.process()`内でHCAデコードや大容量確保を行わないことを検証します。
+- 22,050Hzの対象HCA, `./assets/sound/bgm/`（ディレクトリ境界と大文字小文字を区別し、配下のサブディレクトリを含む）HCAの全体ループと非BGMフォルダHCAの非ループ, 左右2チャンネルのステレオ再生, SE同時最大5, 欠音・遅延を検証します。長尺音声のPCM先読み初期500ms/残量250msを用い, `AudioWorklet.process()`内でHCAデコードや大容量確保を行わないことを検証します。
 - GPUテクスチャ, デコード済みPCM, WASMヒープ, ブラウザ一時メモリを分けて観測します。iOS端末での長時間騎士団戦における強制再読込の有無を確認します。
 - CIで`cargo build --release --locked --target wasm32-unknown-unknown`を実行して非圧縮WASMサイズを確認し, 50MB超は最適化の検討契機, 500MB超はサイズ要件不合格として扱います。Client依存ライセンスの生成・同梱・表示も検証します。
 
@@ -410,15 +410,23 @@ Recovery fileからの再送でも同じテストを行います。
 - 酒場では同一Playerからの同時要求が排他され、参照だけではDB行を書き換えず、2時間補充と成立消費が同一Transactionになることを検証する。
 - `FrameData.display_index`の省略／明示0、時計回り90度格納、Characterの参照不足時の代替表示を検証する。
 
+- タイトル「設定」から設定UIへ進み、配布`config.cfg`の上書き値とOPFS `config.cnf`の2つのトグルを保存・初期化できること。未登録名のアセットはoverride=trueでも使用できないこと。Hash衝突辞書に記載された候補Pathだけを明示選択できること。
+- Releaseの`asset_dictionary.json`に対して、同Releaseにある小文字SHA-256値をファイル名にした検査値AssetとのRaw Bytes照合を確認する。欠落・曖昧・不一致では旧Generationを保護する。`verify_asset_dictionary_sha256=false`で照合を省略してもSchema/Path検証を行う。
+- ユーザー構成セットManifestのHash/参照ID/原子切替と、辞書未掲載の素材がセットに含まれていてもRuntime使用できないことを確認する。
+- BGMの判定境界は`./assets/sound/bgm/`の大文字小文字・ディレクトリ区切りを区別し、サブフォルダは含める。
+- Replay署名Byte Encoding v1はProtoBufのRaw Payloadを変えず、JSONの順序変更で署名結果が変わらないこと、Byte改変で拒否することを検証する。
+
 ### 今回確定した境界条件
 
 - `GetAdditionalAuthorizationConfig`で`DISCORD`/`POCKETBASE`/`OTHER`/`NONE`の表示を切り替え、認可Tokenの要否はServerが決める。未実装Adapter起動拒否と、Config取得失敗時に無認可へフォールバックしないことを確認する。
 - Recovery移行中の`UseTavernRecovery`は拒否され、Playerの残ストック、RequestSequence、BP、Replay Eventが変化しないことを確認する。
-- 出撃は永続化成功→Response→後処理の順、通常EventはReplayQueue登録→Response→Workerによる順序保存であることを確認する。通常Eventの署名付きReplay WAL耐久化→成功Response→DB非同期COMMITを検証する。WAL未確定Eventには成功応答を返さない。再起動後の署名・順序検証と重複適用拒否を確認する。
+- 出撃は永続化成功→Response→後処理の順、通常Eventは仮状態の評価→ReplayQueueでEvent番号とOperation IDの予約→専用Workerの署名付きWAL耐久保存完了→RuntimeとRequestSequenceの確定→成功Response→DB/Fileの非同期保存であることを確認する。通常Eventの署名付きReplay WAL耐久化→成功Response→DB非同期COMMITを検証する。WAL未確定Eventには成功応答を返さない。再起動後の署名・順序検証と重複適用拒否を確認する。
 - `asset_dictionary.json`がないRelease/複数あるRelease/不正JSON/誤Path/途中ダウンロード失敗を受けても前Generationが維持されること、ログイン失敗時も手動素材取り込みが可能なことを確認する。
 - 同名・内容違いのHCA鍵は混用されず、誤鍵キャッシュは探索へ戻す。BGMフォルダだけがループし、設定JSONの有無では挙動を変更しない。キャッシュクリアで辞書、保留割当、鍵探索キャッシュが消えることを確認する。
 - Replay Recovery記録のPayload改変、署名/連鎖Hash不一致、DB側との同一番号異Payloadは自動適用せず隔離する。
 
+
+- Item予約はPlayerID+ItemIDのDB行Lockにより複数GuildBattleから二重に確保できず、`UpdatePlayerItem`は予約残数未満の上書きを拒否すること。Join再送で予約を増やさず、予約済みItem使用はWALで低遅延に成功し、後追いDB確定で所持数・予約消費数・Replayが同じTransactionで更新されること。未確定Eventがある間は予約解放を拒否すること。
 
 ## 回答反映後の境界テスト
 
@@ -428,5 +436,5 @@ Recovery fileからの再送でも同じテストを行います。
 - WAL/Journal跨ぎの鍵ID変更・連鎖Anchor不一致・途中Event削除・同一番号異Payload・署名不正を検出し、DBの確定値を上書きせず隔離すること。GameServer異常終了後、未確定Battleを無条件にcompletedへ遷移しないこと。
 - BGM専用フォルダのHCAだけが音源全体ループし、その他の音源は非ループとなること。`hca_config.json`の存在有無で再生方法を変更しないこと。
 - `SpriteAnimationData`・`PlistRoot`・参照PNGの端末内セット取り込みはPublic/Private RPCを呼ばず完結すること。壊れたFrame 1件でセット全体を拒否し、独立した正常セットは維持すること。Armature重複、Skin選択、`content_scale`、Atlas省略値を個別確認すること。
-- ローカル`config.cnf`の既定値は検証ON・素材代替OFFであり、明示設定に限り未検証辞書とユーザー代替素材を受け入れること。未検証時でもサイズ/構造/Path検証を省略しないこと。
+- ローカル`config.cnf`の既定値は辞書SHA-256照合ON・素材代替OFFであり、明示操作でのみ照合省略・**辞書登録名に限る**素材差替えを行えること。未検証時でもサイズ/構造/Path検証を省略しないこと。
 - 表示モーションの取消済みコールバックで二重通知しないこと。`attack2`を恣意的に選ばないこと。演出引数不足時に既存戦闘結果を変更しないこと。

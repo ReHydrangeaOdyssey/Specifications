@@ -989,3 +989,8 @@ HTTP 400は構文/型/許容値の不正、401は認証不成立、403は権限�
 - `Login.client_version`は空文字を拒否してServerの要求Versionと比較し、不一致を専用Version Errorとして返す。
 - 追加認可Tokenは現在選択されたProviderに応じて1系統だけを検証する。`NONE`ならTokenの存在自体を認可成立とは扱わない。未実装Adapterの構成はServerの起動時に拒否し、Clientの自己申告で変えない。
 - `RespondFriendRequest.approve`など、**明示0/falseと省略が業務上異なるフィールドだけ**はProtoBufの`optional`のPresenceも確認する。その他のRPCの完全な値域について未提示のゲームルールを一括補完することはせず、実装に採用するAPIから個別の既存Payload制約を適用する。
+
+
+### Private `ReserveGuildBattleItems` / `ReleaseGuildBattleItems`
+
+- 両Requestの`guild_battle_id`・`player_id`は正整数で存在するIDを必須とする。存在しないPlayer/Battleは404、対象Battleを保持しないCallerは403、二重解放や成立イベント未反映は状態に応じて冪等成功/409とする。Proto3既定値0は無効（通常PlayerIDは0不可）。レスポンスの予約ItemIDは一意、数量は有効な非負整数で、予約データの正本はPrivate API/DBが持つ。

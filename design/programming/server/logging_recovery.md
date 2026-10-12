@@ -70,6 +70,8 @@ Formatは`GuildBattleReplayEnvelope`のlength-delimited Protocol Buffers列で�
 
 ## Replay復元
 
+Replayの**最終的な欠損・破損判定**は、当該Battleの署名付きWALとRecovery Journalを先に検出し、署名・連鎖Hash・Event連番・Operation ID・DB確定Anchorを検証し、検証済み未反映Eventを既存Private APIの冪等Transactionで回収した**後**に行う。検証できないローカル記録は隔離し、未署名Fileを自動的なDB正本としない。途中段階のDB/File間の欠番は「復旧待機」であり即座に最終破損とみなさない。
+
 ```mermaid
 flowchart TD
     F[Replay file] --> C[Create Event読込]
@@ -132,7 +134,9 @@ Recovery状態では、それ以降の対象GuildBattle中DB送信を停止し�
 
 ローカルJournalはEventごとのJSON不変レコードとし、`/var/lib/game-server/recovery/guild_battle_<GuildBattleID>_<InstanceID>/event_<index>_<operation-id>.json`へ保存する。一時ファイル作成→Payloadと検査用SHA-256書込→ファイル`fsync`→原子的rename→親ディレクトリ`fsync`完了を1レコードの成立境界とする。永続化が未完了なら成功応答を返さない。再起動時にはHash・Event Index・Operation ID・Payloadを検証し、未完成の一時ファイルは成立扱いしない。
 
-## 低遅延Replay WAL（通常時の非出撃Event）
+## 低遅延Replay WAL（通常時の非出撃Event）署名対象Byte列、Hash鎖の初期値、鍵世代と保存形式は「[ローカルReplay署名対象v1](../../system/replay_local_record_encoding.md)」を正本とする。JSONのキー順序やProtocol Buffersの再Serialize結果へ署名しない。
+
+
 
 GameServerはDB送信を待たずに非出撃の状態変更へ応答するため、`/var/lib/game-server/replay_wal/guild_battle_<GuildBattleID>_<InstanceID>/`にイベント単位の先行記録を持つ。専用Workerが`event_<index>_<operation-id>.json`を一時ファイルから書込み、正規Payload・Event Index・Operation ID・前記録HashをEd25519署名し、ファイル`fsync`→原子的rename→親ディレクトリ`fsync`まで完了した時点を**通常Eventの受理確定**とする。ゲームの操作スレッドはディスクI/Oを実行せず、非同期完了通知を利用する。複数Eventを1回の`fsync`で確定するGroup Commitは順序を保持する場合のみ可能とし、DB往復による待機を受付の必須条件にしない。ストレージの遅延が大きい場合はローカルI/O完了待ちが残るため、恒常的な0ms応答は保証しない。
 
@@ -193,7 +197,7 @@ CompleteGuildBattleは一般Recovery送信規則と別です。
 
 ## 異常終了後のBattle終結
 
-CoordinatorはOwnerの消失を検出し、DBのBattle状態・予定終了時刻・最後の確定Event IndexとReplay復元可否を照会する。`in_progress`を新しいOwnerへ無条件に再割当してバトルを続行しない。終了時刻超過かつ署名付きWAL/JournalとDBの整合を検証できる場合に限り、同一Battleの未反映Eventを冪等回収し、`resolving`から通常の結果確定手順へ進める責務を明示する。検証不能または操作の未確定がある場合は`resolving`に保留して自動完了せず、異常原因を確認する。引継ぎOwnerは旧Ownerと同一Battleを同時所有しない。
+Owner消失時はCoordinatorが当該Battleへの新規操作の振分けを停止し、DBに確定済みの結果・イベントを維持する。**別Instanceによる旧OwnerのVolume再Attach、進行中Battleの引継ぎ・完全再現・未保存Queueの回収は現行要件にしない。**同じGameServerの再起動で利用可能な検証済みWAL/Journalが残る場合に限り冪等回収を試みてもよい。署名やDBとの照合ができなければ自動完了せず、`resolving`または障害状態で停止する。クラッシュで失われた未確定メモリ操作は回復対象にせず、消失し得ることを運営上許容する。
 
 ## Metrics
 

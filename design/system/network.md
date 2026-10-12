@@ -124,7 +124,7 @@ flowchart TD
         k8s_api["Kubernetes API Server"]
         scale_controller["Dedicated GameServer<br/>Scale Controller"]
         game_workload["GameServer Workload<br/>replica target"]
-        game_storage[("GameServer writable volumes<br/>replay log / recovery PV")]
+        game_storage[("GameServer writable volumes<br/>replay file / WAL PV / recovery PV")]
     end
 
     subgraph DATA["Private Data Server - not Internet-facing"]
@@ -180,7 +180,7 @@ flowchart TD
 * KubernetesではNetworkPolicyを使用し, Internetから到達可能な対象をIngress/Public API Serverだけに制限する. GameServer, GuildBattleCoordinator, Private API Server, DatabaseをInternetへ直接公開しない. Discord BotはDiscordとの通信に必要な外向き通信, GameServer・GuildBattleCoordinator・Private API Serverからの運営通知受信, `AdditionalAuthorizationProvider=DISCORD`時のPrivate API Server `RevokeDiscordSessions`呼び出しだけを許可する.
 * Discord Botの本番配置先は本仕様では固定しない. Discordへ接続可能で, GameServer・GuildBattleCoordinator・Private API Serverからの運営通知を受信可能かつ必要時にPrivate API ServerへmTLS接続可能な運営管理下環境へ配置する.
 * Public API Server, GameServerおよびGuildBattleCoordinator Podはnon-root Userで実行し, privilege escalationを禁止し, Linux Capabilityをすべてdropし, `RuntimeDefault` seccompを使用する.
-* Public API Server, GameServerおよびGuildBattleCoordinator Podはroot filesystemをread-onlyとする. System/Access/Security Logは`stdout` / `stderr`へ出力し, Container RuntimeおよびNode上のログ収集Agentが非同期に収集する. 騎士団戦リプレイログ用の`./log/guild_battle`だけを必要なGameServerへ専用Writable Volumeとしてmountする. GameServerのDatabase障害時保存は`/var/lib/game-server/recovery`へmountした専用Persistent Volumeへの書き込みを許可する.
+* Public API Server, GameServerおよびGuildBattleCoordinator Podはroot filesystemをread-onlyとする. System/Access/Security Logは`stdout` / `stderr`へ出力し, Container RuntimeおよびNode上のログ収集Agentが非同期に収集する. 騎士団戦リプレイファイル用の`./log/guild_battle`をWritable Volumeへ、正常時先行記録用の`/var/lib/game-server/replay_wal`とDB障害時保存用の`/var/lib/game-server/recovery`を**相互に分離したPersistent Volume**へmountする。いずれもroot filesystemのread-only制約から除外するmount先だけを書込可能とし、GameServerのnon-root UID/GIDに最小限の読書き権限を与える。Replay FileはDB確定ログから再構築可能であり別途恒久保存を必須にしない。WAL/Journalのマウントは同じInstanceでの再起動時に既存データを引き続き参照できるものとし、他Ownerへの自動転用を保証しない。
 * Public API ServerのKubernetes ServiceAccountには, GameServer用EndpointSliceの`get`, `list`, `watch`に必要な最小権限だけを付与する.
 * GuildBattleCoordinatorのKubernetes ServiceAccountには, GameServer用EndpointSliceの`get`, `list`, `watch`に必要な最小権限だけを付与する. `GuildBattleCoordinator`は単一Instanceで稼働するため騎士団戦生成用Leader Electionは行わない.
 * GameServerは騎士団戦マッチング用Leaseを使用しない. Kubernetes APIを直接使用しないGameServerではServiceAccount Tokenを自動mountしない.

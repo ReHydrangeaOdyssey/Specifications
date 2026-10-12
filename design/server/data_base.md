@@ -445,6 +445,14 @@ erDiagram
     ITEM ||--o{ PLAYER_ITEM : assigned
 ```
 
+### 騎士団戦Item予約の正本
+
+`PLAYER_ITEM_BATTLE_RESERVATION`をDBテーブルとして追加する。複合主キーは`(guild_battle_id, player_id, item_id)`、カラムは`reserved_total`（開始時予約数、`u32`）、`consumed_committed`（後追いCOMMIT済み数、`u32`）、`released_at`（nullable timestamp）。予約中未使用個数は`reserved_total - consumed_committed`（未解放のみ）で、常に`0 <= consumed_committed <= reserved_total`とする。`PLAYER_ITEM.quantity >= SUM(active reserved_total - consumed_committed)`をPlayerID+ItemIDごとの更新Invariantとする。
+
+`ReserveGuildBattleItems`は参加時に`PLAYER_ITEM`の全Item行をID昇順でLockし、各Itemの`quantity - 他Battleの有効予約残数`を当該Battleへ予約する。`(BattleID,PlayerID)`で二重参加しても同じ予約を返し、複数GameServerから同じ在庫を二重予約しない。Item使用時はBattleの未消費予約枠を超えない範囲だけ署名付きWALで即時成立させ、DBの`SaveGuildBattleItemLog`でReplay・Player在庫減算・`consumed_committed`を同一Transactionで確定する。予約枠が無い場合はItem使用を拒否し、後追いDB COMMIT待機の低遅延方針を変えない。
+
+`UpdatePlayerItem`など他のItem変更は、Active予約残数以上の所持数を維持しなければ拒否する。終了後、対応する成立EventがすべてDBへ反映済みの場合に限り未消費の予約を解放する。Owner消失・未確定Eventありの場合は憶測で解放せず、当該予約を保全する。
+
 BP50回復薬の日次配布は現段階では実施しないため, 日次配布実績テーブル`PLAYER_ITEM_DAILY_GRANT`は新規設計の対象外とする.
 
 ### 騎士団戦専用
@@ -664,5 +672,5 @@ Private API Serverは更新対象Databaseトランザクション内で`GUILD_BA
 ## Replay確定アンカーとItem後追い更新
 
 - 騎士団戦ごとに`last_committed_event_index`、`last_record_hash`、`signing_key_id`をDBの検証済み確定アンカーとして保持する。先行Eventが確定した順に同一Transactionで更新し、WALからRecovery Journalへの切替時にも旧Anchorとの署名連鎖を維持する。Hashまたは署名だけを正本性の唯一の根拠とはしない。同じOperation ID/Indexの異Payloadを検出した場合は上書きせず隔離する。
-- `SaveGuildBattleItemLog`は`GuildBattleItemLogPayload.quantity_before/quantity_after`の連続減算（1個）とEvent/Operation IDの冪等検証、`PLAYER_ITEM`の非負残数・当該Battleで予約済みの順序・Event Indexを検証して、Item在庫の減算とReplay Event保存を同一Transactionにする。GameServerのItem使用成功応答は署名付きReplay WAL耐久化後とし、本Transactionの完了は後追いでよい。処理待ちEventを含む同一Playerの在庫を別経路で同時消費して二重引落ししないよう、同一Playerの未確定消費との排他を設ける。競合・不正・署名不一致で後追い適用できない場合はWALを残して隔離し、当該GuildBattleの最終確定を禁止する。
+- `SaveGuildBattleItemLog`は`GuildBattleItemLogPayload.quantity_before/quantity_after`の連続減算（1個）とEvent/Operation IDの冪等検証、`PLAYER_ITEM`の非負残数・当該Battleで予約済みの順序・Event Indexを検証して、Item在庫の減算とReplay Event保存を同一Transactionにする。GameServerのItem使用成功応答は署名付きReplay WAL耐久化後とし、本Transactionの完了は後追いでよい。処理待ちEventを含む同一Playerの在庫を別経路で同時消費して二重引落ししないよう、`PLAYER_ITEM_BATTLE_RESERVATION`の未使用予約合計を差し引いて他経路の使用可能在庫を検証する。競合・不正・署名不一致で後追い適用できない場合はWALを残して隔離し、当該GuildBattleの最終確定を禁止する。
 - `CompleteGuildBattle`前に当該Battleで成功応答済みの全WAL・Journal Eventの署名/番号/DB反映とReplay File整合性を検証する。未反映が1件でもあれば`resolving`のままにして結果を確定しない。

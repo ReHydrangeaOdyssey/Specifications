@@ -748,3 +748,7 @@ sequenceDiagram
 ### Replay WALと応答待機
 
 通常の非出撃操作はGameServerの作業状態で先に計算し、署名付きのローカルReplay WALが耐久書込み済みになってから正本状態・RequestSequenceを確定して成功Responseを返す。Private API経由のDB保存とReplay File書込は非同期Workerで行い、DBの往復を応答の条件としない。出撃と酒場等のDB Transactionが必要な操作は、それぞれのより強い固有確定条件を優先する。WALの形式・再起動検証・冪等性は`design/programming/server/logging_recovery.md`を正本とする。
+
+### 初回参加時のItem予約
+
+Preload中の`GetPlayerItems`は表示・初期資料の取得であり、他操作からの在庫を排他予約しない。**実際の`JoinGuildBattle`初回成立時に**GameServerがPrivate `ReserveGuildBattleItems(GuildBattleID,PlayerID)`を呼び、DBが未予約分を同Battleへ確保した後にだけBattle内Item使用を許可する。再接続では既存予約を再利用し、Reservationによる所持数の再増加を行わない。予約失敗でもBattleの他の機能の成否まで推測せず、Item使用は予約なしとして拒否する。
