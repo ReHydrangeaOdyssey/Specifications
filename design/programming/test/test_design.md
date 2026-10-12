@@ -438,3 +438,13 @@ Recovery fileからの再送でも同じテストを行います。
 - `SpriteAnimationData`・`PlistRoot`・参照PNGの端末内セット取り込みはPublic/Private RPCを呼ばず完結すること。壊れたFrame 1件でセット全体を拒否し、独立した正常セットは維持すること。Armature重複、Skin選択、`content_scale`、Atlas省略値を個別確認すること。
 - ローカル`config.cnf`の既定値は辞書SHA-256照合ON・素材代替OFFであり、明示操作でのみ照合省略・**辞書登録名に限る**素材差替えを行えること。未検証時でもサイズ/構造/Path検証を省略しないこと。
 - 表示モーションの取消済みコールバックで二重通知しないこと。`attack2`を恣意的に選ばないこと。演出引数不足時に既存戦闘結果を変更しないこと。
+
+### Replay WAL/Journal・DBの媒体非依存Event Hash検証
+
+- Create Eventの`prev_event_hash`がゼロ32byteであり、`StartGuildBattle`の初回Replay行と`GUILD_BATTLE_REPLAY_ANCHOR(1, event_hash)`が同一DB Transactionで確定すること。直後のDB先行出撃とWAL通常Eventの`event_hash`が媒体に依存せず直前のEvent Hashを連鎖すること。
+- 通常EventのWAL fsync/rename/親ディレクトリ同期完了後は、DB Workerが先行EventのCOMMIT待機中でも順序を保ち後続Eventの成立応答が可能であること。後続DB COMMITは先行DB COMMITを追い越せないこと。WAL不成立ではPRNG・RequestSequence・Event Indexを確定しないこと。
+- WAL→Journalで同一署名RecordをByteコピーしてもIndexと`event_hash`が変わらないこと。DB先行Eventの結果不明で同一Operation IDのv2記録をJournalへ残しても二重Replay/Item消費が発生しないこと。
+- 同一EventをWAL/Journal両方へ配置し、署名済みEvent Hash・Envelope・元Requestが一致すれば単一Eventとして照合されること。Record Hashだけが異なる新規署名・別内容・Operation ID衝突・Event Hash不一致は隔離すること。
+- DBの`GUILD_BATTLE_REPLAY_LOG.(event_index,operation_id,prev_event_hash,event_hash)`と`GUILD_BATTLE_REPLAY_ANCHOR`が同一Transactionで更新されること。再送・同一番号/同一Operation IDの冪等成功と、番号欠落/異Payload拒否を検証すること。
+- v2のCanonical Byte順序・長さ・UTF-8・Event Hash・Record Hash・Ed25519署名を検証し、1byte変更・鍵世代不一致・切断・署名不正を拒否すること。DB確定済みAnchorと一致しないローカルRecordは自動DB適用しないこと。
+- 完全に失われた未耐久メモリQueueを「署名が正しい」という理由で復元できると扱わず、GameServer異常終了時の完全復元を必須にしないこと。

@@ -604,7 +604,16 @@ erDiagram
         GameServerTime time
         GuildBattleReplayProcessType process_type
         uint64 event_index
+        OperationID operation_id
+        BinaryData prev_event_hash
+        BinaryData event_hash
         BinaryData payload
+    }
+
+    GUILD_BATTLE_REPLAY_ANCHOR {
+        GuildBattleID guild_battle_id PK, FK
+        uint64 last_committed_event_index
+        BinaryData last_event_hash
     }
 
     ERROR_LOG {
@@ -615,12 +624,17 @@ erDiagram
     }
 
     GUILD_BATTLE ||--o{ GUILD_BATTLE_REPLAY_LOG : has
+    GUILD_BATTLE ||--o| GUILD_BATTLE_REPLAY_ANCHOR : anchored_by
     GUILD_BATTLE ||--o{ ERROR_LOG : has_error
 ```
 
 `ERROR_LOG.guild_battle_id`はNULLを許可する. 騎士団戦自体がまだ生成されていない時間帯単位のエラーではNULLとして保存する.
 
-`GUILD_BATTLE_REPLAY_LOG.payload`には, 「[騎士団戦リプレイProtocol Buffers定義](../system/guild_battle_replay.proto)」の`GuildBattleReplayEnvelope`をProtocol BuffersでSerializeしたバイナリを`bytea`として保存する. `GUILD_BATTLE_REPLAY_LOG.process_type`は検索用の索引値とし, Serialize済みEnvelopeの`process_type`と必ず一致させる. `event_index`もEnvelope内の番号と一致させ、`UNIQUE(guild_battle_id, event_index)`を適用する。`event_index=1`をCreateとし、後続Eventは同一GuildBattleIDで欠番なく1ずつ増加する。再送で同一番号・同一Payloadなら冪等成功とし、同一番号で異なるPayloadは拒否する。GuildBattle単位で番号の発行とDB/ローカルJournalへの耐久化確定を直列管理し、先行番号が未確定のまま次番号の成功応答を返さない。
+`GUILD_BATTLE_REPLAY_LOG.payload`には, 「[騎士団戦リプレイProtocol Buffers定義](../system/guild_battle_replay.proto)」の`GuildBattleReplayEnvelope`をProtocol BuffersでSerializeしたバイナリを`bytea`として保存する. `GUILD_BATTLE_REPLAY_LOG.process_type`は検索用の索引値とし, Serialize済みEnvelopeの`process_type`と必ず一致させる. `event_index`もEnvelope内の番号と一致させ、`UNIQUE(guild_battle_id, event_index)`を適用する。`event_index=1`をCreateとし、後続Eventは同一GuildBattleIDで欠番なく1ずつ増加する。`operation_id`は`X-Operation-ID`と同じ値を保持し、`UNIQUE(guild_battle_id,operation_id)`を適用する。同一番号/Operation IDでRaw EnvelopeとEvent Hashが一致すれば冪等成功とし、異なる場合は拒否する。`prev_event_hash`・`event_hash`はいずれも32byteであり、[Event Hashと署名対象v2](../system/replay_local_record_encoding.md)の媒体非依存式で決定する。これらはReplayの署名済みローカルRecord Hashではない。
+
+`GUILD_BATTLE_REPLAY_ANCHOR`を`guild_battle_id`主キーで保持し、`last_committed_event_index`と`last_event_hash`をDB確定済みprefixの正本とする。`StartGuildBattle`のCreate Event番号1・ゼロ前Hash・`GUILD_BATTLE`の開始状態更新とAnchor `(1, create_event_hash)` は**同一Transaction**で確定する。以降のReplay保存では当該Anchor行をロックし、直前Event Index/Hashの連続性を検証してからReplay行・Operation ID冪等行・Anchorを同一Transactionで更新する。未成立の先行番号を飛ばしてDBへCOMMITしない。
+
+**成立確定**とはGameServerが成功応答可能になる確定点（通常非出撃Eventは署名付きWAL耐久保存、出撃は正常時DB COMMIT・Recovery中Journal耐久保存、酒場はDB Transaction）であり、**DB反映確定**とはPrivate APIがReplay行/AnchorをCOMMITしたことを指す。後続Eventの応答は直前Eventの**成立確定**を必要とし、通常Eventについて直前EventのDB反映確定までは要求しない。DB Workerだけが連続した番号で順にCOMMITする。
 
 
 ## 5秒のDB/NW障害判定とローカル保存
@@ -671,6 +685,6 @@ Private API Serverは更新対象Databaseトランザクション内で`GUILD_BA
 
 ## Replay確定アンカーとItem後追い更新
 
-- 騎士団戦ごとに`last_committed_event_index`、`last_record_hash`、`signing_key_id`をDBの検証済み確定アンカーとして保持する。先行Eventが確定した順に同一Transactionで更新し、WALからRecovery Journalへの切替時にも旧Anchorとの署名連鎖を維持する。Hashまたは署名だけを正本性の唯一の根拠とはしない。同じOperation ID/Indexの異Payloadを検出した場合は上書きせず隔離する。
+- DBの検証済み確定アンカーは`GUILD_BATTLE_REPLAY_ANCHOR.(last_committed_event_index,last_event_hash)`であり、保存媒体に依存しないEvent Hashだけを連鎖する。各Replay行の`operation_id`・`prev_event_hash`・`event_hash`は同一Transactionで確定し、ローカル署名RecordをDBアンカーの代わりとしない。署名検証鍵IDはGameServer側の検証鍵台帳で管理する。Hashまたは署名だけを正本性の唯一の根拠とはせず、DBの既存確定値と異なるEventは隔離する。
 - `SaveGuildBattleItemLog`は`GuildBattleItemLogPayload.quantity_before/quantity_after`の連続減算（1個）とEvent/Operation IDの冪等検証、`PLAYER_ITEM`の非負残数・当該Battleで予約済みの順序・Event Indexを検証して、Item在庫の減算とReplay Event保存を同一Transactionにする。GameServerのItem使用成功応答は署名付きReplay WAL耐久化後とし、本Transactionの完了は後追いでよい。処理待ちEventを含む同一Playerの在庫を別経路で同時消費して二重引落ししないよう、`PLAYER_ITEM_BATTLE_RESERVATION`の未使用予約合計を差し引いて他経路の使用可能在庫を検証する。競合・不正・署名不一致で後追い適用できない場合はWALを残して隔離し、当該GuildBattleの最終確定を禁止する。
 - `CompleteGuildBattle`前に当該Battleで成功応答済みの全WAL・Journal Eventの署名/番号/DB反映とReplay File整合性を検証する。未反映が1件でもあれば`resolving`のままにして結果を確定しない。

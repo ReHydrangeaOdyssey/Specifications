@@ -752,3 +752,7 @@ sequenceDiagram
 ### 初回参加時のItem予約
 
 Preload中の`GetPlayerItems`は表示・初期資料の取得であり、他操作からの在庫を排他予約しない。**実際の`JoinGuildBattle`初回成立時に**GameServerがPrivate `ReserveGuildBattleItems(GuildBattleID,PlayerID)`を呼び、DBが未予約分を同Battleへ確保した後にだけBattle内Item使用を許可する。再接続では既存予約を再利用し、Reservationによる所持数の再増加を行わない。予約失敗でもBattleの他の機能の成否まで推測せず、Item使用は予約なしとして拒否する。
+
+### Replay Event確定と保存媒体の扱い
+
+通常非出撃Eventは署名付きWAL耐久保存後に応答でき、DBの順次COMMITを待たない。GameServerは各Eventの媒体に依存しないEvent Hashを連鎖させる。DBはReplay行とDB確定アンカーを同一Transactionで更新し、既成立EventのIndexを変更しない。同一EventがWALとRecovery Journalに存在しても重複計上せず、署名・Hash・Operation ID・Replay内容を照合してから冪等反映する。署名対象のByte形式と境界は[ローカルReplay記録v2](../system/replay_local_record_encoding.md)に従う。

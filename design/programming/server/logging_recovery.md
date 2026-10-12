@@ -84,7 +84,7 @@ flowchart TD
 
 復元時は現在のDB可変値を初期状態として使用しません。
 
-Replay fileは`event_index`を1から連続する順番で検証する。欠落・重複・順序異常・末尾の不完全なlength-delimited Envelopeは、DB側の同一GuildBattleID・同一番号のEventを照合して復元可能な場合だけ復旧する。DBとFile双方に該当番号がない場合は破損扱いとし、再生しない。DBとFileの同一番号でPayloadが異なれば自動採用せず破損扱いとする。DB側にも必要なデータがなければ、当該Replayを破損データとして扱い再生しない。出撃の成功Response後のClient通信状態はServer上の成立済み操作を巻き戻す条件としない。同一出撃の重複適用は既存のRequestSequenceとOperation IDの規則に従う。
+上記のWAL/Journal検証・冪等DB回収が完了したBattleに限り、Replay fileは`event_index`を1から連続する順番で検証する。欠落・重複・順序異常・末尾の不完全なlength-delimited Envelopeは、DB側の同一GuildBattleID・同一番号のEventを照合して復元可能な場合だけ復旧する。DBとFile双方に該当番号がない場合は破損扱いとし、再生しない。DBとFileの同一番号でPayloadが異なれば自動採用せず破損扱いとする。DB側にも必要なデータがなければ、当該Replayを破損データとして扱い再生しない。出撃の成功Response後のClient通信状態はServer上の成立済み操作を巻き戻す条件としない。同一出撃の重複適用は既存のRequestSequenceとOperation IDの規則に従う。
 
 ## Credential Redaction
 
@@ -132,21 +132,25 @@ Recovery状態では、それ以降の対象GuildBattle中DB送信を停止し�
 
 同一GuildBattleの操作を単一の順序確定キューで受け付け、`event_index=1`はCreate、以降は単調連続採番する。**出撃**は従来どおりDB COMMIT（Recovery中はローカル耐久記録）確定後に成功Responseを返す。**非出撃の通常Event**は仮状態に操作を適用し、Event Index・Operation ID・Payloadを順序キューへ予約した後、**専用Workerが署名付きローカル先行ログ（Replay WAL）へ耐久化した時点でのみ正本状態・RequestSequenceを確定して応答**し、DB/File保存を非同期に進める。通常Eventの応答はDB COMMITを意味しないが、署名付きReplay WALの耐久保存完了を保証する。Workerは番号順に保存を進め、先行番号のDB保存確定前に後続番号をDBへCOMMITしない。処理スレッドはDB応答やディスクI/Oを同期実行せず、保存遅延・Queue高水位は監視し、Queue上限時だけ受付を待機する。DB障害でRecoveryに移行した後は、**新たな成立Eventの成功応答を返す前に**専用Workerが署名付きローカル記録の耐久化を完了する。各Eventの番号とOperation IDはDB・Replay File・回復レコード間で変えず、Retry/再送は冪等に照合する。非出撃の先行ログ書込みが未完了なら成功応答せず、プロセス停止時には耐久済みReplay WALを署名・連続番号で検証してDBへ冪等に反映する。DB確定前にWALを削除しない。
 
-ローカルJournalはEventごとのJSON不変レコードとし、`/var/lib/game-server/recovery/guild_battle_<GuildBattleID>_<InstanceID>/event_<index>_<operation-id>.json`へ保存する。一時ファイル作成→Payloadと検査用SHA-256書込→ファイル`fsync`→原子的rename→親ディレクトリ`fsync`完了を1レコードの成立境界とする。永続化が未完了なら成功応答を返さない。再起動時にはHash・Event Index・Operation ID・Payloadを検証し、未完成の一時ファイルは成立扱いしない。
+ローカルJournalはv2署名付きEventごとのJSON不変レコードとし、`/var/lib/game-server/recovery/guild_battle_<GuildBattleID>_<InstanceID>/event_<index>_<operation-id>.json`へ保存する。一時ファイル作成→固定したEnvelope/Request・Event Hash・Record Hash・署名書込→ファイル`fsync`→原子的rename→親ディレクトリ`fsync`完了を1レコードの成立境界とする。永続化が未完了なら成功応答を返さない。再起動時にはHash・Event Index・Operation ID・Payloadを検証し、未完成の一時ファイルは成立扱いしない。
 
-## 低遅延Replay WAL（通常時の非出撃Event）署名対象Byte列、Hash鎖の初期値、鍵世代と保存形式は「[ローカルReplay署名対象v1](../../system/replay_local_record_encoding.md)」を正本とする。JSONのキー順序やProtocol Buffersの再Serialize結果へ署名しない。
+## 低遅延Replay WAL（通常時の非出撃Event）
+
+媒体非依存のEvent Hash、Record署名対象Byte列、Hash鎖の初期値、鍵世代と保存形式は「[ローカルReplay記録とEvent Hash v2](../../system/replay_local_record_encoding.md)」を正本とする。JSONのキー順序やProtocol Buffersの再Serialize結果を署名対象にしない。
 
 
 
 GameServerはDB送信を待たずに非出撃の状態変更へ応答するため、`/var/lib/game-server/replay_wal/guild_battle_<GuildBattleID>_<InstanceID>/`にイベント単位の先行記録を持つ。専用Workerが`event_<index>_<operation-id>.json`を一時ファイルから書込み、正規Payload・Event Index・Operation ID・前記録HashをEd25519署名し、ファイル`fsync`→原子的rename→親ディレクトリ`fsync`まで完了した時点を**通常Eventの受理確定**とする。ゲームの操作スレッドはディスクI/Oを実行せず、非同期完了通知を利用する。複数Eventを1回の`fsync`で確定するGroup Commitは順序を保持する場合のみ可能とし、DB往復による待機を受付の必須条件にしない。ストレージの遅延が大きい場合はローカルI/O完了待ちが残るため、恒常的な0ms応答は保証しない。
+
+WALからJournalへ同一Eventを保全コピーするときは、`record_kind`を変更して再署名せず、署名済みv2記録をByte単位で複製する。Record Hashの違いを連鎖せず、Event Hashが同一か検証する。DBに先行COMMITしたCreate・出撃・酒場のEventも、Private APIが保存したEvent Hash/Operation IDで同じ連鎖に入れる。
 
 署名検証用鍵はRecovery記録と同じ保護鍵体系を使用する。DBの同一Operation ID/番号へのCOMMITおよびReplay File追記が確認できるまで先行記録を消去しない。起動時はReplay WALを検証し、DBの確定済みEventとPayloadまで一致したものは二重適用せず、DB未反映のものは順序・署名照合後に既存Private APIの冪等Transactionで保存する。同番号異Payload・署名/連鎖不正は自動適用せず隔離する。Recovery中の専用Journalは別Pathに置き、二重記録の有無を同一Operation IDで照合する。通常Eventも耐久先行ログが保存できない場合は不成立として扱う。
 
 ## 永続Volume・検証アンカー・状態遷移
 
 - Replay WALおよびRecovery Journalは**別ディレクトリの専用Persistent Volume**上に格納し、プロセス・Pod再起動で失われないことを前提にする。GameServer Instanceの署名秘密鍵はVolumeのログ本文には置かず、認可済み実行主体のみ参照できる別管理領域に保持する。検証公開鍵は鍵IDとともに保持し、署名後の古い鍵世代も未処理記録の検証が終わるまで残す。
-- Battleごとにイベントの`(last_committed_event_index, last_record_hash, signing_key_id)`をDB確定アンカーとして保持する。DB確定済み番号までの連鎖を検査し、WALからJournalへの移行レコードにも直前Hashと署名鍵IDを入れる。DB障害中に新しいDBアンカーを確定できない場合は最後の検証済みアンカーからの連鎖をローカルで維持し、復帰後にDB確定履歴との一致を確認する。Hashだけ、または署名だけの一致を完全性の証明として単独採用しない。
-- Eventの保存状態は`wal_durable`、`db_unknown`、`db_committed`、`file_confirmed`、`recovery_pending`として扱い、同一`(GuildBattleID,event_index,OperationID)`を全段階で追跡する。DB結果不明時は同じ操作の確定照会・許可されたRetryで判定し、WALとJournalの両方に同一Eventが存在しても新Eventを作らない。同番号異Payload、番号欠損、署名・Hash鎖不正は隔離する。
+- Battleごとに`GUILD_BATTLE_REPLAY_ANCHOR.(last_committed_event_index,last_event_hash)`をDB確定アンカーとして保持し、Replay行の`operation_id,prev_event_hash,event_hash`と照合する。**次のEventの前Hashには媒体別のRecord Hashではなく直前のEvent Hash**を使用する。WAL→Journal切替時に同一Eventを複製する場合は署名済み記録を不変のままコピーし、別Eventとして再採番・再署名しない。DB先行Eventの保存結果不明時は同じEvent Hash/Operation IDに紐付いたRequestを署名付きJournalへ保存する。署名鍵世代はRecord側で検証し、DBアンカーのEvent Hashとは別に扱う。
+- Eventの保存状態は`wal_durable`、`db_unknown`、`db_committed`、`file_confirmed`、`recovery_pending`として扱い、同一`(GuildBattleID,event_index,OperationID,event_hash)`を全段階で追跡する。状態は更新可能なWorker管理情報であり、署名済み不変Record本文を書き換えない。DB結果不明時は同じ操作の確定照会・許可されたRetryで判定する。同一EventがWALとJournalの両方に存在する場合、同じ`event_hash`だけでなく署名、Envelope Byte列と元Private Requestの一致を検証する。異なるPayload、番号欠損、署名・Event Hash鎖の不正は隔離する。
 - Volume容量上限・ファイル数上限・fsync/rename失敗では新規操作を成功扱いせず、受付にバックプレッシャーを掛ける。未検証レコードを自動削除しない。DBの同一Payload確定とReplay Fileへの反映を確認するまで対応WALを削除しない。再起動後は一時ファイルを不成立として分離し、WAL・Journal→署名/順序検証→既存DBアンカー/Operation ID照合→冪等DB追記→Replay File検証、の順で復旧する。検証不能な記録は削除・成功扱いせず隔離する。
 - Replay WALの保存要求に失敗した**未成立Event**は正本Runtime・PRNG・RequestSequenceを変更しない。直列キューは当該予約を解放し、同じ連続番号を次の**未成立**要求にだけ割り当て直す。既に成功応答済みのイベント番号は再利用しない。
 
@@ -167,11 +171,10 @@ guild_battle_<GuildBattleID>_<GameServerInstanceID>/event_<EventIndex>_<Operatio
 
 UTF-8 JSONに以下を保存します。
 
-- 元Private API名
-- `X-Operation-ID`
-- Request Payload（protobufバイト列のBase64）
-- Event Indexおよび保存順序
-- Payloadを検証するSHA-256
+- 元Private API名と固定したRequest Payload（protobuf生Byte列のBase64url）
+- `X-Operation-ID`、GuildBattleID、Event Index、保存順序
+- 固定したReplay Envelope Bytes、前Event Hash、Event Hash
+- v2の`record_kind`・署名鍵ID・Record Hash・Ed25519署名（v2形式を正本とする）
 
 本番ではPersistent Volumeへmountします。
 

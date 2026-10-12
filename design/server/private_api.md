@@ -788,7 +788,7 @@ Private `ReleaseGuildBattleItems`はBattleの成立済みItem WAL/Journalがす�
 騎士団戦中の成立した各種処理について, GameServerのReplay WorkerからPrivate API Serverへリプレイログ送信が行われる. 各論理Payloadは「[guild_battle_replay.proto](../system/guild_battle_replay.proto)」の`GuildBattleReplayEnvelope`へ変換してProtocol BuffersでSerializeし, `GUILD_BATTLE_REPLAY_LOG.payload`へバイナリ保存する.
 通常の騎士団戦要求処理スレッドはPrivate API Serverへのリプレイログ保存完了を待機しない。ただし出撃は非同期Worker経由の`SaveGuildBattleSortieLog` COMMIT完了を成功Responseの条件とする。Workerへの依頼と完了確認は非同期で行う。 処理成立時はReplay EventをReplayQueueへ追加し, Replay Workerが成立順に送信する.
 騎士団戦作成ログだけは`StartGuildBattle`のDatabaseトランザクション内で同期保存し, InitialSeed保存と`GUILD_BATTLE.status=in_progress`遷移を同時に確定する.
-ReplayQueueおよびDatabase送信失敗時の扱いは「[ログ仕様](../system/log.md)」および「騎士団戦DB送信失敗時」に従う. `SaveGuildBattle*LogRequest.event_index`は1より大きい番号を要求し、Create Eventは番号1とする。各保存処理は`(guild_battle_id,event_index)`の一意制約で同番号・同Payloadだけ冪等とし、異なるPayloadの同番号保存は拒否する。
+ReplayQueueおよびDatabase送信失敗時の扱いは「[ログ仕様](../system/log.md)」および「騎士団戦DB送信失敗時」に従う. `SaveGuildBattle*LogRequest.event_index`は1より大きい番号を要求し、Create Eventは番号1とする。各保存処理は`(guild_battle_id,event_index)`と`(guild_battle_id,operation_id)`の一意制約で同番号・同Operation ID・同Raw Envelopeのみ冪等とし、異なる組合せは拒否する。Private APIは`X-Operation-ID`、Replay Envelopeの決定的Byte列、直前の`GUILD_BATTLE_REPLAY_ANCHOR`から媒体非依存のEvent Hashを計算する。対象BattleのAnchor行をロックし、Replay行・DB Operation冪等行・Anchorの更新を1 Transactionで確定する。Createは`StartGuildBattle`内で前Hashゼロ・Event1とAnchorを同時作成する。番号が欠けるRequestは保留せず拒否し、順序はGameServerのDB Workerが制御する。Replay File/WAL/JournalのRecord Hashや署名鍵IDをDBのEvent Hashに混入しない。
 
 #### 参加
 
