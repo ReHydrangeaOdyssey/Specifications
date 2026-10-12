@@ -82,7 +82,7 @@ OPFSのPNG → File / Blob → createImageBitmap() → WebGL 2 texImage2D()
 
 ### キャラクター構成セットのClient専用取り込み
 
-アセット追加画面では辞書に登録されたPNG/HCAの実ファイルを取り込みます。`SpriteAnimationData`と`PlistRoot`はClientの描画モデルであり、ProtoBufファイルを`./assets/`に配置する操作を要求しません。構造情報の参照とPNG実体の照合・既存実ファイルの安全な差替えはClient内で完結させます。対応するゲームのPublic/Private RPCは作りません。`design/client/local_asset_storage.md`のファイル単位の取込・ロールバック規則に従い、アニメーション構造検証が失敗したセットは登録せず、既存の検証済みセットを維持します。CharacterID・Actionへの機械生成不能な対応Schemaは追加せず、明示されたユーザーの表示選択をもとに必要な参照を解決します。
+アセット追加画面では辞書に登録されたPNG/HCAの実ファイルを取り込みます。`SpriteAnimationData`と`PlistRoot`はClientの描画モデルであり、ProtoBufファイルを`./assets/`に配置する操作を要求しません。構造情報の参照とPNG実体の照合・既存実ファイルの安全な差替えはClient内で完結させます。対応するゲームのPublic/Private RPCは作りません。`design/client/local_asset_storage.md`のファイル単位の取込・ロールバック規則に従い、アニメーション構造検証が失敗したセットは登録せず、既存の検証済みセットを維持します。CharacterID・Actionへの機械生成不能な対応Schemaは追加しません。構造情報はClientが起動時に利用できるモデルまたはユーザーが当該セッションへ提供し検証済みのモデルから参照し、`./assets/`のProtoBuf実体を要求しません。ユーザーの明示選択はCharacterID/向き→構造モデル参照/Armatureの必要分だけ`./settings/character_display_selections.json`に原子的に保存し、再起動時にはモデルと辞書許可PNGを照合します。参照先を再読込できない場合は選択を使用せず代替画像とします。
 
 ### 表示モーション制御の実装詳細
 
@@ -118,9 +118,9 @@ OPFSのPNG → File / Blob → createImageBitmap() → WebGL 2 texImage2D()
 - OPFSの基本構造は`./game_info.json`（現在・前回のバージョン）, `./assets/<something>`, `./cache/<something>`とします。通常のアセットPathは維持し, 配置変更が必要なバージョンでだけ`game_info.json`を照合して差分移行を実行します。`game_info.json`の`version`と`previous_version`は`design/client/client.md`で定義したu32 3要素形式で検証し、不正値は初期データに再生成します。必要な差分処理でエラーがなければ更新成功と判定します。**個別の取込中断**は自動再開しません。一方、Version差分移行が中断した場合はマーカーを検出して次回起動時にその移行を最初から自動再実行します。
 - OPFSでは非同期APIと`FileSystemSyncAccessHandle`を利用可能な処理で選択します。非同期のほうが効率的な処理には非同期APIを使い, 同期APIはWorker内でのアクセスに限定します。用途別の性能・互換性測定は継続します。
 - 圧縮HCAファイル全体と全体PCMを同時に常駐させません。デコード済みPCM, GPU資源, WASMメモリは用途別に管理し, 不要な`AudioBuffer`の参照を解除します。
-- 取り込みはまず`./cache/temp/user_impoert/`で行います。辞書の第1キーは拡張子付き元ファイル名の完全一致とし、エントリの`path`が非空なら一意Pathへ、空なら内容SHA-256で`paths` Objectの対応Pathを選びます。辞書一致時だけ`./assets/`へ移し、不一致は`./cache/unknown_resouce/`へ保留します。ユーザーは区分「BGM」「SE」「Voice」「Character」「SD Character」「Character Icon」を指定でき、Characterでは対象IDを記録しますが、辞書不一致のままRuntimeでは使用しません。元ファイル名は照合用に保存し、一意IDによる強制改名はしません。既存Pathの上書きはユーザー確認を要し、一括上書き/キャンセルも実装します。
+- 取り込みはまず`./cache/temp/user_impoert/`で行います。辞書の第1キーは拡張子付き元ファイル名の完全一致とし、エントリの`path`が非空なら一意Pathへ、空なら内容SHA-256で`paths` Objectの対応Pathを選びます。辞書一致時だけ`./assets/`へ移し、不一致は`./cache/unknown_resouce/`へ保留します。ユーザーは区分「BGM」「SE」「Voice」「Character」「SD Character」「Character Icon」を指定でき、Characterでは対象IDを記録しますが、辞書不一致のままRuntimeでは使用しません。元ファイル名は照合用に保存し、一意IDによる強制改名はしません。既存Pathを異なる内容に差し替える場合は`allow_user_asset_override=true`とユーザー確認の両方が必要であり、一括上書き/キャンセルも実装します。設定OFFでも辞書一致の未配置Pathへの新規取込みは可能です。
 - PNG/HCAは辞書Pathに基づきOPFSの`./assets/`へ保存・復元します。タイトル画面からのアセット削除では任意の素材を個別・一括で削除できます。自動的な容量調整削除はせず, 容量不足時はゲームを利用不可にして削除操作を有効にします。キャッシュクリアはVersion移行・辞書差分退避・構成素材入替の処理中は拒否し、それ以外は`./cache/`のみを対象とします。辞書形式は`design/client/client.md`で確定しており、取得するRelease Asset名は`asset_dictionary.json`に固定します。辞書保留素材は`./cache/unknown_resouce/`、取込一時領域は`./cache/temp/user_impoert/`です。
-- 辞書Generation更新時は旧辞書と新辞書の全Pathを照合し、新辞書で不要になった既存ファイルを`./cache/obsolete_assets/`へ退避します。退避とActive辞書切替は中断マーカーとロールバックを備え、処理中はユーザー操作・キャッシュクリアを無効化します。配布辞書の`./assets/`はPath値の一部であり、保存時に追加の接頭辞を付けません。
+- 辞書Generation更新時はPath集合だけでなくPathに対応する元名と内容Hash条件を比較し、Pathが共通でも新辞書に不適合な実ファイルは`./cache/obsolete_assets/`へ退避します。内容Hash条件のあるエントリはバイト列を再計算して照合し、`path`一意では配布元Hashを架空に検証しません。退避とActive辞書切替は中断マーカーとロールバックを備え、処理中はユーザー操作・キャッシュクリアを無効化します。配布辞書の`./assets/`はPath値の一部であり、保存時に追加の接頭辞を付けません。
 
 ### 依存・ビルド・検証条件
 
@@ -132,7 +132,7 @@ OPFSのPNG → File / Blob → createImageBitmap() → WebGL 2 texImage2D()
 
 ## ログイン・サーバー未接続時
 
-- ログイン不可またはServer未接続の場合, Server通信が必須の処理のみを無効にし, ローカルで成立する機能を維持します。タイトル・ホーム間の遷移, アセットの追加・削除, キャッシュクリア, クレジット画面の表示と戻る操作は, Server通信の有無で制限しません。
+- ログイン不可またはServer未接続の場合, Server通信が必須の処理のみを無効にし, ローカルで成立する機能を維持します。有効辞書と検証済み代替画像の両方が揃っている場合のタイトル・ホーム間の遷移、アセットの追加・削除、キャッシュクリア、クレジット画面の表示と戻る操作はServer通信の有無で制限しません。開始前検査が失敗した場合はホームへの遷移だけ拒否し、ローカル操作は維持します。
 - Client各機能の利用可否は, Server通信・認証が必要かどうかと, OPFS等の必要なブラウザ機能の状態によって判定します。容量不足によるゲーム操作制限時もアセット削除を可能とします。
 - Server接続と必要な認証が復帰した場合は, Server通信を必要とする機能も使用可能に戻します。
 - Serverを正本とする処理の状態や戦闘結果は、未接続時のClientだけで確定しません。
@@ -322,7 +322,7 @@ Seedが`0`かどうかだけでランダム要素の有無を判定しません�
 
 1. ユーザー指定ファイルを拡張子/実データ型で検証する。元ファイル名は改名・Unicode正規化せず照合メタデータへ保持する。
 2. `./cache/temp/user_impoert/`に一時保存し、辞書が有効なら`filename`の一致→`path`非空なら直接Path使用／空なら内容SHA-256で`paths` Object照合を実行する。
-3. 一致かつ辞書Pathが`./assets/`から始まる安全な完全Pathである場合は確認済みの上書き方針に従い確定保存する。不一致は`./cache/unknown_resouce/`へ移し、区分・対象ID・元名・保留Pathの割当情報を保存するがRuntimeへ渡さない。
+3. 一致かつ辞書Pathが`./assets/`から始まる安全な完全Pathである場合は、未配置なら通常取込み、同じバイト列なら変更なし、既存内容と異なるなら設定ONと明示確認がある場合のみ確定保存する。不一致は`./cache/unknown_resouce/`へ移し、区分・対象ID・元名・保留Pathの割当情報を保存するがRuntimeへ渡さない。
 4. キャッシュクリアは`./cache/`全体を消すため、取込途中および辞書未一致の保留素材は失われる。辞書一致済み`./assets/`は残す。Version移行中は別途保護する。
 5. ログイン成功時に`./config.cfg`（YAML）を読み、`update_asset_dictionary=true`ならRelease APIから最新または`asset_dictionary_version`で指定したtagを取得する。具体的Assetを一意に選択できない場合は更新失敗として扱う。初回失敗時は1回Retryし、それでも失敗なら保存済み旧辞書へ戻す。
 

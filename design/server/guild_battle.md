@@ -662,7 +662,7 @@ DB障害発生状態では, それ以降の騎士団戦中Database送信を行�
 保存形式は`guild_battle_<GuildBattleID>_<InstanceID>/event_<EventIndex>_<OperationID>.json`の不変Eventファイルとする。Eventごとに要求、Operation ID、番号、検査用Hashを保持し、一時ファイル→fsync→atomic rename→ディレクトリfsyncで確定する。
 ローカルファイルはGameServer再起動後も保持する.
 騎士団戦終了時に当該BattleのローカルEventを番号順に再送する。GameServer起動時は終了済みBattleのみ再送し、進行中Battleの記録は保全して終了時までDB送信を再開しない。
-再送中に1件でも失敗した場合はローカルファイルを残し, 全件の再送に成功した場合だけ対応するローカルファイルを削除する.
+再送中に失敗したローカル記録は残す。DB再送が全件成功しても、該当EventのReplay File反映とv2署名・連鎖検証まで完了する前はファイルを削除しない。DB確定済みでFileのみ未反映ならDB正本から補修・照合し、条件成立後にだけ該当レコードを削除する。
 
 騎士団戦最終結果の保存は下記終了シーケンスの専用規則を使用する.
 

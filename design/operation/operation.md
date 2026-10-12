@@ -15,7 +15,7 @@
 * 運営判断前に対象`GuildBattleID`, GuildID, 状態, Error Code, GameServerInstanceIDを確認する.
 * 通常の復旧ではDatabaseを直接更新しない.
 * 仕様で定義された運営APIまたはCoordinator操作を優先する.
-* Recoveryファイルを手動削除しない. Databaseへの再送が全件成功した場合だけ削除する.
+* Recoveryファイルを手動削除しない。該当EventのDB冪等COMMIT、Replay Fileへの反映、v2署名・Event Hash連鎖の検証が**すべて確認できた場合だけ**該当レコードを削除できる。DBへ反映済みでもReplay File未反映なら、DB正本からFileを補修して照合するまで保持する。
 * Credential, Token, Password, mTLS秘密鍵を運営記録へ貼り付けない.
 * 手動対応を行った場合は対象ID, 実施時刻, 原因, 実施操作, 結果を簡単な運営記録へ残す.
 
@@ -175,8 +175,7 @@ guild_battle_<GuildBattleID>_<GameServerInstanceID>/event_<EventIndex>_<Operatio
 * 当該GuildBattle終了時.
 * GameServer起動時は終了済みBattleのみ再送する。進行中Battleのデータは検証・保全し、そのBattleの終了までDB送信を再開しない。
 
-全Record成功時だけファイルを削除する.
-1件でも失敗した場合はファイルを残す.
+各RecordのDB冪等反映・Replay Fileへの反映・v2署名/連鎖検証がすべて完了したときだけ、その**該当Record**を削除する。DBへの再送が全件成功してもReplay Fileが未反映のRecordは保持し、DB正本からFileを再構築・照合後に削除できる。検証失敗・再送失敗・照合不能のRecordは削除せず隔離または保留する。
 
 ### 運営確認
 

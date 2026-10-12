@@ -153,7 +153,7 @@ Replay Queueが満杯の場合だけ、Replayを破棄せず空きができる�
 
 起動時に`/var/lib/game-server/recovery`を走査します。
 
-`guild_battle_<GuildBattleID>_<GameServerInstanceID>/event_<EventIndex>_<OperationID>.json`を検出したら、HashとEvent番号を検証します。起動時には終了済みBattleだけを同一`X-Operation-ID`で順に再送し、DB確定済みEventを削除します。進行中Battleは保全のみ実施します。
+`guild_battle_<GuildBattleID>_<GameServerInstanceID>/event_<EventIndex>_<OperationID>.json`を検出したら、v2署名・連鎖Hash・Event番号・Operation IDを検証します。起動時には終了済みBattleだけを同一`X-Operation-ID`で順に再送します。**DB確定だけでは削除せず**、Replay File反映とv2署名・連鎖検証も照合できた該当Recordだけ削除します。進行中Battleは保全のみ実施します。
 
 Recoveryファイルの再送とGameServerが`ready`になる厳密な前後関係は現仕様に明示されていないため、本設計では追加しません。
 

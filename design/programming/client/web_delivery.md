@@ -14,7 +14,7 @@ Rust/WASM製Web Clientの静的配布を定義する。
 ## 認証Callbackと配布設定
 
 - GitHub Pages公開成果物の`/auth/callback/index.html`にClient起動用HTMLを配置し、直接アクセス時にもCode交換処理を起動する。
-- 静的設定`public_api_origin`は単一のHTTPS Origin文字列のみを許可し、Path・Query・Fragmentや資格情報付きURLを拒否する。未設定時はローカル機能のみを提供する。
+- 静的設定`public_api_origin`は**実配備先が確定した時だけ**指定する単一のHTTPS Origin文字列とし、Path・Query・Fragmentや資格情報付きURLを拒否する。仮のホスト名を埋め込まず、未設定時はローカル機能のみを提供する。設定する際はPublic API側の許可Client Origin・CORS、認証Callback URI、CookieのSameSite/Domain/Host条件を一括照合する。
 - Public APIと認証Originは同一とし、`/auth/authorize`の画面はPublic API ServerがHTTPSで配信する。
 
 ## ビルドと公開

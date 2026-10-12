@@ -36,6 +36,6 @@
 
 ## 実体確定時のみ埋める運用値
 
-- GameAssetsの代替画像は実ReleaseにAssetが公開された時点で、論理代替画像とRelease tag・Asset名・検証情報を照合して設定する。未公開の名前を仕様へ仮置きしない。
-- Public APIのHTTPS Originは配備先が確定した時点でClient/API/認証Callback/CORS/Cookie設定へ同じ実値を反映する。仮のドメインは設定しない。
+- GameAssetsの代替画像は実ReleaseにAssetが公開された時点で、**論理代替画像ID→Release tag→実Asset名→検証用情報**を配布設定で一意に対応付け、実体と照合してからゲーム開始条件の検証対象へ登録する。未公開の名前・tag・URLを仕様へ仮置きしない。公開前または取得失敗時には未検証画像を有効とせず既存のゲーム開始エラーを表示する。
+- Public APIのHTTPS Originは**配備先確定時のみ**静的設定の`public_api_origin`へ登録し、Client接続先・Public API側の許可Client Origin/CORS・認証Callback URI・CookieのHost/SameSite/Domain設定を同じ環境で照合する。仮のドメインを設定しない。未設定中はClientのローカル機能だけを提供する。
 - アセット辞書のPathは生成側がOPFS Root相対`./assets/`始まりとして出力する。Clientの二重連結はしない。辞書更新時の不要素材はcache退避する。

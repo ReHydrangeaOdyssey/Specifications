@@ -152,6 +152,7 @@ WALからJournalへ同一Eventを保全コピーするときは、`record_kind`�
 - Battleごとに`GUILD_BATTLE_REPLAY_ANCHOR.(last_committed_event_index,last_event_hash)`をDB確定アンカーとして保持し、Replay行の`operation_id,prev_event_hash,event_hash`と照合する。**次のEventの前Hashには媒体別のRecord Hashではなく直前のEvent Hash**を使用する。WAL→Journal切替時に同一Eventを複製する場合は署名済み記録を不変のままコピーし、別Eventとして再採番・再署名しない。DB先行Eventの保存結果不明時は同じEvent Hash/Operation IDに紐付いたRequestを署名付きJournalへ保存する。署名鍵世代はRecord側で検証し、DBアンカーのEvent Hashとは別に扱う。
 - Eventの保存状態は`wal_durable`、`db_unknown`、`db_committed`、`file_confirmed`、`recovery_pending`として扱い、同一`(GuildBattleID,event_index,OperationID,event_hash)`を全段階で追跡する。状態は更新可能なWorker管理情報であり、署名済み不変Record本文を書き換えない。DB結果不明時は同じ操作の確定照会・許可されたRetryで判定する。同一EventがWALとJournalの両方に存在する場合、同じ`event_hash`だけでなく署名、Envelope Byte列と元Private Requestの一致を検証する。異なるPayload、番号欠損、署名・Event Hash鎖の不正は隔離する。
 - Volume容量上限・ファイル数上限・fsync/rename失敗では新規操作を成功扱いせず、受付にバックプレッシャーを掛ける。未検証レコードを自動削除しない。DBの同一Payload確定とReplay Fileへの反映を確認するまで対応WALを削除しない。再起動後は一時ファイルを不成立として分離し、WAL・Journal→署名/順序検証→既存DBアンカー/Operation ID照合→冪等DB追記→Replay File検証、の順で復旧する。検証不能な記録は削除・成功扱いせず隔離する。
+- Recovery Journalも対応WALと同じく、**該当EventのDB冪等確定・Replay File反映確認・v2の署名/連鎖検証の全完了**まで保持する。DBのみ確定してFileが欠ける場合はDB正本からFileを補修・照合してから該当レコードを削除する。全件再送成功という事実だけではローカル先行記録を消去しない。
 - Replay WALの保存要求に失敗した**未成立Event**は正本Runtime・PRNG・RequestSequenceを変更しない。直列キューは当該予約を解放し、同じ連続番号を次の**未成立**要求にだけ割り当て直す。既に成功応答済みのイベント番号は再利用しない。
 
 
@@ -184,7 +185,7 @@ UTF-8 JSONに以下を保存します。
 
 - 保存済みOperation IDを変更しません。
 - 1件でも失敗した場合、fileを残します。
-- 全件成功した場合だけfileを削除します。
+- 全件DB再送成功**だけ**ではfileを削除しません。対応EventのDB冪等確定、Replay File反映およびv2署名・連鎖の照合をすべて確認できた該当Recordのみ削除します。DB先行でFileが欠けた場合はDB正本から修復・確認後に削除します。
 
 Recovery file容量・file件数の仕様に記載された推奨値は監視・運用Configurationとして扱います。
 
