@@ -14,8 +14,8 @@ HTTP 400は構文/型/許容値の不正、401は認証不成立、403は権限�
 | RPC / Field | Presence・許容値 | 不正・衝突時 |
 |---|---|---|
 | `GetAdditionalAuthorizationConfig` / 空Request | Message Body必須、Credential不要 | HTTP 400 |
-| `CreateAccount`・`Login` / `login_id`,`password` | 空文字不可。認可Tokenは選択中Providerの契約に従い、`NONE`なら追加Token不要 | 400（形式）、401（認証） |
-| `CreateGuild` / `daytime_start_time`,`nighttime_start_time` | ProtoBuf `optional`のPresence必須。列挙値0が有効なら明示0を許可 | 400（省略/列挙外） |
+| `CreateAccount`・`Login` / `login_id`,`password` | `login_id`: ASCII英数字と `._-`、3～64文字・大文字小文字を区別。`password`: 非空。認可Tokenは選択中Providerの契約に従い、`NONE`なら追加Token不要 | 400（形式）、401（認証） |
+| `CreateGuild` / `guild_name`,`daytime_start_time`,`nighttime_start_time` | `guild_name`: UTF-8で1～10文字（重複可）。昼夜はProtoBuf `optional`のPresence必須。定義済み列挙値0が有効なら明示0を許可 | 400（省略/列挙外） |
 | `RespondFriendRequest` / `approve` | `optional bool`を必須。明示`false`は拒否として有効 | 400（省略） |
 | `UseItem` / `player_id`,`guild_battle_id`,`request_sequence`,`item_id` | 既存ID範囲とOwner/Join/Sequence一致を要求。所持数0のときの使用は不成立。Item残数の変更はWAL受理確定後 | 400（型・範囲）、403（他人）、409（残数・順序・対戦状態） |
 | `SaveGuildBattleItemLog` / `payload`,`event_index` | Payload必須、Event番号2以上、Operation ID必須。数量が差1で、Create Snapshotからの使用順と一致すること。DB在庫は1以上 | 400（構造）、409（同番号異Payload/在庫競合） |
@@ -40,9 +40,9 @@ HTTP 400は構文/型/許容値の不正、401は認証不成立、403は権限�
 
 | Field | Wire型 | Presence/必須性 | 有効値/制限 | 不正時 |
 |---|---|---|---|---|
-| `login_id` | `string`（1） | 非空を要求する場合は空文字/空bytesを拒否 | UTF-8/Token/Header/Sizeなど既存Payload制約 | 400:型/長さ不正、401:認証失敗 |
+| `login_id` | `string`（1） | 必須、3～64文字（Proto3空文字は拒否） | ASCII英数字および`._-`のみ。大小文字を区別 | 400:文字/長さ不正、401:認証失敗 |
 | `password` | `string`（2） | 空文字禁止、長さ/形式は既存認証仕様 | UTF-8/Token/Header/Sizeなど既存Payload制約 | 400:形式不正、401:認証不成立 |
-| `user_name` | `string`（3） | 非空を要求する場合は空文字/空bytesを拒否 | UTF-8/Token/Header/Sizeなど既存Payload制約 | 400:型/長さ不正、401:認証失敗 |
+| `user_name` | `string`（3） | 必須、空文字を拒否 | 既存UserName/Payload制約に従う（未定義の文字上限は設けない） | 400:空値/既存制約違反 |
 | `discord_authorization_token` | `string`（4） | `DISCORD`のとき必須。それ以外では省略可 | UTF-8/Token/Header/Sizeなど既存Payload制約 | 401:認証不正、400:形式不正 |
 | `additional_authorization_token` | `string`（5） | `POCKETBASE`等の非Discord追加認可で必須、`NONE`では省略可 | 検証Adapterが検証したTokenのみ有効 | 401:認可不成立、400:形式不正 |
 
@@ -50,9 +50,9 @@ HTTP 400は構文/型/許容値の不正、401は認証不成立、403は権限�
 
 | Field | Wire型 | Presence/必須性 | 有効値/制限 | 不正時 |
 |---|---|---|---|---|
-| `login_id` | `string`（1） | 非空を要求する場合は空文字/空bytesを拒否 | UTF-8/Token/Header/Sizeなど既存Payload制約 | 400:型/長さ不正、401:認証失敗 |
+| `login_id` | `string`（1） | 必須、3～64文字（Proto3空文字は拒否） | ASCII英数字および`._-`のみ。大小文字を区別 | 400:文字/長さ不正、401:認証失敗 |
 | `password` | `string`（2） | 空文字禁止、長さ/形式は既存認証仕様 | UTF-8/Token/Header/Sizeなど既存Payload制約 | 400:形式不正、401:認証不成立 |
-| `client_version` | `string`（3） | 非空を要求する場合は空文字/空bytesを拒否 | UTF-8/Token/Header/Sizeなど既存Payload制約 | 400:型/長さ不正、401:認証失敗 |
+| `client_version` | `string`（3） | 必須、空文字不可 | Server指定のRequiredVersionと一致 | 400:空値、既存のClientVersionMismatch Error:不一致 |
 | `discord_authorization_token` | `string`（4） | `DISCORD`のとき必須。それ以外では省略可 | UTF-8/Token/Header/Sizeなど既存Payload制約 | 401:認証不正、400:形式不正 |
 | `additional_authorization_token` | `string`（5） | `POCKETBASE`等の非Discord追加認可で必須、`NONE`では省略可 | 検証Adapterが検証したTokenのみ有効 | 401:認可不成立、400:形式不正 |
 
@@ -74,7 +74,7 @@ HTTP 400は構文/型/許容値の不正、401は認証不成立、403は権限�
 |---|---|---|---|---|
 | `access_token` | `string`（1） | 未設定の認証情報は拒否 | UTF-8/Token/Header/Sizeなど既存Payload制約 | 401:認証不正、400:形式不正 |
 | `player_id` | `uint64`（2） | ID/Sequence/Amountの業務無効値を検証（0は用途に応じる） | 整数型範囲 + 予約値・既存Payload上下限 | 400:無効なID/範囲、409:状態競合 |
-| `guild_name` | `string`（3） | 非空を要求する場合は空文字/空bytesを拒否 | UTF-8/Token/Header/Sizeなど既存Payload制約 | 400:型/長さ不正、401:認証失敗 |
+| `guild_name` | `string`（3） | 必須、空文字不可 | UTF-8で最大10文字、重複可 | 400/API_ERROR_INVALID_GUILD_NAME |
 | `daytime_start_time` | `optional GuildBattleStartTime`（4） | Presence必須（`has_`で確認） | 型の値域 + 既存Payload制約 | 400:省略/無効値 |
 | `nighttime_start_time` | `optional GuildBattleStartTime`（5） | Presence必須（`has_`で確認） | 型の値域 + 既存Payload制約 | 400:省略/無効値 |
 
@@ -144,7 +144,7 @@ HTTP 400は構文/型/許容値の不正、401は認証不成立、403は権限�
 |---|---|---|---|---|
 | `access_token` | `string`（1） | 未設定の認証情報は拒否 | UTF-8/Token/Header/Sizeなど既存Payload制約 | 401:認証不正、400:形式不正 |
 | `player_id` | `uint64`（2） | ID/Sequence/Amountの業務無効値を検証（0は用途に応じる） | 整数型範囲 + 予約値・既存Payload上下限 | 400:無効なID/範囲、409:状態競合 |
-| `client_version` | `string`（3） | 非空を要求する場合は空文字/空bytesを拒否 | UTF-8/Token/Header/Sizeなど既存Payload制約 | 400:型/長さ不正、401:認証失敗 |
+| `client_version` | `string`（3） | 必須、空文字不可 | Server指定のRequiredVersionと一致 | 400:空値、既存のClientVersionMismatch Error:不一致 |
 | `mode` | `optional ArenaMode`（4） | Presence必須（`has_`で確認） | 型の値域 + 既存Payload制約 | 400:省略/無効値 |
 | `opponent_id` | `uint64`（5） | ID/Sequence/Amountの業務無効値を検証（0は用途に応じる） | 整数型範囲 + 予約値・既存Payload上下限 | 400:無効なID/範囲、409:状態競合 |
 | `local_formation_id` | `uint32`（6） | ID/Sequence/Amountの業務無効値を検証（0は用途に応じる） | 整数型範囲 + 予約値・既存Payload上下限 | 400:無効なID/範囲、409:状態競合 |
@@ -165,7 +165,7 @@ HTTP 400は構文/型/許容値の不正、401は認証不成立、403は権限�
 |---|---|---|---|---|
 | `access_token` | `string`（1） | 未設定の認証情報は拒否 | UTF-8/Token/Header/Sizeなど既存Payload制約 | 401:認証不正、400:形式不正 |
 | `player_id` | `uint64`（2） | ID/Sequence/Amountの業務無効値を検証（0は用途に応じる） | 整数型範囲 + 予約値・既存Payload上下限 | 400:無効なID/範囲、409:状態競合 |
-| `client_version` | `string`（3） | 非空を要求する場合は空文字/空bytesを拒否 | UTF-8/Token/Header/Sizeなど既存Payload制約 | 400:型/長さ不正、401:認証失敗 |
+| `client_version` | `string`（3） | 必須、空文字不可 | Server指定のRequiredVersionと一致 | 400:空値、既存のClientVersionMismatch Error:不一致 |
 | `guild_id` | `uint64`（4） | ID/Sequence/Amountの業務無効値を検証（0は用途に応じる） | 整数型範囲 + 予約値・既存Payload上下限 | 400:無効なID/範囲、409:状態競合 |
 | `guild_battle_id` | `uint64`（5） | ID/Sequence/Amountの業務無効値を検証（0は用途に応じる） | 整数型範囲 + 予約値・既存Payload上下限 | 400:無効なID/範囲、409:状態競合 |
 | `local_formation_id` | `uint32`（6） | ID/Sequence/Amountの業務無効値を検証（0は用途に応じる） | 整数型範囲 + 予約値・既存Payload上下限 | 400:無効なID/範囲、409:状態競合 |
@@ -415,9 +415,9 @@ HTTP 400は構文/型/許容値の不正、401は認証不成立、403は権限�
 
 | Field | Wire型 | Presence/必須性 | 有効値/制限 | 不正時 |
 |---|---|---|---|---|
-| `login_id` | `string`（1） | 非空を要求する場合は空文字/空bytesを拒否 | UTF-8/Token/Header/Sizeなど既存Payload制約 | 400:型/長さ不正、401:認証失敗 |
+| `login_id` | `string`（1） | 必須、3～64文字（Proto3空文字は拒否） | ASCII英数字および`._-`のみ。大小文字を区別 | 400:文字/長さ不正、401:認証失敗 |
 | `password` | `string`（2） | 空文字禁止、長さ/形式は既存認証仕様 | UTF-8/Token/Header/Sizeなど既存Payload制約 | 400:形式不正、401:認証不成立 |
-| `user_name` | `string`（3） | 非空を要求する場合は空文字/空bytesを拒否 | UTF-8/Token/Header/Sizeなど既存Payload制約 | 400:型/長さ不正、401:認証失敗 |
+| `user_name` | `string`（3） | 必須、空文字を拒否 | 既存UserName/Payload制約に従う（未定義の文字上限は設けない） | 400:空値/既存制約違反 |
 | `discord_user_id` | `uint64`（4） | ID/Sequence/Amountの業務無効値を検証（0は用途に応じる） | 整数型範囲 + 予約値・既存Payload上下限 | 400:無効なID/範囲、409:状態競合 |
 | `discord_authorization_token_id` | `bytes`（5） | 未設定の認証情報は拒否 | UTF-8/Token/Header/Sizeなど既存Payload制約 | 401:認証不正、400:形式不正 |
 
@@ -425,7 +425,7 @@ HTTP 400は構文/型/許容値の不正、401は認証不成立、403は権限�
 
 | Field | Wire型 | Presence/必須性 | 有効値/制限 | 不正時 |
 |---|---|---|---|---|
-| `login_id` | `string`（1） | 非空を要求する場合は空文字/空bytesを拒否 | UTF-8/Token/Header/Sizeなど既存Payload制約 | 400:型/長さ不正、401:認証失敗 |
+| `login_id` | `string`（1） | 必須、3～64文字（Proto3空文字は拒否） | ASCII英数字および`._-`のみ。大小文字を区別 | 400:文字/長さ不正、401:認証失敗 |
 | `password` | `string`（2） | 空文字禁止、長さ/形式は既存認証仕様 | UTF-8/Token/Header/Sizeなど既存Payload制約 | 400:形式不正、401:認証不成立 |
 | `discord_user_id` | `uint64`（3） | ID/Sequence/Amountの業務無効値を検証（0は用途に応じる） | 整数型範囲 + 予約値・既存Payload上下限 | 400:無効なID/範囲、409:状態競合 |
 | `discord_authorization_token_id` | `bytes`（4） | 未設定の認証情報は拒否 | UTF-8/Token/Header/Sizeなど既存Payload制約 | 401:認証不正、400:形式不正 |
@@ -995,3 +995,10 @@ HTTP 400は構文/型/許容値の不正、401は認証不成立、403は権限�
 - Public `UseItem`は認証済みPlayerIDと当該Battleの単一Owner・Join・RequestSequence・ItemID・Battle内数量1以上を必須とし、失敗では状態を変更しない。Client申告の残数は受け取らない。成功はWAL耐久保存後であり、DB減算の完了待ちはしない。
 - Private `SaveGuildBattleItemLog`は`quantity_before >= 1`と`quantity_after=quantity_before-1`、Create Snapshotからの同一Player/Itemの先行Item Event連続性、Event番号・Operation ID・Event Hashの一致、DB在庫1以上を同一Transactionで検証する。同一Operationの再送は同じ結果のみ返し、別内容は409を返す。
 - Private `UpdatePlayerItem`等、Battle Item Eventを介さない在庫書込みは対象Playerが`in_progress`または`resolving`の対戦に含まれる間は409を返す。予約APIは存在しない。
+
+### 運用対象RPCの値域補足（汎用行に優先）
+
+- Public `CreateAccount`/`Login`の`login_id`は既存Session仕様のASCII英数字・`.`・`_`・`-`、3～64文字を適用する。`Login.client_version`は非空、要求Version不一致は専用Version Errorを使用する。新しいパスワード文字種別・長さの上限は発明しない。
+- Public `CreateGuild.guild_name`はUTF-8で空文字を拒否し最大10文字とする。昼夜の開始時刻は定義済みEnum値と`optional` Presenceの両方を確認する。`player_id=0`を通常Playerとして受理しない。
+- Private `StartGuildBattle`は`game_server_instance_id`非空と`create_log`存在・正本Owner一致を必須とし、Item Snapshotを同じDB Transactionで現在在庫と照合する。Snapshot不一致は409、未存在Createログは400とする。
+- Private `UpdatePlayerItem`はPlayerID・ItemIDの有効性に加え、PlayerID単位のTransaction排他・対戦状態確認を行い、対象Playerが進行中/結果確定待ちBattleのCreate Snapshotに含まれる場合は409とする。`quantity=0`は所持数を0へ更新する正当な値として扱い、これだけでは省略入力とは断定しない。

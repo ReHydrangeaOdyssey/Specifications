@@ -140,7 +140,7 @@ Recovery状態では、それ以降の対象GuildBattle中DB送信を停止し�
 
 
 
-GameServerはDB送信を待たずに非出撃の状態変更へ応答するため、`/var/lib/game-server/replay_wal/guild_battle_<GuildBattleID>_<InstanceID>/`にイベント単位の先行記録を持つ。専用Workerが`event_<index>_<operation-id>.json`を一時ファイルから書込み、正規Payload・Event Index・Operation ID・前記録HashをEd25519署名し、ファイル`fsync`→原子的rename→親ディレクトリ`fsync`まで完了した時点を**通常Eventの受理確定**とする。ゲームの操作スレッドはディスクI/Oを実行せず、非同期完了通知を利用する。複数Eventを1回の`fsync`で確定するGroup Commitは順序を保持する場合のみ可能とし、DB往復による待機を受付の必須条件にしない。ストレージの遅延が大きい場合はローカルI/O完了待ちが残るため、恒常的な0ms応答は保証しない。
+GameServerはDB送信を待たずに非出撃の状態変更へ応答するため、`/var/lib/game-server/replay_wal/guild_battle_<GuildBattleID>_<InstanceID>/`にイベント単位の先行記録を持つ。専用Workerが`event_<index>_<operation-id>.json`を一時ファイルから書込み、v2 Canonical Encodingに従った正規Payload・Event Index・Operation ID・直前Eventの媒体非依存`event_hash`を含むRecordにEd25519署名し、ファイル`fsync`→原子的rename→親ディレクトリ`fsync`まで完了した時点を**通常Eventの受理確定**とする。ゲームの操作スレッドはディスクI/Oを実行せず、非同期完了通知を利用する。複数Eventを1回の`fsync`で確定するGroup Commitは順序を保持する場合のみ可能とし、DB往復による待機を受付の必須条件にしない。ストレージの遅延が大きい場合はローカルI/O完了待ちが残るため、恒常的な0ms応答は保証しない。
 
 WALからJournalへ同一Eventを保全コピーするときは、`record_kind`を変更して再署名せず、署名済みv2記録をByte単位で複製する。Record Hashの違いを連鎖せず、Event Hashが同一か検証する。DBに先行COMMITしたCreate・出撃・酒場のEventも、Private APIが保存したEvent Hash/Operation IDで同じ連鎖に入れる。
 

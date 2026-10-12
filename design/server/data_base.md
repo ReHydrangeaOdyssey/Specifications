@@ -689,3 +689,9 @@ Private API Serverは更新対象Databaseトランザクション内で`GUILD_BA
 ### ItemのReplayとDB在庫の関係
 
 `GuildBattleItemLogPayload.quantity_before/after`は**Battle RuntimeのItem残数**であって、各Event時点のDB全体数量を示さない。ReplayのCreate Snapshotを初期値としてEvent Index順に検証し、同一Player/Itemの使用履歴と一致する場合に限り反映する。DB更新では`PLAYER_ITEM`行をLockして`quantity >= 1`を条件に1減算する。Replay Event行・Event Hash・Operation IDの冪等記録・所持数減算を同一Transactionで確定し、元のDB数量をReplayの`quantity_before`で上書きしない。成功応答済みでもDB反映不能ならWAL/Journalを保持し、Battle完了を保留する。
+
+### 開戦時Item Snapshotと通常在庫更新の排他
+
+`StartGuildBattle`と`UpdatePlayerItem`を含む通常在庫書込みは、PostgreSQLの**同じPlayerID単位Transactionロック**を使用する。対象PlayerIDが複数なら昇順に取得し、ロック取得後に`PLAYER_ITEM`の対象行を`(PlayerID,ItemID)`昇順に`SELECT ... FOR UPDATE`する。対戦状態の確認、Create Snapshotと現在在庫の完全一致検査、Create Event/Anchor保存と`scheduled -> in_progress`を`StartGuildBattle`の同一Transactionで確定する。`UpdatePlayerItem`等は同じPlayerロック内で対象Playerが`in_progress`/`resolving`の対戦に含まれないことを確認し、該当するなら409として在庫に手を触れない。並行要求はロック解放後のDB正本を読み直して判定する。Transaction失敗時はStatus/Item/ReplayのすべてをRollbackする。
+
+ロックの実現には`pg_advisory_xact_lock`等のTransaction範囲のPostgreSQL機構を用い、同じPlayerIDに対してStartと通常書込みが同じキーを必ず使う。これはPrivate API内部のDB排他であり、GameServer同士のキャッシュ共有や同期APIではない。参加対象はCreate Snapshot内の通常Player全員（未Joinを含む）とし、Dummyは含めない。既存のBattle専用`SaveGuildBattleItemLog`の冪等減算は許可する。

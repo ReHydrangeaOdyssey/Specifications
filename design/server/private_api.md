@@ -926,3 +926,7 @@ GameServerのRecovery記録は専用秘密鍵を使ってEventの正規化Payloa
 ### `StartGuildBattle`におけるItem初期在庫
 
 Preload結果のCreate Snapshotに含まれる通常PlayerのItem一覧がDB `PLAYER_ITEM`の開戦時数量・ItemIDと一致することを、Create Event保存と同一Transactionで確定する。食い違う場合は409で開始拒否し、GameServerはPreload失敗として既存手順に従う。`GetPlayerItems`の結果は開戦前の候補値であり、開戦後のBattle内Item状態は確定済みCreate Snapshotを使用する。
+
+### Item在庫のDB排他適用
+
+`StartGuildBattle`ではCreate Snapshotに含む通常Player全員についてPlayerID昇順にDB Transactionロックを取得した上で在庫を読み直し、Create/AnchorとStatus変更を同一COMMITで確定する。`UpdatePlayerItem`を含む通常在庫書込みは同じPlayerロックを取得し、進行中・結果確定待ちの対象Battleへの所属を確認してから更新する。未JoinのSnapshot内Playerも制限対象とする。競合時に古いSnapshotで判定を継続しない。GameServer間同期・Item予約は導入しない。詳細は`design/server/data_base.md`の「開戦時Item Snapshotと通常在庫更新の排他」を正本とする。

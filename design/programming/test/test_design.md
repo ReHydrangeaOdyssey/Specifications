@@ -412,7 +412,7 @@ Recovery fileからの再送でも同じテストを行います。
 
 - タイトル「設定」から設定UIへ進み、配布`config.cfg`の上書き値とOPFS `config.cnf`の2つのトグルを保存・初期化できること。未登録名のアセットはoverride=trueでも使用できないこと。Hash衝突辞書に記載された候補Pathだけを明示選択できること。
 - Releaseの`asset_dictionary.json`に対して、同Releaseにある小文字SHA-256値をファイル名にした検査値AssetとのRaw Bytes照合を確認する。欠落・曖昧・不一致では旧Generationを保護する。`verify_asset_dictionary_sha256=false`で照合を省略してもSchema/Path検証を行う。
-- ユーザー構成入力のHash・ProtoBuf参照の一括検証、既存ファイルの退避・切替失敗時ロールバック、再起動時の参照再解決を検証する。永続Manifestは使用せず、辞書未掲載の素材はRuntime使用不可とする。
+- ユーザー提供PNG/HCAのHashとClient描画構造からの画像参照の一括検証、既存ファイルの退避・切替失敗時ロールバック、再起動時の参照再解決を検証する。永続Manifestは使用せず、辞書未掲載の素材はRuntime使用不可とする。
 - BGMの判定境界は`./assets/sound/bgm/`の大文字小文字・ディレクトリ区切りを区別し、サブフォルダは含める。
 - Replay署名Byte Encoding v1はProtoBufのRaw Payloadを変えず、JSONの順序変更で署名結果が変わらないこと、Byte改変で拒否することを検証する。
 
@@ -456,3 +456,10 @@ Recovery fileからの再送でも同じテストを行います。
 - 成功したUseItemのWAL耐久後の応答と、非同期DBのReplay・在庫減算の同一Transaction／冪等なRetryを検証する。WAL失敗なら状態・Sequenceが進まず、同一Sequenceの重複は二重使用しない。DB反映不能時に最終結果を確定しないこと。
 - 有効辞書・代替画像のどちらかが欠ければゲームプレイへ入れず、タイトルの取り込み・削除等は継続できること。未取得状態の空辞書を有効辞書に偽装できないこと。
 - 構成素材の取込みは永続Manifestを要求せず、辞書に許可された既存ファイルの退避・入替・起動後復元を確認する。
+
+### 辞書更新・Item在庫の回帰検証
+
+- `StartGuildBattle`のSnapshot在庫照合と`UpdatePlayerItem`が競合するとき、同一PlayerIDのDBロックで直列化される。更新先行ならSnapshot不一致で開始拒否、開戦先行ならその通常更新が409となり、双方成功で異なる在庫を確定しない。未Joinの通常Playerも対象とする。GameServer間同期APIは用いない。
+- `./assets/`にProtoBufを置いたり、ProtoBufを起動時に`./assets/`から列挙したりしない。描画モデルの構造情報とPNG/HCA実ファイルを区別し、未登録の構造情報を自動生成しない。
+- 辞書Pathが`./assets/characters/a.png`ならまさにそのRoot相対Pathを使用する。`./assets/assets/characters/a.png`を作らず、接頭辞欠落、`..`、不正セグメントを拒否する。
+- 辞書更新時、旧辞書にしか存在しないPathの素材を`./cache/obsolete_assets/`へ退避し、現行の許可Pathから外す。中断時は旧辞書/旧素材へロールバックする。ローディング中は操作を無効化し、キャッシュクリアもできない。キャッシュクリア後は退避素材が消える。

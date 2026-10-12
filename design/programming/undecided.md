@@ -33,3 +33,9 @@
 - `design/test/test_policy.md`
 - `design/client/client.md`
 - `design/client/scene_transition.md`
+
+## 実体確定時のみ埋める運用値
+
+- GameAssetsの代替画像は実ReleaseにAssetが公開された時点で、論理代替画像とRelease tag・Asset名・検証情報を照合して設定する。未公開の名前を仕様へ仮置きしない。
+- Public APIのHTTPS Originは配備先が確定した時点でClient/API/認証Callback/CORS/Cookie設定へ同じ実値を反映する。仮のドメインは設定しない。
+- アセット辞書のPathは生成側がOPFS Root相対`./assets/`始まりとして出力する。Clientの二重連結はしない。辞書更新時の不要素材はcache退避する。
