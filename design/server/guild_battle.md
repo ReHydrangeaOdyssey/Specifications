@@ -652,13 +652,13 @@ sequenceDiagram
 
 ### Database送信失敗時
 
-騎士団戦中にDatabaseへの送信が失敗した場合は, 同一送信を1回だけ再試行する. Replay Workerによるリプレイログ送信も同じ規則を使用する. 再試行も失敗した場合, GameServerは当該騎士団戦についてDB障害発生状態へ移行する.
+騎士団戦中にDatabaseへの送信が失敗した場合は, Retry可能な一時障害に限り、同一Operation IDで初回から合計5秒以内に1回だけ再試行する。確定失敗・再試行失敗・5秒上限でRecoveryへ移行する。 Replay Workerによるリプレイログ送信も同じ規則を使用する. 再試行も失敗した場合, GameServerは当該騎士団戦についてDB障害発生状態へ移行する.
 
 DB障害発生状態では, それ以降の騎士団戦中Database送信を行わず, 本来送信するデータをGameServerローカルのファイルへ保存する. Replay EventのRecovery保存はReplay Worker側で行い, 騎士団戦処理スレッドはファイルI/O完了を待機しない.
 保存形式はUTF-8 JSONとし, 保存先は`/var/lib/game-server/recovery`とする. 本番Kubernetes環境では同PathをGameServer専用Persistent Volumeへmountする.
-ファイル名は`guild_battle_<GuildBattleID>_<GameServerInstanceID>.json`とし, 各送信予定データについてPrivate API名, `X-Operation-ID`, 要求Payload, 保存順序を保持する.
+保存形式は`guild_battle_<GuildBattleID>_<InstanceID>/event_<EventIndex>_<OperationID>.json`の不変Eventファイルとする。Eventごとに要求、Operation ID、番号、検査用Hashを保持し、一時ファイル→fsync→atomic rename→ディレクトリfsyncで確定する。
 ローカルファイルはGameServer再起動後も保持する.
-騎士団戦終了時およびGameServer起動時にローカル保存データを保存順にDatabaseへ再送する.
+騎士団戦終了時に当該BattleのローカルEventを番号順に再送する。GameServer起動時は終了済みBattleのみ再送し、進行中Battleの記録は保全して終了時までDB送信を再開しない。
 再送中に1件でも失敗した場合はローカルファイルを残し, 全件の再送に成功した場合だけ対応するローカルファイルを削除する.
 
 騎士団戦最終結果の保存は下記終了シーケンスの専用規則を使用する.

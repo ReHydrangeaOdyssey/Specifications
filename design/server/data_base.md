@@ -541,7 +541,7 @@ erDiagram
 
 `SaveArenaParty`は対象PlayerIDのアリーナ編成を上記テーブルへ保存する. 既存編成がある場合は同一PlayerIDの編成を置換する.
 
-酒場残回数の正本は`PLAYER_TAVERN_RECOVERY`の`PlayerID`（主キー）とする。`remaining_uses`（`u8`, 0～3、初期3）、`next_recovery_at`（UTC時刻、満量ならNULL）を保持し、GuildIDおよびJST日付はキーに含めない。成立イベント保存と残回数・時刻更新は`SaveGuildBattleTavernRecoveryLog`を介して同一Transactionで確定する。読取時は`now >= next_recovery_at`の間、残回数を1回分増やして`next_recovery_at`へ2時間を加算する（残回数3に達したら時刻NULL）。満量3から初回消費した場合は`now+2時間`を設定し、補充待機中に追加消費しても既存の`next_recovery_at`をリセットしない。成立消費時の状態確定とReplay保存は一体化し、未保存Eventを二重消費しない。
+酒場残回数の正本は`PLAYER_TAVERN_RECOVERY`の`PlayerID`（主キー）とする。消費要求は当該PlayerID行を`SELECT ... FOR UPDATE`相当で排他し、当該Transactionで「経過2時間の補充→残数検証→1回消費→Event/OperationID記録→残数・次回時刻更新」を確定する。初回行作成競合もPlayerID一意制約で排他する。`GetGuildBattleStatus`等の参照では、保存行を変更せず現在時刻から算出した論理残数・次回補充時刻を返す。`remaining_uses`（`u8`, 0～3、初期3）、`next_recovery_at`（UTC時刻、満量ならNULL）を保持し、GuildIDおよびJST日付はキーに含めない。成立イベント保存と残回数・時刻更新は`SaveGuildBattleTavernRecoveryLog`を介して同一Transactionで確定する。読取時は`now >= next_recovery_at`の間、残回数を1回分増やして`next_recovery_at`へ2時間を加算する（残回数3に達したら時刻NULL）。満量3から初回消費した場合は`now+2時間`を設定し、補充待機中に追加消費しても既存の`next_recovery_at`をリセットしない。成立消費時の状態確定とReplay保存は一体化し、未保存Eventを二重消費しない。
 
 騎士団戦開始時刻の変更要求は、昼・夜の設定値と適用開始JST日付を保留値として保持する。翌日JST 0:00以降に対象日でマッチングする際は保留値を有効値として使用する。すでに作成済みの対戦を変更しない。
 
@@ -612,18 +612,18 @@ erDiagram
 
 `ERROR_LOG.guild_battle_id`はNULLを許可する. 騎士団戦自体がまだ生成されていない時間帯単位のエラーではNULLとして保存する.
 
-`GUILD_BATTLE_REPLAY_LOG.payload`には, 「[騎士団戦リプレイProtocol Buffers定義](../system/guild_battle_replay.proto)」の`GuildBattleReplayEnvelope`をProtocol BuffersでSerializeしたバイナリを`bytea`として保存する. `GUILD_BATTLE_REPLAY_LOG.process_type`は検索用の索引値とし, Serialize済みEnvelopeの`process_type`と必ず一致させる. `event_index`もEnvelope内の番号と一致させ、`UNIQUE(guild_battle_id, event_index)`を適用する。`event_index=1`をCreateとし、後続Eventは同一GuildBattleIDで欠番なく1ずつ増加する。再送で同一番号・同一Payloadなら冪等成功とし、同一番号で異なるPayloadは拒否する。
+`GUILD_BATTLE_REPLAY_LOG.payload`には, 「[騎士団戦リプレイProtocol Buffers定義](../system/guild_battle_replay.proto)」の`GuildBattleReplayEnvelope`をProtocol BuffersでSerializeしたバイナリを`bytea`として保存する. `GUILD_BATTLE_REPLAY_LOG.process_type`は検索用の索引値とし, Serialize済みEnvelopeの`process_type`と必ず一致させる. `event_index`もEnvelope内の番号と一致させ、`UNIQUE(guild_battle_id, event_index)`を適用する。`event_index=1`をCreateとし、後続Eventは同一GuildBattleIDで欠番なく1ずつ増加する。再送で同一番号・同一Payloadなら冪等成功とし、同一番号で異なるPayloadは拒否する。GuildBattle単位で番号の発行とDB/ローカルJournalへの耐久化確定を直列管理し、先行番号が未確定のまま次番号の成功応答を返さない。
 
 
 ## 5秒のDB/NW障害判定とローカル保存
 
 騎士団戦中のPrivate API経由DB保存は、開始から**5秒**以内に最終的なDB確定を確認できない場合をDBまたはネットワーク障害と判定する。5秒は同一論理操作の最初の送信開始から測る上限であり、Retryで新たに5秒を追加しない。5秒未満の確定失敗も障害移行条件とする。
 
-- 失敗・Timeout・結果不明が発生したら、そのGuildBattleを`recovery`状態へ遷移し、**以後の当該騎士団戦中はDB送信を再試行しない**。DB送信Workerの未完了要求は同じOperation IDで管理し、返信が遅れて届いても既存Eventを二重確定しない。
-- `recovery`中の新規成立操作はGameServer専用Persistent VolumeのRecovery Journalへ、GuildBattleID・Event Index・Operation ID・元RPC名・protobuf要求のバイト列（Base64表現）・成立順を含めて**非同期Workerで安全に追記**する。ファイルを`flush`し永続化成功を確認してからClientに成功を返す。ゲーム処理Thread自身はファイルI/Oを実行しない。
+- DBの一時的な接続断・Timeout・結果不明は、同一Operation IDで初回から通算5秒以内に最大1回だけ再送／確定照会する。明示的な確定失敗、再試行失敗、または通算5秒上限で当該GuildBattleを`recovery`状態へ遷移し、**以後の当該騎士団戦中はDB送信を再試行しない**。DB送信Workerの未完了要求は同じOperation IDで管理し、返信が遅れて届いても既存Eventを二重確定しない。
+- `recovery`中の新規成立操作はGameServer専用Persistent VolumeのRecovery Journalへ、GuildBattleID・Event Index・Operation ID・元RPC名・protobuf要求のバイト列（Base64表現）・成立順を含む**独立した不変レコードとして非同期Workerで耐久保存**する。レコードにSHA-256チェックサムを付け、一時ファイル書込→ファイル`fsync`→同じファイルシステム内で原子的rename→親ディレクトリ`fsync`がすべて完了してからClientに成功を返す。ゲーム処理Thread自身はファイルI/Oを実行しない。
 - 正常時の出撃は従来どおりDBのCOMMIT完了を成功条件とする。`recovery`移行後の出撃に限り**ローカルJournalの耐久化完了**を成功条件とする。ローカル保存も失敗した場合、当該新規操作は成功扱いしない。Operation ID・RequestSequence・Event Indexによって同じ出撃を再適用しない。
 - DBへの送信途中でTimeoutしたEventはDB側で確定した可能性があるため、ローカルにも同じOperation ID・Event Indexで保留記録する。再送時はPrivate APIの冪等性で既存COMMITを照合し、二重加算しない。
-- 騎士団戦終了後、同BattleのJournalをEvent Index/成立順にDBへ一括転送してから最終結果の確定を要求する。転送が途中失敗した場合はファイルを保持し、DB完了済みとして表示しない。通常の`CompleteGuildBattle`専用の失敗処理は維持する。
+- 騎士団戦終了後、同BattleのJournalをEvent Index/成立順に検証した後DBへ一括転送してから最終結果の確定を要求する。転送が途中失敗した場合はファイルを保持し、DB完了済みとして表示しない。通常の`CompleteGuildBattle`専用の失敗処理は維持する。
 - 再起動後に残存Journalがある場合、終了済みBattleでは再送できる。進行中BattleのJournalについては、当該Battle中に再度DB送信を開始せず、終了処理の時点で転送する。失われたGameServerメモリの進行中Battle状態を自動で再開できることは保証しない。
 
 この例外は「通常時の出撃成功応答はDB COMMIT保証」の規則より優先し、DB/NW障害時だけ正本を永続ローカルJournalへ一時退避する。Journalからの確定後はDatabaseを正本とする。
@@ -632,8 +632,8 @@ erDiagram
 
 騎士団戦中のDatabase更新・ログ保存要求は同一要求を原則1回だけ再試行するが、初回送信開始から合計5秒以内にDB確定を確認できない場合はその時点でDB/NW障害としてRecovery状態へ移行し、当該Battle中はDB送信を再開しない。 通常のリプレイログ保存要求はReplay Workerから非同期送信する。出撃に限り、成功応答前に専用非同期Workerから同一Replay EventをPrivate APIへ保存し、DB COMMITの完了通知を受けてから成功を返す。騎士団戦実行スレッド自身は同期I/Oを実行しない。保存結果が不明な場合は同じ`X-Operation-ID`で照合し、DB確定済みの出撃を取り消さない。未保存を確認できた場合のみ出撃を失敗扱いにする。 Retry失敗または5秒の確定待機上限に達した場合、GameServerはDB障害状態へ移行し、 それ以降の騎士団戦中DB送信を停止して送信予定データをローカル保存する.
 ローカル保存は`/var/lib/game-server/recovery`配下のUTF-8 JSONファイルとして行う. 本番Kubernetes環境では同PathをGameServer専用Persistent Volumeへmountし, GameServer再起動後も保持する.
-Recoveryファイル名は`guild_battle_<GuildBattleID>_<GameServerInstanceID>.json`とする. ファイル内には元のPrivate API名, Operation ID, 要求Payload, 保存順序を保持する.
-騎士団戦終了時にローカル保存データをEvent Indexおよび保存順にDatabaseへ一括再送し、全件確定後に最終結果保存を実行する。 GameServer起動時にもRecoveryディレクトリを走査し, 残存ファイルを保存順に再送する. 再送中に1件でも失敗した場合はファイルを残し, 全件成功した場合だけ対応ファイルを削除する.
+Recovery記録は`guild_battle_<GuildBattleID>_<GameServerInstanceID>/event_<EventIndex>_<OperationID>.json`の不変Eventファイルとする。同名の一時ファイルを完全保存した後、renameとディレクトリ同期で確定する。ファイルには元のPrivate API名、Operation ID、Event Index、要求Payload、成立順、検査用SHA-256を保持する。検証に失敗したファイルを成立Eventとして再送しない。
+騎士団戦終了時にローカル保存データをEvent Indexおよび保存順にDatabaseへ一括再送し、全件確定後に最終結果保存を実行する。 GameServer起動時にもRecoveryディレクトリを走査するが、**終了済みGuildBattleだけ**を保存順に再送する。進行中GuildBattleのJournalは検証・保全し、Battle終了までDB送信を再開しない。 再送に失敗したEventファイルは残し、各EventのDB確定後に該当ファイルを削除できる。
 
 `CompleteGuildBattle`はこの一般規則とは別に, 初回失敗後1回だけ同一`X-Operation-ID`で再試行し, 再試行も失敗した場合はErrorLogを保存し, `DiscordNotificationEnabled=true`の場合はDiscord Botへ通知する. その後の原因調査・復旧は運営が手動で行う. 最終結果保存, Player勝敗数更新, `GUILD_BATTLE.status=completed`, 当該対戦2Guildのmembership lock解除は同一Databaseトランザクションで確定する. 同一`matching_target_date`・`matching_start_time`の全対戦が終端状態（`completed`・`canceled`・`replaced`）となった場合だけ除外Guild解除と除外一覧削除も同一トランザクションに含め, いずれか失敗時は全体をRollbackする.
 

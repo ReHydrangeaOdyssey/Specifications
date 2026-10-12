@@ -145,7 +145,7 @@ GuildBattle専用Threadでは以下を同期実行しません。
 - Replay file書き込み
 - `stdout` / `stderr`書き込み
 - 外部Telemetry送信
-- ReplayのDatabase保存完了待機
+- Battle Thread自身による同期Database/ファイルI/O（ただしWorkerへの永続化完了待ちが必要な成立操作は結果を待つ）
 
 Replay Queueが満杯の場合だけ、Replayを破棄せず空きができるまで要求処理を待機します。System Log Queueの低優先Logとは異なる扱いです。
 
@@ -153,7 +153,7 @@ Replay Queueが満杯の場合だけ、Replayを破棄せず空きができる�
 
 起動時に`/var/lib/game-server/recovery`を走査します。
 
-`guild_battle_<GuildBattleID>_<GameServerInstanceID>.json`を検出した場合、保存順で元Private API要求を同一`X-Operation-ID`のまま再送します。全件成功したファイルだけ削除します。
+`guild_battle_<GuildBattleID>_<GameServerInstanceID>/event_<EventIndex>_<OperationID>.json`を検出したら、HashとEvent番号を検証します。起動時には終了済みBattleだけを同一`X-Operation-ID`で順に再送し、DB確定済みEventを削除します。進行中Battleは保全のみ実施します。
 
 Recoveryファイルの再送とGameServerが`ready`になる厳密な前後関係は現仕様に明示されていないため、本設計では追加しません。
 

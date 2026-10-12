@@ -25,7 +25,7 @@
 
 | Component | 主責務 | 明示的に持たない責務 |
 |---|---|---|
-| Client（Rust/WASM Web） | UI、WebGL 2描画、Web Audio再生、OPFSアセット管理、ローカル編成、認証状態、未接続時のローカル機能維持と通信必須機能の制御、アセット追加専用シーンとファイル名SHA-256ハッシュ辞書による画像の自動割り当て、Arena再現、GuildBattle表示状態 | 戦闘結果の正本、RefreshToken平文参照、ServerのPNG/HCAアセット配信 |
+| Client（Rust/WASM Web） | UI、WebGL 2描画、Web Audio再生、OPFSアセット管理、ローカル編成、認証状態、未接続時のローカル機能維持と通信必須機能の制御、アセット追加専用シーンと元ファイル名／同名衝突時のみ内容SHA-256を用いるRelease Asset辞書による素材の自動割り当て、Arena再現、GuildBattle表示状態 | 戦闘結果の正本、RefreshToken平文参照、ServerのPNG/HCAアセット配信 |
 | Public API | TLS境界、deserialize、Boundary Validation、Token検証、Rate Limit、Cookie、Routing | Domain判定、DB transaction |
 | Private API | Account/Guild Domain、Session、DB操作、GuildBattle Lifecycle | Arena抽選、戦闘計算、GuildBattleマッチング |
 | GameServer | Arena、GuildBattle実行状態、戦闘計算、Replay生成 | GuildBattle生成・マッチング・自己割当 |

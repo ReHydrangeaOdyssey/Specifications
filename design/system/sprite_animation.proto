@@ -12,7 +12,6 @@ message SpriteAnimationData {
   repeated string config_png_path = 5 [json_name = "config_png_path"];
   float content_scale = 6 [json_name = "content_scale"];
 
-  reserved 7;
 }
 
 message ArmatureData {
@@ -89,7 +88,7 @@ message FrameData {
   optional float scale_y = 6 [json_name = "cY"];
   float skew_x = 7 [json_name = "kX"];
   float skew_y = 8 [json_name = "kY"];
-  sint32 display_index = 9 [json_name = "dI"];
+  optional sint32 display_index = 9 [json_name = "dI"];
   sint32 tween_easing = 10 [json_name = "twE"];
   optional bool tween_frame = 11 [json_name = "tweenFrame"];
   uint32 blend_source = 12 [json_name = "bd_src"];
@@ -99,7 +98,6 @@ message FrameData {
   optional string event_name = 15 [json_name = "evt"];
   repeated float tween_easing_params = 16 [json_name = "twEP"];
 
-  reserved 17;
 }
 
 message Color {

@@ -7,11 +7,11 @@
 - [U-03] Public API ServerのHTTPS Origin（静的Clientの配布先は`https://rehydrangeaodyssey.github.io/`）.
 - [U-05] HTTP/2 + TLS 1.3の対象ブラウザでの実通信検証結果.
 - [U-07/08] 最小対応ブラウザを含む各端末でのフォルダ一括選択・元ファイル削除権限と実装可否（未対応環境はコピーのみ）.
-- [U-09] AssetDictionaryリポジトリ内の具体的な辞書配布ファイルURLと、配布物の完全性/Version検証方法。辞書JSON Schemaは`design/client/client.md`で確定済み。
-- [U-11/12] ユーザー用素材区分から具体的Pathへの対応, 任意素材に関する割当メタデータの形式.
-- [U-14/15] `game_info.json`のVersion差分移行規則と, 途中停止後の整合性回復手順.
+- [U-09] AssetDictionaryのRelease Asset内の実ファイル名・配布物の完全性検証方法。最新/指定tagの取得方法と辞書Schemaは`design/client/client.md`で確定済み。
+- [U-11/12] 手動区分・対象ID・原本ファイル名と取込中のPathを持つ割当メタデータの正確なSchema（保留/一時保存PathはClient仕様で確定）。
+- [U-14/15] Versionごとの具体的な配置差分、移行対象と衝突時の移行表。中断後は移行マーカーで最初から再実行し、個別取込は自動再開しない。
 - [U-19] `cridecoder`のiPhone Safari/WASM実機動作・依存ライセンス検証後の最終採否.
-- [U-20] HCAの再生出力はステレオ2チャンネルに確定. 1チャンネル素材の扱い, 辞書におけるループ区間のデータ形式, 対象端末のステレオ実機検証結果は未確定.
+- [U-20] HCA出力は常にステレオ2ch、1ch入力は左右へ複製し、ループ真偽は`hca_config.json`で設定。設定ファイルと各HCAの実際の対応Path・鍵探索ライブラリの採否・実機検証結果は未確定。
 - [U-21] 暫定先読み500ms/補充250msの実機欠音評価結果（数値は最終最適値ではない）.
 - [U-22] 実機FPS試験に使用する具体端末, 実測結果. GPU/RAM利用率は合否閾値として使用しない.
 - [U-24] OPFSの非同期APIとWorker内同期APIの用途別比較結果.

@@ -152,8 +152,7 @@ Databaseから`GUILD_BATTLE`を直接DELETEしない.
 
 ### 自動切替
 
-GuildBattle中のDatabase送信失敗時は同一要求を1回だけ再試行する.
-再試行も失敗した場合はDB障害発生状態へ遷移し, 以後の対象GuildBattleのDatabase送信内容をRecoveryファイルへ保存する.
+GuildBattle中のDatabase送信でRetry可能な一時障害が起きた場合、同一Operation IDで合計5秒以内に最大1回だけ再試行する。明示的確定失敗・再試行失敗・5秒経過時はDB障害状態へ遷移し, 以後の対象GuildBattleのDatabase送信内容をRecoveryファイルへ保存する.
 
 Recovery保存先は`/var/lib/game-server/recovery`とする.
 本番Kubernetes環境ではGameServer専用Persistent Volumeを使用する.
@@ -163,10 +162,10 @@ Recovery保存先は`/var/lib/game-server/recovery`とする.
 ファイル名は以下とする.
 
 ```text
-guild_battle_<GuildBattleID>_<GameServerInstanceID>.json
+guild_battle_<GuildBattleID>_<GameServerInstanceID>/event_<EventIndex>_<OperationID>.json
 ```
 
-各Recordは元Private API名, Operation ID, Request Payload, 保存順序を保持する.
+各Recordは元Private API名、Operation ID、Event Index、Request Payload、保存順序、SHA-256検査値を保持する。一時ファイル→file fsync→atomic rename→directory fsync完了を成立条件とする。
 再試行, GuildBattle終了時再送, GameServer起動時再送では同じOperation IDを使用する.
 
 ### 自動再送
@@ -174,7 +173,7 @@ guild_battle_<GuildBattleID>_<GameServerInstanceID>.json
 以下のタイミングで保存順に再送する.
 
 * 当該GuildBattle終了時.
-* GameServer起動時.
+* GameServer起動時は終了済みBattleのみ再送する。進行中Battleのデータは検証・保全し、そのBattleの終了までDB送信を再開しない。
 
 全Record成功時だけファイルを削除する.
 1件でも失敗した場合はファイルを残す.

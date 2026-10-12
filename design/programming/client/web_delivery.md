@@ -79,3 +79,7 @@ Rust/WASM製Web Clientの静的配布を定義する。
 - `https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/WebGL_best_practices`
 - `https://developer.mozilla.org/en-US/docs/Web/API/HTMLInputElement/webkitdirectory`
 - `https://developer.mozilla.org/en-US/docs/Web/API/StorageManager/estimate`
+
+## アセット辞書の運営設定
+
+Web配布ルートに`./config.cfg`をYAMLで設置する。運営は配布ファイルを差し替えて辞書更新を一時停止できる。`update_asset_dictionary`の既定値は`true`、`asset_dictionary_version`の既定値は`latest`。この設定は静的配布物であり、Clientから変更してServerへ書き戻す機能は設けない。辞書のReleaseの探索は`design/client/client.md`の「アセット辞書取得の設定」に従う。

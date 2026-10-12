@@ -137,7 +137,7 @@ GuildBattle Replayは「[リプレイProtocol Buffers定義](../system/guild_bat
 * Database送信失敗時に同一要求を1回だけ再試行する.
 * 2回目も失敗した場合にRecoveryファイルへ切り替える.
 * Recovery再送で同一`X-Operation-ID`が二重適用されない.
-* GameServer再起動時にRecoveryファイルを検出して再送する.
+* GameServer再起動時にRecovery Eventファイルを検出し、終了済みBattleだけを再送する。進行中BattleはJournalの検証・保全にとどめる。
 * `CompleteGuildBattle`が2回とも失敗した場合にTransaction全体がRollbackされ, `completed`, Player勝敗数, membership lock, 除外一覧のいずれも部分更新されない.
 * GuildBattleCoordinator再起動時にDatabase状態から`scheduled` BattleをReconcileできる.
 
@@ -178,7 +178,7 @@ GuildBattle Replayは「[リプレイProtocol Buffers定義](../system/guild_bat
 
 Clientの選定済み実装方式については, `design/programming/test/test_design.md`の「ブラウザ実装・アセット・音声の検証」を参照し, iPhone Safari/PWA, Android Chrome/PWA, WebGL 2, PNG, OPFS, HCA/音声を検証する. PWAのインストール・起動等を含め, 対象OS・ブラウザの組合せで回帰試験を実施する. PNG/HCAファイル本体のOPFS保存は定義済みである一方, HCAデコーダーの最終採用には実機検証を要する. ClientとPublic API Server間のHTTP/2 over TLS 1.3・Protocol Buffersおよび騎士団戦通知のHTTP/2 Response streamを通信仕様として確認し, WebSocketをPublic API通信方式として使用しない.
 
-HCA 22,050Hz・非暗号化・左右2チャンネルのステレオ・辞書指定ループ・SE同時最大5を検証する. PCM先読みの初期500ms/補充250msを実機で調整する. 性能合否はFPS30以上（連続60秒平均, 初期10秒除外）・CIの非圧縮WASM500MB以下とし, 50MB超で最適化を検討する. GPU・RAMは参考計測とする.
+HCA 22,050Hz・1ch入力左右複製・2ch入力の左右保持・鍵キャッシュと失敗時の再探索・`hca_config.json`のループ設定・SE同時最大5を検証する. PCM先読みの初期500ms/補充250msを実機で調整する. 性能合否はFPS30以上（連続60秒平均, 初期10秒除外）・CIの非圧縮WASM500MB以下とし, 50MB超で最適化を検討する. GPU・RAMは参考計測とする.
 
 ### 騎士団施設・配布のテスト対象
 
@@ -416,3 +416,10 @@ HCA 22,050Hz・非暗号化・左右2チャンネルのステレオ・辞書指�
 * 出撃は非同期Worker経由でDB Replay Event保存を確定した後にだけ成功応答を返し、出撃後処理より前の障害で再起動してもDB確定Eventから復元できることを確認する。
 * Replay Eventは同一GuildBattleID内でCreate=1から連番になり、DB/File間の欠損・同番号異内容を検出する。
 * プレイヤー向けReplayの一覧・取得は現段階で拒否し、内部Replayの保存・保全を継続する。
+
+
+## 辞書・回復Journalの現在の判定条件
+
+AssetDictionaryは元ファイル名→`path`または同名衝突時の`paths`（内容SHA-256キー）を正本とする。一意Path時には内容Hashを要求しない。取り込みはキャッシュ上の一時領域から開始し、辞書未一致は`./cache/unknown_resouce/`へ保留して表示・再生しない。HCAは入力1chを左右複製し、鍵キャッシュ不正なら再探索する。
+
+Recovery JournalはGameServer専用Persistent Volume上のEvent不変レコードを一時ファイルから原子的に確定し、ファイルとディレクトリの永続化同期を成功応答条件とする。DBのRetryは同一Operation IDで最大1回かつ合計5秒以内とする。

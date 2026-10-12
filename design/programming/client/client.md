@@ -77,7 +77,7 @@ OPFSのPNG → File / Blob → createImageBitmap() → WebGL 2 texImage2D()
 - ボーンおよびフレームの座標・拡縮・傾き、表示Index、補間を評価して描画します。静止値とフレーム値を合成した後、親ボーンから位置・倍率・傾きの成分を継承してワールド行列を構築し、最後にスキン行列を乗じます。行列を単純に親子乗算する方式は採用しません。色・ブレンド・イベント等のフィールドは保持しますが、姿勢評価への適用範囲は実行規則に従います。PNGの画像本体・アトラスファイル本体は別アセットとし、既定のOPFS読込み・WebGL 2テクスチャ描画の経路を使用します。
 - スプライトのアトラスデータは`design/system/plist.proto`の`PlistRoot`・`Frames`・`FramesFrame`・`Metadata`・`Texture`で表現します。フレームのキーと切り出し矩形・元画像サイズ・オフセットを保持し、アニメーションの`DisplayData`・`TextureData`が持つ画像参照情報と区別します。
 - 骨格・スプライトアトラスの復元、モーション評価、補間、親子成分継承、表示Index・Z順の確定規則は`design/client/sprite_animation_runtime.md`に従います。アトラス回転は`FramesFrame.packing_rotation`の明示値だけを使用し、画像名称や行列の符号から推定しません。描画はWebGL 2の四角形・通常アルファ合成で行います。
-- アニメーションはClientのイベントキューに連動した表示処理とし、画像・UV・アニメーションデータをGameServerの`ProcessedMasterData`に含めません。
+- アニメーションはClientのイベントキューに連動した表示処理とし、画像・UV・アニメーションデータをGameServerの`ProcessedMasterData`に含めません。骨格・アニメーション・アトラス・PNG本体は原則ユーザーが各自用意し、例外的な代替画像などClient配布素材は別リポジトリから取得します。
 
 ### HCAデコード・音声パイプライン
 
@@ -85,7 +85,7 @@ OPFSのPNG → File / Blob → createImageBitmap() → WebGL 2 texImage2D()
 - HCAからPCMへ変換した音声をWeb Audio APIへ渡します。短いSE/ボイスでは必要に応じて全体を`AudioBuffer`へデコードして再利用します。
 - 長いBGM/ボイスはOPFSから必要な圧縮ブロックを読み, 小容量PCMバッファへ逐次デコードします。`AudioWorkletNode`へ`MessagePort`経由でPCMチャンクを供給し, `AudioWorkletProcessor`の小容量キューから再生します。
 - `AudioWorkletProcessor.process()`内でHCAデコードや大容量のメモリ確保を行いません。制御側または専用Workerが先読みし, 音声出力側と役割を分離します。
-- HCAは22,050Hz・非暗号化とし, 辞書で指定された音源だけ指定ループ区間を再生します。SEの同時再生上限は5です。ステレオ2チャンネル（左・右）を再生対象とし, HCAの左右音声を保持したPCMをWeb Audio APIへ供給します。1チャンネル音源の扱いは未確定です。ステレオの実機動作は別途検証します。長尺音声のPCM先読みは初期500ms, 残り250ms到達前に補充する暫定設定を採用し, 欠音・メモリ使用・I/O遅延から調整します。`SharedArrayBuffer`は初期実装では使用しません。
+- HCAは22,050Hzとし、暗号化されている場合は鍵キャッシュを先に試してから必要に応じて鍵探索します。ループは対象音源の`hca_config.json`の`loop`で決定し、`true`は音源全体の繰り返しです。SEの同時再生上限は5です。ステレオ2チャンネル（左・右）を再生対象とし, HCAの左右音声を保持したPCMをWeb Audio APIへ供給します。1チャンネル入力はPCMを左右に複製して出力します。ステレオの実機動作は別途検証します。長尺音声のPCM先読みは初期500ms, 残り250ms到達前に補充する暫定設定を採用し, 欠音・メモリ使用・I/O遅延から調整します。`SharedArrayBuffer`は初期実装では使用しません。
 - HCAのiPhone Safari/WASMでのコンパイル・正しい再生・ピークメモリは未検証です。`cridecoder`は検証合格を最終採用条件とする候補であり, 動作確認済みとは記載しません。
 - `cridecoder`リポジトリはMIT Licenseを掲示していますが, Client配布物に含める当該ライブラリと推移的依存ライブラリのライセンスを確認します。一方, PNG/HCAの音源・画像ファイルは各ユーザーが用意して自端末へ取り込むため, 個別素材のライセンスをClientが自動審査する機能は設けません。ユーザー持ち込み素材の権利と, Clientが配布するソフトウェア/同梱素材の権利は区別します（参照: https://github.com/seiunx-dev/cridecoder）。
 
@@ -98,12 +98,12 @@ OPFSのPNG → File / Blob → createImageBitmap() → WebGL 2 texImage2D()
 
 ### OPFSアセット管理
 
-- タイトル画面の「アセットの追加」からPNG/HCAをファイル単位またはディレクトリ単位で一括取り込みします。コピー/移動を選択可能にし, 移動時は「ゲーム内へファイルの移動はゲーム終了時に消える可能性がある」と表示します。元ファイル削除権限が得られる端末では保存成功後のみ削除し, 削除機能がないブラウザではコピーのみ利用可能とします。二段辞書は`https://github.com/ReHydrangeaOdyssey/AssetDictionary`からLogin完了時に取得し, GameServerから辞書を配布しません。
-- OPFSの基本構造は`./game_info.json`（現在・前回のバージョン）, `./assets/<something>`, `./cache/<something>`とします。通常のアセットPathは維持し, 配置変更が必要なバージョンでだけ`game_info.json`を照合して差分移行を実行します。`game_info.json`の`version`と`previous_version`は`design/client/client.md`で定義したu32 3要素形式で検証し、不正値は初期データに再生成します。必要な差分処理でエラーがなければ更新成功と判定します。中断時の自動再開は要件としません。
+- タイトル画面の「アセットの追加」からPNG/HCAをファイル単位またはディレクトリ単位で一括取り込みします。コピー/移動を選択可能にし, 移動時は「ゲーム内へファイルの移動はゲーム終了時に消える可能性がある」と表示します。元ファイル削除権限が得られる端末では保存成功後のみ削除し, 削除機能がないブラウザではコピーのみ利用可能とします。辞書は`https://github.com/ReHydrangeaOdyssey/AssetDictionary/releases`のRelease Assetから取得し、ログイン成功時に`./config.cfg`が自動更新を有効としている場合にだけ最新または指定Versionを確認します。GameServerから辞書を配布しません。
+- OPFSの基本構造は`./game_info.json`（現在・前回のバージョン）, `./assets/<something>`, `./cache/<something>`とします。通常のアセットPathは維持し, 配置変更が必要なバージョンでだけ`game_info.json`を照合して差分移行を実行します。`game_info.json`の`version`と`previous_version`は`design/client/client.md`で定義したu32 3要素形式で検証し、不正値は初期データに再生成します。必要な差分処理でエラーがなければ更新成功と判定します。**個別の取込中断**は自動再開しません。一方、Version差分移行が中断した場合はマーカーを検出して次回起動時にその移行を最初から自動再実行します。
 - OPFSでは非同期APIと`FileSystemSyncAccessHandle`を利用可能な処理で選択します。非同期のほうが効率的な処理には非同期APIを使い, 同期APIはWorker内でのアクセスに限定します。用途別の性能・互換性測定は継続します。
 - 圧縮HCAファイル全体と全体PCMを同時に常駐させません。デコード済みPCM, GPU資源, WASMメモリは用途別に管理し, 不要な`AudioBuffer`の参照を解除します。
-- アセット取り込みでは拡張子付きファイル名UTF-8のSHA-256と, 必要な場合の内容SHA-256を辞書に照合し, 一致する辞書Pathへ保存します。一致しない場合はユーザー素材として区分「BGM」「SE」「Voice」「Character」「SD Character」「Character Icon」の選択を求めます。カテゴリと配置先Pathの対応は未確定です。既存Pathへの上書きはユーザー確認を必須とし, 一括上書き/一括キャンセルを選択できます。ファイル名は英語表記の運用を前提に, ハッシュ入力のUnicode正規化は行わず, 辞書生成側と同一の元ファイル名文字列をUTF-8化します。
-- PNG/HCAは辞書Pathに基づきOPFSの`./assets/`へ保存・復元します。タイトル画面からのアセット削除では任意の素材を個別・一括で削除できます。自動的な容量調整削除はせず, 容量不足時はゲームを利用不可にして削除操作を有効にします。キャッシュクリアは`./cache/`のみです。辞書のファイルURL・形式およびユーザー素材のPathは未確定です。
+- 取り込みはまず`./cache/temp/user_impoert/`で行います。辞書の第1キーは拡張子付き元ファイル名の完全一致とし、エントリの`path`が非空なら一意Pathへ、空なら内容SHA-256で`paths` Objectの対応Pathを選びます。辞書一致時だけ`./assets/`へ移し、不一致は`./cache/unknown_resouce/`へ保留します。ユーザーは区分「BGM」「SE」「Voice」「Character」「SD Character」「Character Icon」を指定でき、Characterでは対象IDを記録しますが、辞書不一致のままRuntimeでは使用しません。元ファイル名は照合用に保存し、一意IDによる強制改名はしません。既存Pathの上書きはユーザー確認を要し、一括上書き/キャンセルも実装します。
+- PNG/HCAは辞書Pathに基づきOPFSの`./assets/`へ保存・復元します。タイトル画面からのアセット削除では任意の素材を個別・一括で削除できます。自動的な容量調整削除はせず, 容量不足時はゲームを利用不可にして削除操作を有効にします。キャッシュクリアはVersion移行中は拒否し、それ以外は`./cache/`のみを対象とします。辞書形式は`design/client/client.md`で確定しており、具体的Release Asset名が未確定です。辞書保留素材は`./cache/unknown_resouce/`、取込一時領域は`./cache/temp/user_impoert/`です。
 
 ### 依存・ビルド・検証条件
 
@@ -122,16 +122,16 @@ OPFSのPNG → File / Blob → createImageBitmap() → WebGL 2 texImage2D()
 
 ### OPFSアセット安全性と一括処理
 
-辞書の配置Pathは`assets/`配下の相対Pathのみ受け付け、絶対Path、URL、`..`、`.`、NULを含む制御文字、空のセグメント、バックスラッシュを拒否する。ファイル名ハッシュの計算とは分けて検証する。
+辞書の配置Pathは`assets/`配下の相対Pathのみ受け付け、絶対Path、URL、`..`、`.`、NULを含む制御文字、空のセグメント、バックスラッシュを拒否する。辞書のPath選択とは別に検証する。
 
 一括取込みと上書きはファイル単位の成功を基本とする。途中中断・キャンセル後も確定保存済みのファイルは残し、未処理ファイルは変更しない。ファイルごとの一時保存と切替処理により既存ファイルを途中書込みで破損させない。成功・失敗・未処理の件数を表示する。削除した素材の割当情報とキャッシュ参照を無効化する。
 
 ## タイトル画面のキャラクター画像割り当て
 
 - タイトル画面にキャッシュクリア・アセット追加・アセット削除・クレジットの操作を提供します。容量不足でゲーム操作不可の場合もアセット削除は可能とします。
-- アセット追加ではプレイヤーが選択した画像・音声を辞書のPathへ自動割当し, 辞書に一致しない素材は区分選択で配置します。
+- アセット追加ではまず`./cache/temp/user_impoert/`へ保存し、元ファイル名および必要時に内容SHA-256で辞書一致を検証します。一致すれば辞書Pathへ確定保存し、不一致は区分/対象IDを記録して`./cache/unknown_resouce/`で保留します。
 - 画像・UVデータはClient側資産とし、Server用`ProcessedMasterData`の対象へ追加しません。
-- PNG以外の画像は受け付けません。画像・音声本体は`./assets/`へ保存し, 既定のファイル名・内容SHA-256辞書から配置Pathを取得します。辞書に一致しない素材はユーザー区分と対象IDを指定して端末へ記録しても、ゲーム内表示・再生には使用しません。
+- PNG以外の画像は受け付けません。辞書と一致した画像・音声本体だけを`./assets/`へ保存し、辞書の`path`または`paths`から配置Pathを取得します。辞書に一致しない素材はユーザー区分と対象IDを指定して端末へ記録しても、ゲーム内表示・再生には使用しません。
 - アプリ独自の容量・解像度・保持期間上限を設けません。容量不足は通知し, 解消までゲーム操作を不可にします。任意素材の個別・一括削除を提供し, キャッシュクリアは`./cache/`だけを削除します。
 
 ## 認証状態
@@ -245,7 +245,7 @@ Seedが`0`かどうかだけでランダム要素の有無を判定しません�
 - Refresh/Logout/LoginなどCookieを必要とするRequestは認証Originのトップレベルページ内で同一Originとして実行します。GitHub Pages上の静的ClientからCookieを含むCross-Site Fetchは行わず, 一度限りの認可コードとPKCE S256を使用したコード交換でAccessTokenを取得します。詳細は`design/system/network.md`とします。
 - `__Host-RefreshToken`のHost-only/HttpOnly/Secure/SameSite=Strict制約を維持し, 配布Originと認証Originの別Site配置に対応するトップレベル遷移方式を採用します。認証画面Pathは`GET /auth/authorize`、固定戻り先は`https://rehydrangeaodyssey.github.io/auth/callback/`とする。認可コード発行・交換のwire schemaは`design/system/public_api.proto`を正とする。認証Originの具体的なホスト値のみ環境設定で指定する。
 - 個別ファイル・フォルダ一括取り込みに対応するUIを設け, ブラウザの対応APIを判定します。元ファイルの削除権限を取得できた場合のみ「移動」を提供します。SafariではブラウザAPI制約により元ファイル削除の提供ができない場合があり, その場合はコピーを利用します。
-- `cridecoder`の採否は`wasm32-unknown-unknown`ビルド、iPhone Safariでの22,050Hz・ステレオ2チャンネルの非暗号化HCA・ループ再生・SE5音同時再生・長時間再生時の欠音・メモリ、およびClient配布物に含まれる依存ライセンス検証の結果で決定します。
+- `cridecoder`の採否は`wasm32-unknown-unknown`ビルド、iPhone Safariでの22,050Hz・1ch入力のL/R複製／2ch入力保持・鍵探索の必要なHCA・ループ再生・SE5音同時再生・長時間再生時の欠音・メモリ、およびClient配布物に含まれる依存ライセンス検証の結果で決定します。
 
 ### 外部情報源
 
@@ -298,4 +298,22 @@ Seedが`0`かどうかだけでランダム要素の有無を判定しません�
 
 ### 辞書照合の正本
 
-辞書はClient仕様の「アセット辞書の形式と照合規則」に従う。第1キーは元ファイル名、第2キーは必ず計算する内容SHA-256。辞書不一致のファイルをRuntimeのテクスチャ・音声・アニメーション参照へ投入しない。端末側割当記録の有無は照合の代替条件としない。
+辞書はClient仕様の「アセット辞書の形式と照合規則」に従う。第1キーは元ファイル名、`path`が空の場合のみ内容SHA-256を計算して`paths` Objectを照合する。辞書不一致のファイルをRuntimeのテクスチャ・音声・アニメーション参照へ投入しない。端末側割当記録の有無は照合の代替条件としない。
+
+
+## 現行仕様に基づくAsset Import Pipeline
+
+1. ユーザー指定ファイルを拡張子/実データ型で検証する。元ファイル名は改名・Unicode正規化せず照合メタデータへ保持する。
+2. `./cache/temp/user_impoert/`に一時保存し、辞書が有効なら`filename`の一致→`path`非空なら直接Path使用／空なら内容SHA-256で`paths` Object照合を実行する。
+3. 一致かつPathが`./assets/`配下で安全な場合は確認済みの上書き方針に従い確定保存する。不一致は`./cache/unknown_resouce/`へ移し、区分・対象ID・元名・保留Pathの割当情報を保存するがRuntimeへ渡さない。
+4. キャッシュクリアは`./cache/`全体を消すため、取込途中および辞書未一致の保留素材は失われる。辞書一致済み`./assets/`は残す。Version移行中は別途保護する。
+5. ログイン成功時に`./config.cfg`（YAML）を読み、`update_asset_dictionary=true`ならRelease APIから最新または`asset_dictionary_version`で指定したtagを取得する。具体的Assetを一意に選択できない場合は更新失敗として扱う。初回失敗時は1回Retryし、それでも失敗なら保存済み旧辞書へ戻す。
+
+## HCA音声の復号準備
+
+- 1ch入力は左右同値の2ch PCM、2ch入力は左右そのままのPCMを出力する。`hca_config.json`の`loop`が`true`なら全曲ループ、`false`なら単発とする。
+- 鍵が必要なら`./cache/temp/decode/keys.json`から元HCAファイル名を検索し、キャッシュ鍵で復号できなければ鍵探索へフォールバックする。探索成功鍵はJSONに更新し、キャッシュクリアで消す。復号失敗は無音とする。
+
+## Client側の描画Fallback
+
+キャラクターの骨格・アニメーション・アトラス・PNGが読み込めない場合は、別リポジトリから取得した代替画像を表示する。CharacterID/向き/Movementの対応情報が存在しない場合は代替画像へ切り替え、照合辞書の`path`/`paths`から生成しない。`FrameData.display_index`はPresenceを確認し、明示0と省略を区別する。90度の格納回転は時計回りだけを対象とし、未知方向を推測しない。

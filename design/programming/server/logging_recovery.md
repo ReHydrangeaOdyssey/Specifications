@@ -20,8 +20,8 @@ flowchart LR
     RW --> PA[Private API]
 
     DBW --> PA
-    DBW -->|2回失敗後| REC[Recovery Writer]
-    RW -->|2回失敗後| REC
+    DBW -->|確定失敗・同一IDの1回Retry失敗・通算5秒| REC[Recovery Writer]
+    RW -->|確定失敗・同一IDの1回Retry失敗・通算5秒| REC
     REC --> RF[/Persistent Recovery JSON/]
 ```
 
@@ -111,18 +111,25 @@ RequestSequence不一致や不正ID等の高頻度Security EventはMemoryで集�
 
 ## DB送信Failure State
 
-GuildBattle中のDB更新またはReplay保存が失敗した場合、同一Operationを1回だけ再試行します。
+GuildBattle中のDB更新またはReplay保存が失敗した場合、Retry可能な一時的な失敗・Timeout・結果不明に限り、初回から通算5秒の枠内で同一Operation IDを最大1回だけ再試行します。確定失敗・再試行失敗・通算5秒経過のいずれかでRecoveryへ移行します。
 
 ```mermaid
 stateDiagram-v2
     [*] --> normal
-    normal --> retrying: DB送信失敗
+    normal --> retrying: Retry可能な一時障害（5秒内）
+    normal --> recovery: 確定失敗・通算5秒
     retrying --> normal: 同一要求Retry成功
-    retrying --> recovery: Retry失敗
+    retrying --> recovery: Retry失敗・通算5秒
     recovery --> recovery: 以後の送信予定をlocal保存
 ```
 
-Recovery状態では、それ以降の対象GuildBattle中DB送信を停止して送信予定データをlocal fileへ保存します。
+Recovery状態では、それ以降の対象GuildBattle中DB送信を停止して送信予定データをGameServerの永続ローカルJournalへ保存します。ここでいう**Journal**とは、DB障害中に成立した操作をDB確定まで一時的に記録する、Event Index・Operation ID・元要求・チェックサム付きの追記型ログであり、通常のSystem LogやPlayer向けReplay画面ではありません。
+
+## Event採番と耐久確定順序
+
+同一GuildBattleの成立操作はGameServer上の単一のEvent確定キューで番号を順に予約し、番号`n`のDB COMMIT（正常時）またはJournal耐久保存（Recovery時）が確定するまで番号`n+1`の成立確定・成功応答を行わない。Createは`event_index=1`とする。Event番号・Operation ID・Payloadの対応はDBとJournalとReplay fileで同一に維持する。DBへは同一Operation ID・Event Indexを使うため、Retry/再送で二重加算をしない。
+
+ローカルJournalはEventごとのJSON不変レコードとし、`/var/lib/game-server/recovery/guild_battle_<GuildBattleID>_<InstanceID>/event_<index>_<operation-id>.json`へ保存する。一時ファイル作成→Payloadと検査用SHA-256書込→ファイル`fsync`→原子的rename→親ディレクトリ`fsync`完了を1レコードの成立境界とする。永続化が未完了なら成功応答を返さない。再起動時にはHash・Event Index・Operation ID・Payloadを検証し、未完成の一時ファイルは成立扱いしない。
 
 ## Recovery file
 
@@ -135,21 +142,22 @@ Recovery状態では、それ以降の対象GuildBattle中DB送信を停止し�
 ファイル名:
 
 ```text
-guild_battle_<GuildBattleID>_<GameServerInstanceID>.json
+guild_battle_<GuildBattleID>_<GameServerInstanceID>/event_<EventIndex>_<OperationID>.json
 ```
 
 UTF-8 JSONに以下を保存します。
 
 - 元Private API名
 - `X-Operation-ID`
-- Request Payload
-- 保存順序
+- Request Payload（protobufバイト列のBase64）
+- Event Indexおよび保存順序
+- Payloadを検証するSHA-256
 
 本番ではPersistent Volumeへmountします。
 
 ## Recovery再送
 
-騎士団戦終了時およびGameServer起動時に保存順で再送します。
+騎士団戦終了時には対象Battleの保存済みEventを番号順で再送します。GameServer起動時はJournalの検証と状態照会を行い、**終了済みBattle**のEventのみ再送します。進行中Battleの保存Eventは保全し、Battle終了時までDB送信を再開しません。
 
 - 保存済みOperation IDを変更しません。
 - 1件でも失敗した場合、fileを残します。
@@ -193,7 +201,7 @@ PlayerID、GuildBattleID、Request ID等を高Cardinality Metric Labelにしま�
 
 ## 5秒上限とBattle終了時の一括送信
 
-- 騎士団戦のDB送信Workerは初回要求開始から5秒以内にCOMMIT確認できなければ当該BattleをRecovery状態へ移行する。同BattleのDB送信は終了まで停止する。1回Retryは合計5秒の範囲内に限る。
-- 正常時の出撃の成立条件はDB COMMIT、Recovery移行後は専用永続Journalの`flush`完了とする。ローカル保存に失敗した要求は成功応答しない。
+- 騎士団戦のDB送信Workerは初回要求開始から5秒以内にCOMMIT確認できない場合、明示的な確定失敗または1回Retry失敗の場合に当該BattleをRecovery状態へ移行する。同BattleのDB送信は終了まで停止する。1回Retryは合計5秒の範囲内に限る。
+- 正常時の出撃の成立条件はDB COMMIT、Recovery移行後は専用永続Journalのファイル`fsync`・原子的rename・親ディレクトリ`fsync`完了とする。ローカル保存に失敗した要求は成功応答しない。
 - Eventの番号・Operation ID・要求Payloadを失わないようReplayQueueとRecovery Workerを連携し、DB結果不明時も同一Operation IDで保存する。Battle終了後にEvent番号順で一括再送し、DB側で既存COMMIT済みのEventを冪等に照合する。
 - 旧図の「Retry失敗」だけでなく**5秒経過**もRecovery遷移条件とする。GameServer起動時に進行中BattleのDB送信を勝手に再開しない。

@@ -16,11 +16,10 @@ message Frames {
 }
 
 // Orientation applied to the sprite when packing it into the atlas.
-// An omitted field has the NONE value; no rotation is inferred.
+// Packing rotation uses CLOCKWISE_90 when rotated; unsupported directions are rejected.
 enum SpritePackingRotation {
   SPRITE_PACKING_ROTATION_NONE = 0;
   SPRITE_PACKING_ROTATION_CLOCKWISE_90 = 1;
-  SPRITE_PACKING_ROTATION_COUNTERCLOCKWISE_90 = 2;
 }
 
 message FramesFrame {

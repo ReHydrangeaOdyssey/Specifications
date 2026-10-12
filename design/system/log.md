@@ -50,7 +50,7 @@ GameServerはシステムログ用Queueと騎士団戦リプレイログ用Repla
 ### ReplayQueue
 
 * 騎士団戦で処理が成立した場合, GameServerは状態反映および`RequestSequence`更新後に対応Replay EventをReplayQueueへ追加する.
-* Replay Event追加順は騎士団戦処理成立順と一致させる。`GuildBattleReplayEnvelope.event_index`はGuildBattleIDごとにCreateを1として成立順に連番採番し、同じ番号をDBとFileに保存する。
+* Replay Event追加順は騎士団戦処理成立順と一致させる。GuildBattle単位の確定キューで前EventのDB COMMITまたはJournalの耐久化完了を確認してから次Eventを成立確定する。`GuildBattleReplayEnvelope.event_index`はGuildBattleIDごとにCreateを1として成立順に連番採番し、同じ番号をDBとFileに保存する。
 * GameServerの騎士団戦処理スレッドはReplay EventのSerializeや同期ファイルI/Oを実行しない。出撃Eventに限り非同期WorkerによるPrivate APIのDB保存完了通知を待って成功Responseを返す。COMMIT結果が不明な場合は同一Operation IDの冪等性記録を照合し、確定したEventを失敗として破棄しない。その他の成立EventのReplay保存は非同期とする。
 * Replay WorkerはReplayQueueを成立順に読み出し, リプレイログファイルへの追記およびPrivate API Server経由のDatabase保存を行う.
 * Replay Logは完全再現に使用するためReplay Eventを破棄しない.
@@ -212,7 +212,7 @@ GameServer受信時刻, `GuildBattleID`, `GuildBattleReplayProcessType`, PlayerI
 
 ### 施設からのBP回復時
 
-GameServer受信時刻, `GuildBattleID`, `GuildBattleReplayProcessType`, 使用PlayerID, 所属GuildID, 使用後BP, 使用後回数を保存する.
+GameServer受信時刻, `GuildBattleID`, `GuildBattleReplayProcessType`, 使用PlayerID, 所属GuildID, 使用後BP, 使用後残回数, 次回補充時刻を保存する。
 
 ## 騎士団戦システムログ
 
