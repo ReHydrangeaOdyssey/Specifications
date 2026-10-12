@@ -27,7 +27,7 @@
 
 * 騎士団戦のログ・Metric・Trace処理は「[ログ仕様](../system/log.md)」に従う.
 * 騎士団戦専用スレッドは, 正常な要求ごとのApplication Log出力, Replay EventのProtocol Buffers Serialize, ファイル書き込み, `stdout` / `stderr`書き込み, 外部Telemetry送信を直接行わない.
-* 処理成立時のReplay Eventは状態反映および`RequestSequence`更新後にReplayQueueへ追加し, Replay Workerがファイル書き込みおよびPrivate API Serverへの保存を行う.
+* 通常の非出撃操作は作業状態・仮PRNG・仮`RequestSequence`で評価し、ReplayQueueでEvent番号とOperation IDを予約する。専用Workerがv2署名付きReplay WALを耐久保存してから作業状態・PRNG・`RequestSequence`を正本に確定し、成功Responseを返す。WAL失敗時は仮変更を破棄し、不成立とする。成立済みEventのDB/Fileへの反映はReplay Workerが非同期で行う。出撃と酒場はそれぞれのDB/Recovery確定規則を優先する。
 * ReplayQueueとSystem Log Queueは分離する.
 * 正常なゲームルール拒否は要求単位のLogを生成せず, Memory上のMetricへ集約する.
 * `RequestSequence`不一致および不正ID等のSecurity EventはMemory上で集約し, 最初の発生および一定期間ごとのSummaryを非同期Log Queueへ追加する.

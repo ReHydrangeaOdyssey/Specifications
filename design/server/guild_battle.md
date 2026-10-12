@@ -62,12 +62,23 @@ sequenceDiagram
         GameServer->>GameServer: LocalFormationID・LocalCharactersとPreload済みServer編成を比較
         alt すでにJoin済み
             GameServer->>GameServer: 現在保持しているRequestSequenceを取得. 騎士団戦本体PRNGは消費しない
+            GameServer -->> PublicAPIServer: GuildBattleJoinResponse(Characters, RequestSequence)
+            PublicAPIServer -->> Client: GuildBattleJoinResponse(Characters, RequestSequence)
         else 初回Join
-            GameServer->>GameServer: 騎士団戦本体PRNGでnext_bounded(1,000,000,000)+1を取得し初期RequestSequenceへ割り当て
-            GameServer->>GameServer: Join成立Replay EventをReplayQueueへ追加
+            GameServer->>GameServer: 作業PRNGでnext_bounded(1,000,000,000)+1を計算し初期RequestSequenceを仮決定
+            GameServer->>GameServer: Join Event・Event番号・Operation IDをReplayQueueに予約
+            GameServer->>GameServer: 専用Workerにv2署名付きWAL耐久保存を依頼
+            alt WAL耐久保存に成功
+                GameServer->>GameServer: 作業PRNG・Join状態・初期RequestSequenceを正本へ確定
+                GameServer -->> PublicAPIServer: GuildBattleJoinResponse(Characters, RequestSequence)
+                PublicAPIServer -->> Client: GuildBattleJoinResponse(Characters, RequestSequence)
+            else WAL保存に失敗
+                GameServer->>GameServer: 仮Join状態・PRNG・Sequence・Event予約を破棄
+                GameServer-->>PublicAPIServer: ApiErrorResponse
+                PublicAPIServer-->>Client: ApiErrorResponse
+            end
         end
-        GameServer -->> PublicAPIServer: GuildBattleJoinResponse(Characters, RequestSequence)
-        PublicAPIServer -->> Client: GuildBattleJoinResponse(Characters, RequestSequence)
+        Note over GameServer: 初回JoinはWAL耐久化後にのみ成功応答し再Joinは確定済み状態を参照する
         Client ->> User: 結果表示
     else 参加不可
         PublicAPIServer -->> Client: ApiErrorResponse
@@ -243,7 +254,7 @@ Database上の状態遷移は「[騎士団戦永続ライフサイクル](guild_
 
 #### 騎士団戦中
 
-出撃結果Responseは出撃要求元のClientへ返す. その後に行う騎士団全体のスコア・チェインの更新は, Responseとは別に`GuildBattleScoreUpdate`で両騎士団の接続中全参加者へ通知する. GameServerのRuntimeは出撃要求を受信順で直列処理し, 当該出撃の後処理と通知対象状態の確定まで同一出撃の処理とする. 通知はゲーム状態の正本ではなく, 再接続時は`GetGuildBattleStatus`で同期する.
+出撃結果Responseは出撃要求元のClientへ**出撃Replay EventのDB COMMIT（Recovery中はv2署名付きJournal耐久保存）を確認した後**に返す. 確定前の出撃状態とRequestSequenceは作業状態として扱い、保存失敗・結果不明時に成功応答しない。出撃成立後のBP/TP回復、スコア・チェイン更新は, Responseとは別に`GuildBattleScoreUpdate`で両騎士団の接続中全参加者へ通知する. GameServerのRuntimeは出撃要求を受信順で直列処理し, 当該出撃の後処理と通知対象状態の確定まで同一出撃の処理とする. 通知はゲーム状態の正本ではなく, 再接続時は`GetGuildBattleStatus`で同期する.
 
 ```mermaid
 sequenceDiagram
@@ -251,43 +262,59 @@ sequenceDiagram
     participant Client
     participant PublicAPIServer as Public API Server
     participant GameServer
+    participant ReplayWorker as Replay保存Worker
+    participant PrivateAPIServer as Private API Server
+    participant Database
     participant Subscribers as 両騎士団の購読中Client
 
     Note over Client,Subscribers: 参加後, SubscribeGuildBattleUpdatesで通知ストリームを開始済み
     loop 30分経過するまで
-        User ->> Client: 出撃ボタン押下
-        Client ->> PublicAPIServer: GuildBattleSortie(AccessToken, PlayerID, GuildBattleID, RequestSequence, SelectID[5])
-        PublicAPIServer ->> GameServer: GuildBattleSortie(PlayerID, GuildBattleID, RequestSequence, SelectID[5], AuthenticatedContext)
-        GameServer ->> GameServer: GuildBattleID・PlayerID・RequestSequence一致確認
-        GameServer ->> GameServer: 出撃可否チェック
-        GameServer ->> GameServer: 騎士団戦全体Sequence加算
-        GameServer ->> GameServer: GuildBattlePlayerRuntimeState.attack_count += 1
-        GameServer ->> GameServer: 加算後attack_countでEXTERLIZE補正を算出
-        GameServer ->> GameServer: CBC → CBC発生条件 → キリ番CB → 強襲無効 → 強襲CBの順で出撃種別を判定
-
+        User->>Client: 出撃ボタン押下
+        Client->>PublicAPIServer: GuildBattleSortie(AccessToken, PlayerID, GuildBattleID, RequestSequence, SelectID[5])
+        PublicAPIServer->>GameServer: GuildBattleSortie(PlayerID, GuildBattleID, RequestSequence, SelectID[5], AuthenticatedContext)
+        GameServer->>GameServer: GuildBattleID・PlayerID・RequestSequence・出撃可否を検証
+        GameServer->>GameServer: 作業状態で出撃Sequence・attack_countを仮加算しEXTERLIZEを判定
+        GameServer->>GameServer: CBC → CBC条件 → キリ番CB → 強襲無効 → 強襲CBの順で出撃種別を判定
         alt キャッスルブレイク
-            GameServer ->> GameServer: 相手抽選なしでCBスコア計算・イベント種別確定
-            GameServer ->> GameServer: 成功した要求のRequestSequenceを1加算
-            GameServer -->> PublicAPIServer: GuildBattleCastleBreakResponse(EventType, Score, Seed, NextRequestSequence)
-            PublicAPIServer -->> Client: GuildBattleCastleBreakResponse
+            GameServer->>GameServer: 相手抽選なしでCBスコア・EventType・結果を仮計算
         else 殲滅
-            GameServer ->> GameServer: 生存相手PlayerID候補を昇順で構築し被弾重み付き抽選
-            GameServer ->> GameServer: HP1以上の相手Character候補から抽選
-            GameServer ->> GameServer: 戦闘開始時点のOwn/EnemyCharacters, 有効BattleTacticsEffectsを確定
-            GameServer ->> GameServer: 戦闘処理
-            GameServer ->> GameServer: 成功した要求のRequestSequenceを1加算
-            GameServer -->> PublicAPIServer: GuildBattleAnnihilationResponse(EnemyPlayerID, EnemyFormationID, OwnCharacters, EnemyCharacters, BattleTacticsEffects, Seed, Score, NextRequestSequence)
-            PublicAPIServer -->> Client: GuildBattleAnnihilationResponse
-            Client ->> Client: 同一初期状態・Seedからgame-coreで戦闘を再現
+            GameServer->>GameServer: 生存相手PlayerID候補を昇順で構築し被弾重み付き抽選
+            GameServer->>GameServer: HP1以上の相手Character候補から抽選
+            GameServer->>GameServer: Own/EnemyCharacters・有効BattleTacticsEffects・Seedを確定入力として戦闘計算
         end
-
-        GameServer ->> GameServer: 出撃完了Battle SpecialのBP/TP回復を反映
-        GameServer ->> GameServer: GuildBattlePlayerRuntimeState.acquired_score += 今回取得スコア
-        GameServer ->> GameServer: 両騎士団のScore・Chain処理
-        GameServer ->> GameServer: 出撃成立Replay EventをReplayQueueへ追加
-        GameServer -->> PublicAPIServer: GuildBattleScoreUpdate(GuildBattleID, 所属別AllyScore, EnemyScore, Chain, ChainRemainingMilliseconds)
-        PublicAPIServer -->> Subscribers: 接続中の両騎士団参加者へ所属別更新を配信
-        Note over Client,Subscribers: 要求元Clientも購読中なら同じ更新を受信する
+        GameServer->>GameServer: 作業状態でRequestSequenceを仮加算し出撃Event番号・Operation IDを予約
+        GameServer->>ReplayWorker: SaveGuildBattleSortieLog保存要求(出撃成立候補Event)
+        alt 通常時のDB確定
+            ReplayWorker->>PrivateAPIServer: SaveGuildBattleSortieLog(同一Event番号・Operation ID)
+            PrivateAPIServer->>Database: 出撃Replay Eventを冪等Transactionで保存
+            Database-->>PrivateAPIServer: DB COMMIT成功
+            PrivateAPIServer-->>ReplayWorker: 保存確定
+        else DB障害・5秒の確定不能でRecoveryへ切替
+            ReplayWorker->>ReplayWorker: v2署名付きRecovery Journalを耐久保存
+        end
+        ReplayWorker-->>GameServer: DB COMMITまたはRecovery Journal耐久保存の結果
+        alt 保存確定に成功
+            GameServer->>GameServer: 出撃作業状態とRequestSequenceを正本へ反映
+            alt キャッスルブレイク
+                GameServer-->>PublicAPIServer: GuildBattleCastleBreakResponse(EventType, Score, Seed, NextRequestSequence)
+                PublicAPIServer-->>Client: GuildBattleCastleBreakResponse
+            else 殲滅
+                GameServer-->>PublicAPIServer: GuildBattleAnnihilationResponse(EnemyPlayerID, EnemyFormationID, OwnCharacters, EnemyCharacters, BattleTacticsEffects, Seed, Score, NextRequestSequence)
+                PublicAPIServer-->>Client: GuildBattleAnnihilationResponse
+                Client->>Client: 同一初期状態・Seedからgame-coreで戦闘を再現
+            end
+            GameServer->>GameServer: 出撃完了Battle SpecialのBP/TP回復を反映
+            GameServer->>GameServer: GuildBattlePlayerRuntimeState.acquired_score += 今回取得スコア
+            GameServer->>GameServer: 両騎士団Score・Chain・通知対象状態を確定
+            GameServer->>ReplayWorker: 同一出撃Eventを成立順にReplay Fileへ後追い保存
+            GameServer-->>PublicAPIServer: GuildBattleScoreUpdate(GuildBattleID, 所属別AllyScore, EnemyScore, Chain, ChainRemainingMilliseconds)
+            PublicAPIServer-->>Subscribers: 接続中の両騎士団参加者へ所属別更新を配信
+        else 保存失敗・結果不明
+            GameServer->>GameServer: 保存失敗は仮状態を破棄し結果不明は同Operation IDで照合する
+            GameServer-->>PublicAPIServer: 結果確定不能として既定のエラーまたは照会へ
+            PublicAPIServer-->>Client: 出撃の成功Responseを返さない
+        end
+        Note over GameServer,Subscribers: 後処理・通知状態の確定まで同一出撃の直列処理とし次要求へ進まない
     end
 ```
 
@@ -374,28 +401,35 @@ sequenceDiagram
     GameServer->>GameServer: TP, 使用回数チェック
 
     alt 使用可能
-        GameServer->>GameServer: 使用可能回数, TP処理
+        GameServer->>GameServer: 作業状態で使用可能回数・TPを仮更新
         alt ランダム要素あり
-            GameServer->>GameServer: 騎士団戦の現在Random.next_u32()をSeedとして取得
+            GameServer->>GameServer: 作業PRNGからRandom.next_u32()をSeedとして仮取得
             GameServer->>GameServer: Random::new(Seed)でタクティクス固有Randomを生成
             GameServer->>GameServer: タクティクス固有Randomでランダム結果を決定
         else ランダム要素なし
             GameServer->>GameServer: Seed = 0
         end
-        GameServer->>GameServer: タクティクス固有効果を適用
-        GameServer->>GameServer: 継続効果はend_type・count_consume_trigger・発動元PlayerID/GuildIDを含むTacticsActiveEffectStateとして保持
-        GameServer->>GameServer: 成功した要求のRequestSequenceを1加算
-        GameServer-->>PublicAPIServer: UseTacticsResponse(Seed)
-        PublicAPIServer-->>Client: UseTacticsResponse(Seed)
-
-        GameServer ->> GameServer: タクティクス使用成立Replay EventをReplayQueueへ追加
+        GameServer->>GameServer: 作業状態へタクティクス効果を仮適用
+        GameServer->>GameServer: 継続効果のend_type・count_consume_trigger・発動元PlayerID/GuildIDを作業状態に保持
+        GameServer->>GameServer: 作業RequestSequenceを仮加算しEvent番号・Operation IDを予約
+        GameServer->>GameServer: タクティクスEventをReplayQueueへ予約し専用Workerでv2署名付きWALを耐久保存
+        alt WAL耐久保存成功
+            GameServer->>GameServer: TP・効果・PRNG・RequestSequenceを正本へ確定
+            GameServer-->>PublicAPIServer: UseTacticsResponse(Seed)
+            PublicAPIServer-->>Client: UseTacticsResponse(Seed)
+        else WAL耐久保存失敗
+            GameServer->>GameServer: 仮状態・PRNG・Event予約を破棄しSequence不変更
+            GameServer-->>PublicAPIServer: ApiErrorResponse
+            PublicAPIServer-->>Client: ApiErrorResponse
+        end
     else 使用不可
         GameServer-->>PublicAPIServer: ApiErrorResponse(API_ERROR_TACTICS_NOT_AVAILABLE)
         PublicAPIServer-->>Client: ApiErrorResponse(API_ERROR_TACTICS_NOT_AVAILABLE)
     end
     
-    Client->>Client: TP, 使用回数更新
-    Client->>Client: ランダム要素ありの場合はSeedからRandomを生成して同じランダム結果を再現
+    Note over Client: UseTacticsResponseを受信した場合だけ次のローカル表示更新を実行
+    Client->>Client: 成功応答時にTP・使用回数を更新
+    Client->>Client: 成功応答かつランダム要素ありの場合のみSeedから同じ結果を再現
 ```
 
 継続効果を生成する場合は`TacticsActiveEffectState.source_player_id`へ使用者PlayerID, `source_guild_id`へ使用成立時点の所属GuildIDを保存し, `TacticsTarget`の相対対象解決に使用する.
@@ -461,13 +495,18 @@ sequenceDiagram
     GameServer->>GameServer: HEAL_STATE_NONEを確認
 
     alt 開始可能
-        GameServer->>GameServer: 回復待機時間算出
-        GameServer->>GameServer: HealState = HEAL_STATE_HEALING
-        GameServer->>GameServer: 成功した要求のRequestSequenceを1加算
-        GameServer-->>PublicAPIServer: StartHealResponse
-        PublicAPIServer-->>Client: StartHealResponse
-
-        GameServer ->> GameServer: 治療状態変更Replay EventをReplayQueueへ追加
+        GameServer->>GameServer: 作業状態で回復待機時間を算出しHealState = HEAL_STATE_HEALINGを仮設定
+        GameServer->>GameServer: 作業RequestSequenceを仮加算しEvent番号・Operation IDを予約
+        GameServer->>GameServer: 治療開始EventをReplayQueueへ予約し専用Workerでv2署名付きWALを耐久保存
+        alt WAL耐久保存成功
+            GameServer->>GameServer: HealState・回復待機時間・RequestSequenceを正本へ確定
+            GameServer-->>PublicAPIServer: StartHealResponse
+            PublicAPIServer-->>Client: StartHealResponse
+        else WAL耐久保存失敗
+            GameServer->>GameServer: 仮状態・Event予約を破棄しSequence不変更
+            GameServer-->>PublicAPIServer: ApiErrorResponse
+            PublicAPIServer-->>Client: ApiErrorResponse
+        end
 
         Note over GameServer: 回復待機時間経過
 
@@ -498,19 +537,24 @@ sequenceDiagram
     GameServer->>GameServer: HealState = HEAL_STATE_HEALINGを確認
 
     alt キャンセル可能
-        GameServer->>GameServer: 回復待機時間をリセット
-        GameServer->>GameServer: HealState = HEAL_STATE_NONE
+        GameServer->>GameServer: 作業状態で回復待機時間をリセットしHealState = HEAL_STATE_NONEを仮設定
         alt 治療開始前のReviveState = REVIVE_STATE_ANNIHILATED
-            GameServer->>GameServer: ReviveState = REVIVE_STATE_ANNIHILATED
+            GameServer->>GameServer: 作業ReviveState = REVIVE_STATE_ANNIHILATED
         else 治療開始前のReviveState = REVIVE_STATE_NORMAL
-            GameServer->>GameServer: ReviveState = REVIVE_STATE_NORMAL
+            GameServer->>GameServer: 作業ReviveState = REVIVE_STATE_NORMAL
         end
         Note over GameServer: HP/BPは回復しない
-        GameServer->>GameServer: 成功した要求のRequestSequenceを1加算
-        GameServer-->>PublicAPIServer: CancelHealResponse
-        PublicAPIServer-->>Client: CancelHealResponse
-
-        GameServer ->> GameServer: 治療状態変更Replay EventをReplayQueueへ追加
+        GameServer->>GameServer: 作業RequestSequenceを仮加算しEvent番号・Operation IDを予約
+        GameServer->>GameServer: 治療取消EventをReplayQueueへ予約し専用Workerでv2署名付きWALを耐久保存
+        alt WAL耐久保存成功
+            GameServer->>GameServer: 作業状態・RequestSequenceを正本へ確定
+            GameServer-->>PublicAPIServer: CancelHealResponse
+            PublicAPIServer-->>Client: CancelHealResponse
+        else WAL耐久保存失敗
+            GameServer->>GameServer: 仮状態・Event予約を破棄しSequence不変更
+            GameServer-->>PublicAPIServer: ApiErrorResponse
+            PublicAPIServer-->>Client: ApiErrorResponse
+        end
     else キャンセル不可
         GameServer-->>PublicAPIServer: ApiErrorResponse
         PublicAPIServer-->>Client: ApiErrorResponse
@@ -536,13 +580,18 @@ sequenceDiagram
     GameServer->>GameServer: HealState = HEAL_STATE_COMPLETEDを確認
 
     alt 完了可能
-        GameServer->>GameServer: BP, HP回復処理
-        GameServer->>GameServer: HealState = HEAL_STATE_NONE
-        GameServer->>GameServer: 成功した要求のRequestSequenceを1加算
-        GameServer-->>PublicAPIServer: CompleteHealResponse
-        PublicAPIServer-->>Client: CompleteHealResponse
-
-        GameServer ->> GameServer: 治療状態変更Replay EventをReplayQueueへ追加
+        GameServer->>GameServer: 作業状態でBP・HP回復とHealState = HEAL_STATE_NONEを仮計算
+        GameServer->>GameServer: 作業RequestSequenceを仮加算しEvent番号・Operation IDを予約
+        GameServer->>GameServer: 治療完了EventをReplayQueueへ予約し専用Workerでv2署名付きWALを耐久保存
+        alt WAL耐久保存成功
+            GameServer->>GameServer: 作業状態・RequestSequenceを正本へ確定
+            GameServer-->>PublicAPIServer: CompleteHealResponse
+            PublicAPIServer-->>Client: CompleteHealResponse
+        else WAL耐久保存失敗
+            GameServer->>GameServer: 仮状態・Event予約を破棄しSequence不変更
+            GameServer-->>PublicAPIServer: ApiErrorResponse
+            PublicAPIServer-->>Client: ApiErrorResponse
+        end
     else 完了不可
         GameServer-->>PublicAPIServer: ApiErrorResponse
         PublicAPIServer-->>Client: ApiErrorResponse
@@ -568,14 +617,18 @@ sequenceDiagram
     GameServer->>GameServer: 使用可能かチェック
 
     alt 復活可能
-        GameServer->>GameServer: パーティランク仕様に従ってパーティランクを算出
-        GameServer->>GameServer: パーティランクに応じた復活待機時間を設定
-        GameServer->>GameServer: ReviveState = REVIVE_STATE_REVIVING
-        GameServer->>GameServer: 成功した要求のRequestSequenceを1加算
-        GameServer-->>PublicAPIServer: StartReviveResponse
-        PublicAPIServer-->>Client: StartReviveResponse
-
-        GameServer ->> GameServer: 復活状態変更Replay EventをReplayQueueへ追加
+        GameServer->>GameServer: 作業状態でパーティランクを算出し復活待機時間とReviveState = REVIVE_STATE_REVIVINGを仮設定
+        GameServer->>GameServer: 作業RequestSequenceを仮加算しEvent番号・Operation IDを予約
+        GameServer->>GameServer: 復活開始EventをReplayQueueへ予約し専用Workerでv2署名付きWALを耐久保存
+        alt WAL耐久保存成功
+            GameServer->>GameServer: ReviveState・待機時間・RequestSequenceを正本へ確定
+            GameServer-->>PublicAPIServer: StartReviveResponse
+            PublicAPIServer-->>Client: StartReviveResponse
+        else WAL耐久保存失敗
+            GameServer->>GameServer: 仮状態・Event予約を破棄しSequence不変更
+            GameServer-->>PublicAPIServer: ApiErrorResponse
+            PublicAPIServer-->>Client: ApiErrorResponse
+        end
 
         Note over GameServer: パーティランクに応じた復活待機時間経過
 
@@ -607,13 +660,18 @@ sequenceDiagram
     GameServer->>GameServer: ReviveState = REVIVE_STATE_REVIVINGを確認
 
     alt キャンセル可能
-        GameServer->>GameServer: 復活待機時間を破棄
-        GameServer->>GameServer: ReviveState = REVIVE_STATE_ANNIHILATED
-        GameServer->>GameServer: 成功した要求のRequestSequenceを1加算
-        GameServer-->>PublicAPIServer: CancelReviveResponse
-        PublicAPIServer-->>Client: CancelReviveResponse
-
-        GameServer ->> GameServer: 復活状態変更Replay EventをReplayQueueへ追加
+        GameServer->>GameServer: 作業状態で復活待機時間を破棄しReviveState = REVIVE_STATE_ANNIHILATEDを仮設定
+        GameServer->>GameServer: 作業RequestSequenceを仮加算しEvent番号・Operation IDを予約
+        GameServer->>GameServer: 復活取消EventをReplayQueueへ予約し専用Workerでv2署名付きWALを耐久保存
+        alt WAL耐久保存成功
+            GameServer->>GameServer: 作業状態・RequestSequenceを正本へ確定
+            GameServer-->>PublicAPIServer: CancelReviveResponse
+            PublicAPIServer-->>Client: CancelReviveResponse
+        else WAL耐久保存失敗
+            GameServer->>GameServer: 仮状態・Event予約を破棄しSequence不変更
+            GameServer-->>PublicAPIServer: ApiErrorResponse
+            PublicAPIServer-->>Client: ApiErrorResponse
+        end
     else キャンセル不可
         GameServer-->>PublicAPIServer: ApiErrorResponse
         PublicAPIServer-->>Client: ApiErrorResponse
@@ -640,13 +698,18 @@ sequenceDiagram
     GameServer->>GameServer: ReviveState = REVIVE_STATE_COMPLETEDを確認
 
     alt 完了可能
-        GameServer->>GameServer: BP, HP処理
-        GameServer->>GameServer: ReviveState = REVIVE_STATE_NORMAL
-        GameServer->>GameServer: 成功した要求のRequestSequenceを1加算
-        GameServer-->>PublicAPIServer: CompleteReviveResponse
-        PublicAPIServer-->>Client: CompleteReviveResponse
-
-        GameServer ->> GameServer: 復活状態変更Replay EventをReplayQueueへ追加
+        GameServer->>GameServer: 作業状態でBP・HP処理とReviveState = REVIVE_STATE_NORMALを仮計算
+        GameServer->>GameServer: 作業RequestSequenceを仮加算しEvent番号・Operation IDを予約
+        GameServer->>GameServer: 復活完了EventをReplayQueueへ予約し専用Workerでv2署名付きWALを耐久保存
+        alt WAL耐久保存成功
+            GameServer->>GameServer: 作業状態・RequestSequenceを正本へ確定
+            GameServer-->>PublicAPIServer: CompleteReviveResponse
+            PublicAPIServer-->>Client: CompleteReviveResponse
+        else WAL耐久保存失敗
+            GameServer->>GameServer: 仮状態・Event予約を破棄しSequence不変更
+            GameServer-->>PublicAPIServer: ApiErrorResponse
+            PublicAPIServer-->>Client: ApiErrorResponse
+        end
     else 完了不可
         GameServer-->>PublicAPIServer: ApiErrorResponse
         PublicAPIServer-->>Client: ApiErrorResponse

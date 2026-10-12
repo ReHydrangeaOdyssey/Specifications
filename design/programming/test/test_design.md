@@ -173,7 +173,7 @@ IEEE-754 32bit浮動小数点として、仕様に記載された演算順を変
 - `RematchPreloadFailedGuildBattles`
 - 同一開始時刻の複数対戦中, 最初のCompletedでは除外Guildを解除せず, 最後のCompletedでのみロック解除・除外一覧削除（並行Completeを含む）
 - `SubscribeGuildBattleUpdates`の初回スナップショット・所属基準の両Guildスコアとチェイン/残り時間・複数購読者への配信
-- 出撃Response送信後に出撃後効果・Replay・更新通知, 次要求処理の前に後処理完了
+- 出撃Replay EventのDB COMMIT（Recovery中はJournal耐久保存）を確認してから出撃Responseを送信すること。Response後の出撃後効果・同EventのReplay File追記・更新通知を、次要求処理前に完了すること。永続化失敗・結果不明時に成功Responseを返さないこと。
 - チェイン時間経過リセットではPushしない, 通信断後はGetGuildBattleStatusの値へ再同期する
 - 開戦30:00の購読正常終了と, 30:00以前のキュー待ちPlayerだけ処理完了後に終了する分岐
 
@@ -411,7 +411,7 @@ Recovery fileからの再送でも同じテストを行います。
 - `FrameData.display_index`の省略／明示0、時計回り90度格納、Characterの参照不足時の代替表示を検証する。
 
 - タイトル「設定」から設定UIへ進み、配布`config.cfg`の上書き値とOPFS `config.cnf`の2つのトグルを保存・初期化できること。未登録名のアセットはoverride=trueでも使用できないこと。Hash衝突辞書に記載された候補Pathだけを明示選択できること。
-- `allow_user_asset_override=false`で辞書一致の未配置Pathへ新規取込みは可能、同じ内容の再取込みは変更なし、**既存Pathへの異内容上書きは拒否**されること。`true`かつ確認操作がある場合のみ異内容への置換を許し、未登録ファイル名/Path・形式不正は設定ONでも拒否すること。一意`path`方式で配布元内容Hashを検証したと扱わないこと。
+- `allow_user_asset_override=false`で辞書一致の未配置Pathへ新規取込みは可能、同じ内容の再取込みは変更なし、**既存Pathへの異内容上書きは拒否**されること。`true`かつ確認操作がある場合のみ一意`path`方式の既存Pathへの異内容置換を許す。`paths`方式は設定ON・利用者確認があっても対象候補Hashと内容SHA-256が異なる新規取込み・上書き・候補Path手動選択を拒否すること。未登録ファイル名/Path・形式不正は設定ONでも拒否すること。一意`path`方式で配布元内容Hashを検証したと扱わないこと。
 - Releaseの`asset_dictionary.json`に対して、同Releaseにある小文字SHA-256値をファイル名にした検査値AssetとのRaw Bytes照合を確認する。欠落・曖昧・不一致では旧Generationを保護する。`verify_asset_dictionary_sha256=false`で照合を省略してもSchema/Path検証を行う。
 - ユーザー提供PNG/HCAのHashとClient描画構造からの画像参照の一括検証、既存ファイルの退避・切替失敗時ロールバック、再起動時の参照再解決を検証する。永続Manifestは使用せず、辞書未掲載の素材はRuntime使用不可とする。
 - BGMの判定境界は`./assets/sound/bgm/`の大文字小文字・ディレクトリ区切りを区別し、サブフォルダは含める。
@@ -434,6 +434,7 @@ Recovery fileからの再送でも同じテストを行います。
 
 - Recovery Replayの1件再送が失敗する場合、`CompleteGuildBattle`を発行せず`resolving`を保持すること。全件の署名・Hash鎖・Event Index・DB確定が成功した場合だけ完了要求すること。
 - 通常Eventは受付→仮状態/番号予約→署名付きWALの耐久保存→Runtime/RequestSequence確定→成功応答→DB非同期保存の順となること。WAL書込・fsync・署名/空き容量に失敗した場合、PRNG/残数/RequestSequenceとEvent番号を進めず成功応答しないこと。
+- 初回`JoinGuildBattle`は作業PRNGで初期Sequenceを仮決定し、v2 WALが耐久化してからJoin状態・PRNG・Sequenceと成功Responseを確定すること。再JoinはPRNGを消費せず、WAL失敗時は初回Join成立・成功Responseが発生しないこと。`UseTactics`・`Start/Cancel/CompleteHeal`・`Start/Cancel/CompleteRevive`も仮状態→ReplayQueue予約→WAL耐久化→正本確定→成功Responseの順とし、WAL障害時のTP/BP/HP・継続効果・待機時間・PRNG・Sequence不変更を検査すること。
 - Item使用では対戦内Snapshotの残数を仮減算し、WAL確定後にのみ表示残数と成功応答を更新すること。`SaveGuildBattleItemLog`がSnapshotと先行Item Eventの数量連続性を再検証し、後追いTransactionでDB残数減算・Replay Eventを同時確定すること。Private APIでのRetryは同じOperation IDで二重消費しないこと。酒場利用はDB即時Transactionのまま、Recovery中には拒否すること。
 - WAL/Journal跨ぎの鍵ID変更・連鎖Anchor不一致・途中Event削除・同一番号異Payload・署名不正を検出し、DBの確定値を上書きせず隔離すること。GameServer異常終了後、未確定Battleを無条件にcompletedへ遷移しないこと。
 - BGM専用フォルダのHCAだけが音源全体ループし、その他の音源は非ループとなること。`hca_config.json`の存在有無で再生方法を変更しないこと。
@@ -465,4 +466,6 @@ Recovery fileからの再送でも同じテストを行います。
 - `StartGuildBattle`のSnapshot在庫照合と`UpdatePlayerItem`が競合するとき、同一PlayerIDのDBロックで直列化される。更新先行ならSnapshot不一致で開始拒否、開戦先行ならその通常更新が409となり、双方成功で異なる在庫を確定しない。未Joinの通常Playerも対象とする。GameServer間同期APIは用いない。
 - `./assets/`にProtoBufを置いたり、ProtoBufを起動時に`./assets/`から列挙したりしない。描画モデルはClientが利用できる構造情報または当該セッションの検証済み入力だけから選ぶ。セッション限りの構造情報を再起動で復元したと偽らず、参照が切れた明示選択は代替画像へ切り替える。CharacterID/向きの明示選択を`./settings/character_display_selections.json`から検証付きで復元し、削除・辞書変更で無効化する。全Action対応表は生成しない。
 - 辞書Pathが`./assets/characters/a.png`ならまさにそのRoot相対Pathを使用する。`./assets/assets/characters/a.png`を作らず、接頭辞欠落、`..`、不正セグメントを拒否する。
+- 辞書更新時、旧検証済み辞書GenerationによるPath→元名の逆引きが一意な場合だけ来歴を確証し、`paths`方式では現存バイト列のSHA-256も一致確認する。旧Generationの消失・破損、同Pathの複数元名候補、Hash不一致では内容やPathから元名を推測せず`./cache/obsolete_assets/`へ退避してRuntime使用を禁止すること。永続Manifestを追加しないこと。
+- 構造モデル読込み入口はPNG/HCAの通常取込みと独立し、同梱モデル・セッション読込みモデルへ同一の構造Validationを適用すること。未対応形式はエラーとし、登録失敗で既存モデルを失わないこと。`structure_ref`の異なるモデルへの重複割当、差替え後の旧ID誤参照、再起動後のセッション限定モデル誤復元を拒否し、参照失効時に代替画像へ切り替えること。
 - 辞書更新時は新旧PathだけでなくPathに紐付く元ファイル名・内容Hash条件を比較する。旧辞書にしかないPathに加え、Pathが共通でも新条件に合わない既存実ファイルを`./cache/obsolete_assets/`へ退避し、現行の許可Pathから外す。`path`一意では提供されない期待Hashの照合成功を捏造せず、`paths`条件では内容Hashの再計算を行う。適合済み共通Pathは保持する。中断時は旧辞書/旧素材へロールバックする。ローディング中は操作を無効化し、キャッシュクリアもできない。キャッシュクリア後は退避素材が消える。

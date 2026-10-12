@@ -82,7 +82,7 @@ OPFSのPNG → File / Blob → createImageBitmap() → WebGL 2 texImage2D()
 
 ### キャラクター構成セットのClient専用取り込み
 
-アセット追加画面では辞書に登録されたPNG/HCAの実ファイルを取り込みます。`SpriteAnimationData`と`PlistRoot`はClientの描画モデルであり、ProtoBufファイルを`./assets/`に配置する操作を要求しません。構造情報の参照とPNG実体の照合・既存実ファイルの安全な差替えはClient内で完結させます。対応するゲームのPublic/Private RPCは作りません。`design/client/local_asset_storage.md`のファイル単位の取込・ロールバック規則に従い、アニメーション構造検証が失敗したセットは登録せず、既存の検証済みセットを維持します。CharacterID・Actionへの機械生成不能な対応Schemaは追加しません。構造情報はClientが起動時に利用できるモデルまたはユーザーが当該セッションへ提供し検証済みのモデルから参照し、`./assets/`のProtoBuf実体を要求しません。ユーザーの明示選択はCharacterID/向き→構造モデル参照/Armatureの必要分だけ`./settings/character_display_selections.json`に原子的に保存し、再起動時にはモデルと辞書許可PNGを照合します。参照先を再読込できない場合は選択を使用せず代替画像とします。
+アセット追加画面では辞書に登録されたPNG/HCAの実ファイルを取り込みます。`SpriteAnimationData`と`PlistRoot`はClientの描画モデルであり、ProtoBufファイルを`./assets/`に配置する操作を要求しません。構造情報の参照とPNG実体の照合・既存実ファイルの安全な差替えはClient内で完結させます。対応するゲームのPublic/Private RPCは作りません。`design/client/local_asset_storage.md`のファイル単位の取込・ロールバック規則に従い、アニメーション構造検証が失敗したセットは登録せず、既存の検証済みセットを維持します。CharacterID・Actionへの機械生成不能な対応Schemaは追加しません。構造情報はClientが起動時に利用できる同梱モデル、またはアセット追加画面のPNG/HCA取込みと独立した構造モデル読込み入口でClient内部形式へ変換し、同じ構造検証に通った当該セッション内モデルから参照し、`./assets/`のProtoBuf実体を要求しません。ユーザーの明示選択はCharacterID/向き→構造モデル参照/Armatureの必要分だけ`./settings/character_display_selections.json`に原子的に保存し、再起動時にはモデルと辞書許可PNGを照合します。`structure_ref`はClientが登録した構造モデルの一意なIDとし、別モデルへの重複付与を拒否します。セッション内での再読込み・差替えにより選択が元モデルへ検証可能に結び付かない場合は無効化し、参照先を再読込できない場合も代替画像を使用します。入力ファイルの形式・拡張子は対応実データが確定するまで推測で固定しません。
 
 ### 表示モーション制御の実装詳細
 
@@ -315,7 +315,7 @@ Seedが`0`かどうかだけでランダム要素の有無を判定しません�
 
 ### 辞書照合の正本
 
-辞書はClient仕様の「アセット辞書の形式と照合規則」に従う。第1キーは元ファイル名、`path`が空の場合のみ内容SHA-256を計算して`paths` Objectを照合する。辞書不一致のファイルをRuntimeのテクスチャ・音声・アニメーション参照へ投入しない。端末側割当記録の有無は照合の代替条件としない。
+辞書はClient仕様の「アセット辞書の形式と照合規則」に従う。第1キーは元ファイル名、`path`が空の場合のみ内容SHA-256を計算して`paths` Objectを照合する。`paths`方式は`allow_user_asset_override=true`でもHash不一致の候補Path選択や異内容上書きを認めない。辞書不一致のファイルをRuntimeのテクスチャ・音声・アニメーション参照へ投入しない。端末側割当記録の有無は照合の代替条件としない。
 
 
 ## 現行仕様に基づくAsset Import Pipeline
