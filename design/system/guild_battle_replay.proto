@@ -132,7 +132,8 @@ message GuildBattleTavernRecoveryLogPayload {
   uint64 player_id = 3; // 回復を行ったPlayerID.
   uint64 guild_id = 4; // 使用時の所属GuildID.
   uint32 bp_after = 5; // 回復後BP.
-  uint32 use_count_after = 6; // 回復成立後に適用された使用回数. 0..3.
+  uint32 remaining_uses_after = 6; // 成立後の酒場残回数. 0..3。既存wire field 6は維持.
+  uint64 next_recovery_at = 7; // 次の1回分が回復するUTC epoch microseconds. 満量なら0.
 }
 
 message GuildBattleReplayEnvelope {

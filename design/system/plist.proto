@@ -15,6 +15,14 @@ message Frames {
   map<string, FramesFrame> entries = 1;
 }
 
+// Orientation applied to the sprite when packing it into the atlas.
+// An omitted field has the NONE value; no rotation is inferred.
+enum SpritePackingRotation {
+  SPRITE_PACKING_ROTATION_NONE = 0;
+  SPRITE_PACKING_ROTATION_CLOCKWISE_90 = 1;
+  SPRITE_PACKING_ROTATION_COUNTERCLOCKWISE_90 = 2;
+}
+
 message FramesFrame {
   optional sint64 height = 1; // height
   optional double offsetX = 2; // offsetX
@@ -24,6 +32,7 @@ message FramesFrame {
   optional sint64 width = 6; // width
   optional sint64 x = 7; // x
   optional sint64 y = 8; // y
+  SpritePackingRotation packing_rotation = 9;
 }
 
 message Metadata {

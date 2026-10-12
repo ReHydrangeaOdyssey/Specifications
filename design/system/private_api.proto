@@ -13,8 +13,10 @@ message CreateAccountPrivateRequest {
   string login_id = 1; // 新規作成するLoginID
   string password = 2; // Argon2idでHash化して保存するPassword
   string user_name = 3; // 新規Playerのゲーム内表示名
-  uint64 discord_user_id = 4; // `DiscordAuthorizationRequired=true`の場合は検証済みTokenの`sub`. 無効な構成では`0`
-  bytes discord_authorization_token_id = 5; // `DiscordAuthorizationRequired=true`の場合は検証済みTokenの`jti`. 無効な構成では予約済み無効値
+  uint64 discord_user_id = 4; // `AdditionalAuthorizationProvider=DISCORD`の場合は検証済みTokenの`sub`. 無効な構成では`0`
+  bytes discord_authorization_token_id = 5; // DISCORDで検証済みTokenの`jti`. 他方式では空.
+  string additional_authorization_provider = 6; // Server構成で検証済みの方式名.
+  string additional_authorization_subject = 7; // Adapterで検証済みの不変主体. NONEでは空.
 }
 
 message CreateAccountPrivateResponse {
@@ -24,8 +26,10 @@ message CreateAccountPrivateResponse {
 message AuthenticateAccountRequest {
   string login_id = 1; // 認証対象LoginID
   string password = 2; // 検証するPassword
-  uint64 discord_user_id = 3; // `DiscordAuthorizationRequired=true`の場合は検証済みTokenの`sub`. 無効な構成では`0`
-  bytes discord_authorization_token_id = 4; // `DiscordAuthorizationRequired=true`の場合は検証済みTokenの`jti`. 無効な構成では予約済み無効値
+  uint64 discord_user_id = 3; // `AdditionalAuthorizationProvider=DISCORD`の場合は検証済みTokenの`sub`. 無効な構成では`0`
+  bytes discord_authorization_token_id = 4; // DISCORDで検証済みTokenの`jti`. 他方式では空.
+  string additional_authorization_provider = 5; // Server構成で検証済みの方式名.
+  string additional_authorization_subject = 6; // Adapterで検証済みの不変主体. NONEでは空.
 }
 
 message AuthenticateAccountResponse {
@@ -448,12 +452,14 @@ message SaveGuildBattleTacticsLogRequest { game.guildbattle.replay.GuildBattleTa
 message SaveGuildBattleItemLogRequest { game.guildbattle.replay.GuildBattleItemLogPayload payload = 1; uint64 event_index = 2; }
 message SaveGuildBattleHealLogRequest { game.guildbattle.replay.GuildBattleHealLogPayload payload = 1; uint64 event_index = 2; }
 message SaveGuildBattleReviveLogRequest { game.guildbattle.replay.GuildBattleReviveLogPayload payload = 1; uint64 event_index = 2; }
+message SaveGuildBattleTavernRecoveryLogRequest { game.guildbattle.replay.GuildBattleTavernRecoveryLogPayload payload = 1; uint64 event_index = 2; }
 message SaveGuildBattleJoinLogResponse {}
 message SaveGuildBattleSortieLogResponse {}
 message SaveGuildBattleTacticsLogResponse {}
 message SaveGuildBattleItemLogResponse {}
 message SaveGuildBattleHealLogResponse {}
 message SaveGuildBattleReviveLogResponse {}
+message SaveGuildBattleTavernRecoveryLogResponse {}
 
 message GetGuildFacilityUpgradeCostPrivateRequest { uint64 player_id = 1; uint64 guild_id = 2; game.publicapi.GuildFacilityID facility_id = 3; }
 message GetGuildFacilityUpgradeCostPrivateResponse { uint32 current_level = 1; uint32 next_level = 2; uint32 required_gold = 3; bool is_max_level = 4; }

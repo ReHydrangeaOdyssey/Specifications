@@ -3,9 +3,9 @@
 * Accountの本人認証は`LoginID`と`Password`を使用する.
 * Discord Bot連携はOptionとし, Accountの本人認証方式そのものには使用しない.
 * Discord Bot連携では運営通知とDiscordロールによる追加認可を行う. 2つの機能は個別に有効・無効を設定可能とする.
-* `DiscordAuthorizationRequired=true`の場合, Account新規作成およびLoginにはDiscord Botが発行した`DiscordAuthorizationToken`を必須とする. 現在の運用では`DiscordAuthorizationRequired=true`とする.
-* `DiscordAuthorizationRequired=false`の場合, Discord Botを導入せずにAccount新規作成およびLoginを行える.
-* `DiscordAuthorizationRequired=true`で作成したAccountは`DiscordAuthorizationToken.sub`のDiscordUserIDをAccountへBindingし, Login時は同一DiscordUserIDのTokenだけを許可する.
+* 運営者は追加認可方式を`AdditionalAuthorizationProvider`で選択する。現在の運用では`DISCORD`とする。
+* `AdditionalAuthorizationProvider=NONE`の場合、追加認可Tokenを必要とせず、既存のLoginID/Password認証は維持する。
+* `AdditionalAuthorizationProvider=DISCORD`で作成したAccountは`DiscordAuthorizationToken.sub`のDiscordUserIDをAccountへBindingし、Login時は同一DiscordUserIDのTokenだけを許可する。
 * `DiscordNotificationEnabled=true`の場合, GameServer, GuildBattleCoordinatorおよびPrivate API Serverから運営向け通知をDiscord Botへ送信する. `false`の場合はBot通知を行わず, ErrorLog等の既存処理だけを行う.
 * `ACCOUNT`と`PLAYER`は分離し, 認証主体を`ACCOUNT`, ゲーム上の主体を`PLAYER`とする.
 * 1つのAccountに同時に保持できる有効なRefresh Sessionは1つだけとする.
@@ -26,17 +26,34 @@
 
 Cross-Site配布時の認証は`design/system/network.md`の「静的Clientと認証Originが異なる場合の認証手順」に従う. 既存のRefresh Session回転・期限・Cookie属性は変更しない. 認証APIのClient側呼出元を表す後続のシーケンス図は認証Origin上の画面による第一者要求を論理的に示すものであり, 別Siteの静的配布ClientがStrict Cookieを付けて直接呼ぶことを意味しない.
 
+## 追加認可方式の選択
+
+Accountの`LoginID`・`Password`による本人認証と、運営者が構成時に選ぶ**追加認可**は分離する。追加認可の運用設定`AdditionalAuthorizationProvider`は以下のいずれか1値とし、サーバー側設定だけで選択する。Clientが申告した方式に切り替えてはならない。
+
+| 値 | 追加認可の扱い |
+|---|---|
+| `DISCORD` | 従来のDiscord Role追加認可Tokenの署名、Claim、期限、Binding、再利用防止を実施する。現在の運用既定値。 |
+| `POCKETBASE` | PocketBase側で認証済みであることをServerが検証する追加認可Adapterを使用する。Clientから受け取るユーザーID自体を検証済み主体とはみなさない。 |
+| `OTHER` | 他の認証サービス用の拡張予約値。検証Adapter未実装では有効化を拒否する。 |
+| `NONE` | 追加認可を要求しない。`LoginID`・`Password`認証、AccessToken、RefreshSession、Rate Limitは維持する。公開環境では非推奨。 |
+
+- `DISCORD`は従来の`DiscordAuthorizationRequired=true`、`NONE`は`false`に相当する。`DiscordAuthorizationRequired`との二重設定は許可せず、移行後は`AdditionalAuthorizationProvider`を正本とする。`DiscordNotificationEnabled`はこの設定から独立して有効化できる。
+- `DISCORD`では既存の`discord_authorization_token`を受け付ける。`POCKETBASE`などの非Discord方式ではPublic Requestの`additional_authorization_token`からAdapterが検証する。`NONE`では追加Tokenを必須としない。**選択中の方式の検証済み結果がない場合はAccount作成・Loginを拒否する**（`NONE`を除く）。
+- Adapterが正本のサービスに対して署名・有効期限・発行者・Audience・必要な権限を検証して確定した`provider`と不変の`subject`だけをPrivate APIへ渡す。検証の具体的方式は対象サービスのAdapter契約による。`POCKETBASE`について具体的な資格情報の取得・検証を提供する実装がない場合、構成の起動時に失敗させ、無検証で通過させない。
+- `ACCOUNT`に`additional_authorization_provider`と`additional_authorization_subject`を持ち、追加認可有効時は登録時の組をLogin時に照合する。既存Discord Accountの`discord_user_id`は移行時に`DISCORD`のsubjectへ対応付ける。`NONE`は追加認可のBindingを要求しない。異なる方式への既存Account移行を自動で行わない。
+- `NONE`も認証不要な匿名アクセスを意味しない。認証なしの匿名ログインを許可する仕様は追加しない。
+
 ## Discord Bot設定
 
 | 設定 | 内容 | 現在の運用値 |
 |---|---|---|
-| `DiscordAuthorizationRequired` | Account新規作成およびLoginでDiscordロール追加認可を必須とするか | `true` |
+| `AdditionalAuthorizationProvider` | Account新規作成およびLoginで追加認可に使う方式。`DISCORD`/`POCKETBASE`/`OTHER`/`NONE` | `DISCORD` |
 | `DiscordNotificationEnabled` | 運営向け通知をDiscord Botへ送信するか | `true` |
 | `DiscordGuildID` | 追加認可でRole確認対象とするDiscord Guild | 運用設定で指定する |
 | `DiscordRequiredRoleID` | 追加認可で保持を必須とするDiscord Role | 運用設定で指定する |
 
-* `DiscordAuthorizationRequired=false`の場合, `DiscordGuildID`および`DiscordRequiredRoleID`を追加認可には使用しない.
-* `DiscordAuthorizationRequired=true`の場合, Discord Botを使用せずに新規Account作成または新規Loginを成功させる経路を設けない.
+* `AdditionalAuthorizationProvider`が`DISCORD`以外の場合、`DiscordGuildID`および`DiscordRequiredRoleID`を追加認可には使用しない。
+* `AdditionalAuthorizationProvider=DISCORD`の場合、Discord Botを使用せずに新規Account作成または新規Loginを成功させる経路を設けない。
 * `DiscordNotificationEnabled=false`の場合, 通知先Botが存在しないことをエラーとしてゲーム処理へ反映しない.
 
 ## Discord Bot追加認可
@@ -53,7 +70,7 @@ Cross-Site配布時の認証は`design/system/network.md`の「静的Clientと�
   - `jti`: Tokenごとに暗号学的乱数で生成する128bitの`DiscordAuthorizationTokenID`をcanonical UUID文字列で表した値.
   - `iat`: 発行時刻.
   - `exp`: 有効期限.
-* Public API Serverは`DiscordAuthorizationRequired=true`の場合, `CreateAccount`および`Login`の処理前に`DiscordAuthorizationToken`について以下をすべて検証する.
+* Public API Serverは`AdditionalAuthorizationProvider=DISCORD`の場合, `CreateAccount`および`Login`の処理前に`DiscordAuthorizationToken`について以下をすべて検証する.
   - JWT構文が正しい.
   - `alg=EdDSA`である.
   - Discord追加認可Token検証用公開鍵で署名を正常に検証できる.
@@ -63,8 +80,8 @@ Cross-Site配布時の認証は`design/system/network.md`の「静的Clientと�
   - `jti`が予約済み無効値ではない.
 * Public API Serverは検証成功後に`sub`のDiscordUserIDと`jti`をPrivate API Serverへ中継する.
 * Private API ServerはAccount新規作成またはLogin成功時に`jti`を使用済みとしてDatabaseへ保存する. 既に使用済みの`jti`では処理を成功させない.
-* `DiscordAuthorizationRequired=true`でAccountを新規作成する場合, `sub`のDiscordUserIDを`ACCOUNT.discord_user_id`へ保存する.
-* `DiscordAuthorizationRequired=true`でLoginする場合, `sub`のDiscordUserIDと`ACCOUNT.discord_user_id`が一致することを必須とする. 不一致時はAccount認証を成功させない.
+* `AdditionalAuthorizationProvider=DISCORD`でAccountを新規作成する場合, `sub`のDiscordUserIDを`ACCOUNT.discord_user_id`へ保存する.
+* `AdditionalAuthorizationProvider=DISCORD`でLoginする場合, `sub`のDiscordUserIDと`ACCOUNT.discord_user_id`が一致することを必須とする. 不一致時はAccount認証を成功させない.
 * Discord Botが対象DiscordUserIDについて必要Roleを保持しなくなったことを検出した場合, mTLSでPrivate API Serverの`RevokeDiscordSessions`を要求し, 当該DiscordUserIDへBindingされたAccountの`ACCOUNT_SESSION`を削除する.
 * `RefreshAccessToken`ではDiscord APIへのRole問い合わせを行わない. Role喪失はBotからのSession失効と24時間のRefresh Session期限で反映し, 通常ゲームAPIのHot PathへDiscord API通信を追加しない.
 * Discord Bot連携用のGuild ID, Role ID, Bot Token, Bot通知用mTLS秘密鍵およびDiscord追加認可Token署名用秘密鍵をソースコードまたは公開リポジトリへ保存しない.
@@ -141,7 +158,7 @@ sequenceDiagram
     participant PrivateAPIServer as Private API Server
     participant Database
 
-    opt DiscordAuthorizationRequired=true
+    opt AdditionalAuthorizationProvider=DISCORD
         User->>Discord: Discord追加認可Token要求
         Discord->>DiscordBot: DiscordUserID
         DiscordBot->>DiscordBot: Guild・Role・前回要求時刻を検証
@@ -152,7 +169,7 @@ sequenceDiagram
 
     User->>Client: LoginID・Password・ユーザー名入力
     Client->>PublicAPIServer: CreateAccount(LoginID, Password, UserName, DiscordAuthorizationToken)
-    PublicAPIServer->>PublicAPIServer: 必要な場合DiscordAuthorizationToken検証
+    PublicAPIServer->>PublicAPIServer: 選択した追加認可方式のTokenを検証
     PublicAPIServer->>PrivateAPIServer: CreateAccount(LoginID, Password, UserName, DiscordUserID, DiscordAuthorizationTokenID)
     PrivateAPIServer->>PrivateAPIServer: LoginID・Password・UserName検証
     PrivateAPIServer->>PrivateAPIServer: Argon2idでPasswordHash生成
@@ -166,7 +183,7 @@ sequenceDiagram
 
 * `LoginID`はDatabase上で一意とする.
 * `UserName`は既存のPlayerユーザー名制約に従う.
-* `DiscordAuthorizationRequired=true`の場合はAccountへDiscordUserIDをBindingし, `DiscordAuthorizationTokenID`を使用済みとして保存する.
+* `AdditionalAuthorizationProvider=DISCORD`の場合はAccountへDiscordUserIDをBindingし, `DiscordAuthorizationTokenID`を使用済みとして保存する.
 * Account作成, Player作成およびDiscord追加認可Token使用済み記録は同一トランザクションで行う.
 * AccountIDおよびPlayerIDは予約済み無効値を生成しない.
 * LoginID重複による作成失敗はClientへ既存LoginIDの存在を明示せず`API_ERROR_ACCOUNT_CREATION_FAILED`として返す.
@@ -187,7 +204,7 @@ sequenceDiagram
     participant PrivateAPIServer as Private API Server
     participant Database
 
-    opt DiscordAuthorizationRequired=true
+    opt AdditionalAuthorizationProvider=DISCORD
         User->>Discord: Discord追加認可Token要求
         Discord->>DiscordBot: DiscordUserID
         DiscordBot->>DiscordBot: Guild・Role・前回要求時刻を検証
@@ -201,7 +218,7 @@ sequenceDiagram
     PublicAPIServer->>PublicAPIServer: ClientVersion == RequiredVersionを確認
 
     alt Version一致
-        PublicAPIServer->>PublicAPIServer: 必要な場合DiscordAuthorizationToken検証
+        PublicAPIServer->>PublicAPIServer: 選択した追加認可方式のTokenを検証
         PublicAPIServer->>PrivateAPIServer: AuthenticateAccount(LoginID, Password, DiscordUserID, DiscordAuthorizationTokenID)
         PrivateAPIServer->>Database: LoginIDに対応するACCOUNT・PLAYER取得
         Database-->>PrivateAPIServer: Account・Player
@@ -238,7 +255,7 @@ sequenceDiagram
 ```
 
 * Public API Serverは現在要求する`Version`を保持し, Login時に`LoginRequest.ClientVersion`との一致を検証する.
-* `DiscordAuthorizationRequired=true`の場合, Discord追加認可Tokenの未指定は`API_ERROR_DISCORD_AUTHORIZATION_REQUIRED`, 不正, 期限切れまたは使用済みは`API_ERROR_INVALID_DISCORD_AUTHORIZATION_TOKEN`として返す.
+* `AdditionalAuthorizationProvider=DISCORD`の場合、Discord追加認可Tokenの未指定は`API_ERROR_DISCORD_AUTHORIZATION_REQUIRED`, 不正, 期限切れまたは使用済みは`API_ERROR_INVALID_DISCORD_AUTHORIZATION_TOKEN`として返す.
 * LoginID不存在, Password不一致およびDiscordUserID Binding不一致はClientへ同一の`API_ERROR_INVALID_CREDENTIALS`として返す.
 * Login成功時に既存`ACCOUNT_SESSION`を削除してから新しいSessionを保存する.
 * Login成功後, 旧RefreshTokenは使用できない.
@@ -316,3 +333,4 @@ sequenceDiagram
 * 本処理ではRefresh Sessionの期限を延長しない.
 
 CreateGuildへの応答が失われた場合、Clientは`GetInitialGuildStatus`でDB上の作成完了を照会し、作成済みなら通常フローへ、未作成なら初期Guild作成画面へ戻る。CreateGuild要求そのものは再試行しない。
+

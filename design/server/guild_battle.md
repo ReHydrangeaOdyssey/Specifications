@@ -728,3 +728,6 @@ sequenceDiagram
     end
 ```
 
+## DB/NW障害時の5秒判定
+
+当該騎士団戦の最初のDB送信開始から各操作のDB COMMIT確認まで5秒を超えた場合、その操作以降はBattle終了までDB送信を停止する。GameServerは新規成立Eventを永続ローカルJournalへ保存し、保存完了後にのみ成功応答する。Battle終了後、Operation IDとEvent Indexで冪等に一括送信する。通常時はDB COMMIT確認後に成功を返す。

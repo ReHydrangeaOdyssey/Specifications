@@ -190,3 +190,10 @@ PlayerID、GuildBattleID、Request ID等を高Cardinality Metric Labelにしま�
 - `design/server/data_base.md`
 - `design/system/guild_battle_replay.proto`
 - `design/operation/operation.md`
+
+## 5秒上限とBattle終了時の一括送信
+
+- 騎士団戦のDB送信Workerは初回要求開始から5秒以内にCOMMIT確認できなければ当該BattleをRecovery状態へ移行する。同BattleのDB送信は終了まで停止する。1回Retryは合計5秒の範囲内に限る。
+- 正常時の出撃の成立条件はDB COMMIT、Recovery移行後は専用永続Journalの`flush`完了とする。ローカル保存に失敗した要求は成功応答しない。
+- Eventの番号・Operation ID・要求Payloadを失わないようReplayQueueとRecovery Workerを連携し、DB結果不明時も同一Operation IDで保存する。Battle終了後にEvent番号順で一括再送し、DB側で既存COMMIT済みのEventを冪等に照合する。
+- 旧図の「Retry失敗」だけでなく**5秒経過**もRecovery遷移条件とする。GameServer起動時に進行中BattleのDB送信を勝手に再開しない。

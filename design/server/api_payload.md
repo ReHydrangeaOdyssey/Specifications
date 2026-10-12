@@ -176,7 +176,8 @@ Account作成後の初期騎士団作成等, 必須の後続処理が成立し�
 | LoginID | `LoginID` | ログイン認証に使用するユーザーID |
 | Password | `Password` | ログイン認証に使用するPassword |
 | UserName | `UserName` | ゲーム内表示用ユーザー名 |
-| DiscordAuthorizationToken | `DiscordAuthorizationToken` | `DiscordAuthorizationRequired=true`の場合に必須. 無効な構成では空文字とし検証しない |
+| DiscordAuthorizationToken | `DiscordAuthorizationToken` | `AdditionalAuthorizationProvider=DISCORD`の場合だけ必須。それ以外は空文字を許す |
+| AdditionalAuthorizationToken | `String` | `POCKETBASE`等の非Discord追加認可Adapterが検証するToken。`NONE`では省略可 |
 
 ### CreateAccountResponse
 
@@ -191,7 +192,8 @@ Account作成後の初期騎士団作成等, 必須の後続処理が成立し�
 | LoginID | `LoginID` | ログイン認証に使用するユーザーID |
 | Password | `Password` | ログイン認証に使用するPassword |
 | ClientVersion | `Version` | Clientが使用しているゲームロジックおよびマスターデータのVersion |
-| DiscordAuthorizationToken | `DiscordAuthorizationToken` | `DiscordAuthorizationRequired=true`の場合に必須. 無効な構成では空文字とし検証しない |
+| DiscordAuthorizationToken | `DiscordAuthorizationToken` | `AdditionalAuthorizationProvider=DISCORD`の場合だけ必須。それ以外は空文字を許す |
+| AdditionalAuthorizationToken | `String` | `POCKETBASE`等の非Discord追加認可Adapterが検証するToken。`NONE`では省略可 |
 
 ### LoginResponse
 
@@ -463,7 +465,8 @@ GameServerが算出した勝敗・最終HP等の戦闘結果は返さない. Cli
 | Chain | `Count` | 現在のチェイン数 |
 | CbcStatus | `GuildBattleCbcStatus` | 現在のキャッスルブレイクチャンス状態 |
 | RequestSequence | `RequestSequence` | GameServerが現在保持する要求シーケンス番号. 状態取得では加算しない |
-| TavernRemainingUses | `TavernUseCount` | 当該Playerの操作に適用される酒場の残り使用回数（0～3） |
+| TavernRemainingUses | `TavernUseCount` | 当該Playerの酒場ストック残回数（0～3） |
+| TavernNextRecoveryAt | `GameServerTime` | 次の1回分の回復予定時刻。満量なら0 |
 
 ### GuildBattleSortieRequest
 
@@ -580,6 +583,7 @@ GameServerが決定した戦闘開始時点の入力を送信し, ClientはGameS
 |---|---|---|
 | BP | `BP` | 回復成立後のBP. 最大BPを超えない |
 | RemainingUses | `TavernUseCount` | 操作者に適用される残り回数（0～3） |
+| NextRecoveryAt | `GameServerTime` | 次の1回分の回復予定時刻。満量なら0 |
 | NextRequestSequence | `RequestSequence` | 成立時に1加算したSequence |
 
 ### StartHealRequest
@@ -717,8 +721,10 @@ GameServerが決定した戦闘開始時点の入力を送信し, ClientはGameS
 | LoginID | `LoginID` | 新規作成するLoginID |
 | Password | `Password` | Argon2idでHash化して保存するPassword |
 | UserName | `UserName` | 新規Playerのゲーム内表示名 |
-| DiscordUserID | `DiscordUserID` | `DiscordAuthorizationRequired=true`の場合は検証済みTokenの`sub`. 無効な構成では`0` |
-| DiscordAuthorizationTokenID | `DiscordAuthorizationTokenID` | `DiscordAuthorizationRequired=true`の場合は検証済みTokenの`jti`. 無効な構成では予約済み無効値 |
+| DiscordUserID | `DiscordUserID` | `AdditionalAuthorizationProvider=DISCORD`の場合は検証済みTokenの`sub`. 無効な構成では`0` |
+| DiscordAuthorizationTokenID | `DiscordAuthorizationTokenID` | `AdditionalAuthorizationProvider=DISCORD`の場合は検証済みTokenの`jti`. それ以外は空値 |
+| AdditionalAuthorizationProvider | `String` | Server構成で確定し検証済みの方式。Clientの自己申告は無視 |
+| AdditionalAuthorizationSubject | `String` | Provider Adapter検証済みの主体。`NONE`では空値 |
 
 ### CreateAccountPrivateResponse
 
@@ -732,8 +738,10 @@ GameServerが決定した戦闘開始時点の入力を送信し, ClientはGameS
 |---|---|---|
 | LoginID | `LoginID` | 認証対象LoginID |
 | Password | `Password` | 検証するPassword |
-| DiscordUserID | `DiscordUserID` | `DiscordAuthorizationRequired=true`の場合は検証済みTokenの`sub`. 無効な構成では`0` |
-| DiscordAuthorizationTokenID | `DiscordAuthorizationTokenID` | `DiscordAuthorizationRequired=true`の場合は検証済みTokenの`jti`. 無効な構成では予約済み無効値 |
+| DiscordUserID | `DiscordUserID` | `AdditionalAuthorizationProvider=DISCORD`の場合は検証済みTokenの`sub`. 無効な構成では`0` |
+| DiscordAuthorizationTokenID | `DiscordAuthorizationTokenID` | `AdditionalAuthorizationProvider=DISCORD`の場合は検証済みTokenの`jti`. それ以外は空値 |
+| AdditionalAuthorizationProvider | `String` | Server構成で確定し検証済みの方式。Clientの自己申告は無視 |
+| AdditionalAuthorizationSubject | `String` | Provider Adapter検証済みの主体。`NONE`では空値 |
 
 ### AuthenticateAccountResponse
 
@@ -1380,7 +1388,8 @@ Private APIは再抽選を行わない. `GuildBattleID[]`と`Battles[]`のID集�
 | PlayerID | `PlayerID` | 回復を使用したPlayerID |
 | GuildID | `GuildID` | 使用時に所属していたGuildID |
 | BPAfter | `BP` | 回復後のBP |
-| UseCountAfter | `TavernUseCount` | 成立後の使用回数（0～3） |
+| RemainingUsesAfter | `TavernUseCount` | 成立後のストック残回数（0～3） |
+| NextRecoveryAt | `GameServerTime` | 成立後の次回回復予定時刻（満量時0） |
 
 ### GuildBattleHealLogPayload
 
@@ -1407,3 +1416,7 @@ Private APIは再抽選を行わない. `GuildBattleID[]`と`Battles[]`のID集�
 ## プロフィール・フレンド通信Payload
 
 通信型・field numberは`design/system/public_api.proto`および`design/system/private_api.proto`を正本とする。`GetPlayerProfile`は対象Playerの名前、騎士団戦参加回数（`Count`）、勝利数（`Count`）、累計騎士団スコア（`Score` = `u64`）を返す。`ListNotifications`は本人が受け取った未処理フレンド申請の送信者ID・名前を含み、`RespondFriendRequest`は送信者PlayerIDと承認/拒否を指定する。`ListFriends`は本人と相互フレンドになったPlayerIDと表示名の組を返す。`SendFriendRequestResponse.already_requested`は同方向の申請済み状態、`RespondFriendRequestResponse.already_friends`は逆方向申請への応答時にすでにフレンドであった状態を表す。`RemoveFriend`は本人と指定Playerの成立済みフレンド関係を解除する。
+
+## 追加認可用Payloadの互換性
+
+`CreateAccountRequest`と`LoginRequest`の`discord_authorization_token`は`AdditionalAuthorizationProvider=DISCORD`のときだけ使用し、非Discord Adapterへ渡すTokenは`additional_authorization_token`とする。`NONE`では追加認可Tokenの省略を許可する。Private APIの`additional_authorization_provider`と`additional_authorization_subject`はPublic APIが認可Adapterで検証済みの結果を渡す内部値であり、Clientの自己申告値は使用しない。

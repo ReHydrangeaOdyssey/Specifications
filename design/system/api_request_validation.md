@@ -9,6 +9,8 @@ HTTP 400は構文/型/許容値の不正、401は認証不成立、403は権限�
 
 ## フィールド一覧
 
+追加認可Tokenの必須性は`design/server/session.md`の`AdditionalAuthorizationProvider`を正本とする。`DISCORD`では従来Field 4、`POCKETBASE`ではField 5を用い、`NONE`では両者の省略を認める。検証Adapter未実装の方式は許可しない。
+
 ### Public `CreateAccount` — `CreateAccountRequest`
 
 | Field | Wire型 | Presence/必須性 | 有効値/制限 | 不正時 |
@@ -16,7 +18,8 @@ HTTP 400は構文/型/許容値の不正、401は認証不成立、403は権限�
 | `login_id` | `string`（1） | 非空を要求する場合は空文字/空bytesを拒否 | UTF-8/Token/Header/Sizeなど既存Payload制約 | 400:型/長さ不正、401:認証失敗 |
 | `password` | `string`（2） | 空文字禁止、長さ/形式は既存認証仕様 | UTF-8/Token/Header/Sizeなど既存Payload制約 | 400:形式不正、401:認証不成立 |
 | `user_name` | `string`（3） | 非空を要求する場合は空文字/空bytesを拒否 | UTF-8/Token/Header/Sizeなど既存Payload制約 | 400:型/長さ不正、401:認証失敗 |
-| `discord_authorization_token` | `string`（4） | 未設定の認証情報は拒否 | UTF-8/Token/Header/Sizeなど既存Payload制約 | 401:認証不正、400:形式不正 |
+| `discord_authorization_token` | `string`（4） | `DISCORD`のとき必須。それ以外では省略可 | UTF-8/Token/Header/Sizeなど既存Payload制約 | 401:認証不正、400:形式不正 |
+| `additional_authorization_token` | `string`（5） | `POCKETBASE`等の非Discord追加認可で必須、`NONE`では省略可 | 検証Adapterが検証したTokenのみ有効 | 401:認可不成立、400:形式不正 |
 
 ### Public `Login` — `LoginRequest`
 
@@ -25,7 +28,8 @@ HTTP 400は構文/型/許容値の不正、401は認証不成立、403は権限�
 | `login_id` | `string`（1） | 非空を要求する場合は空文字/空bytesを拒否 | UTF-8/Token/Header/Sizeなど既存Payload制約 | 400:型/長さ不正、401:認証失敗 |
 | `password` | `string`（2） | 空文字禁止、長さ/形式は既存認証仕様 | UTF-8/Token/Header/Sizeなど既存Payload制約 | 400:形式不正、401:認証不成立 |
 | `client_version` | `string`（3） | 非空を要求する場合は空文字/空bytesを拒否 | UTF-8/Token/Header/Sizeなど既存Payload制約 | 400:型/長さ不正、401:認証失敗 |
-| `discord_authorization_token` | `string`（4） | 未設定の認証情報は拒否 | UTF-8/Token/Header/Sizeなど既存Payload制約 | 401:認証不正、400:形式不正 |
+| `discord_authorization_token` | `string`（4） | `DISCORD`のとき必須。それ以外では省略可 | UTF-8/Token/Header/Sizeなど既存Payload制約 | 401:認証不正、400:形式不正 |
+| `additional_authorization_token` | `string`（5） | `POCKETBASE`等の非Discord追加認可で必須、`NONE`では省略可 | 検証Adapterが検証したTokenのみ有効 | 401:認可不成立、400:形式不正 |
 
 ### Public `RefreshAccessToken` — `RefreshAccessTokenRequest`
 
@@ -943,3 +947,12 @@ HTTP 400は構文/型/許容値の不正、401は認証不成立、403は権限�
 5. エラーは既存のHTTPステータスと`ApiErrorResponse`を用い、失敗した状態変更は永続化しない。
 
 出撃の保存失敗は成功として応答せず、既存のAPIエラーに従う。一般Player向けReplay一覧/取得は現段階では公開しない。
+
+### Private `SaveGuildBattleTavernRecoveryLog` — `SaveGuildBattleTavernRecoveryLogRequest`
+
+| Field | Wire型 | Presence/必須性 | 有効値/制限 | 不正時 |
+|---|---|---|---|---|
+| `payload` | `GuildBattleTavernRecoveryLogPayload`（1） | 必須（message存在必須） | GuildBattleID・PlayerID・GuildID、残回数0～3、次回回復時刻と成立時刻の整合 | 400 / 409 |
+| `event_index` | `uint64`（2） | 必須、0は禁止 | GuildBattleIDごとに連番。DBでOperation IDと合わせて重複検証 | 400 / 409 |
+
+`X-Operation-ID`はUUID 128bitを必須とする。Replay Eventと`PLAYER_TAVERN_RECOVERY`更新は同一Transactionに含める。

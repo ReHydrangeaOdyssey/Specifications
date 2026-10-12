@@ -87,7 +87,7 @@ flowchart TD
 * 運営ComponentからPrivate API Serverへの運用API通信はmTLSを必須とする. Private API Serverは運営用Service Identityを検証し, 運営API以外を許可しない.
 * 運営ComponentからGuildBattleCoordinatorへのCoordinator固有運用API通信もmTLSを必須とし, GuildBattleCoordinatorは運営用Service Identityから許可した運用操作だけを受け付ける.
 * `DiscordNotificationEnabled=true`の場合, GameServer, GuildBattleCoordinatorまたはPrivate API ServerからDiscord Botへ送信する運営通知通信はmTLSを必須とする. Discord Botは通知送信元のService Identityを検証する.
-* `DiscordAuthorizationRequired=true`の場合, Discord BotからPrivate API Serverの`RevokeDiscordSessions`へ送信するRole喪失通知もmTLSを必須とする. Private API ServerはDiscord BotのService Identityを検証し, Discord Botから他のPrivate APIを受け付けない.
+* `AdditionalAuthorizationProvider=DISCORD`の場合, Discord BotからPrivate API Serverの`RevokeDiscordSessions`へ送信するRole喪失通知もmTLSを必須とする. Private API ServerはDiscord BotのService Identityを検証し, Discord Botから他のPrivate APIを受け付けない.
 * mTLS証明書はPublic API Server, GameServer, GuildBattleCoordinator, Private API Server, Discord Botおよび運営Componentを識別可能なService Identityを持つ. 接続先Serverは証明書のService Identityに基づき呼び出し可能なAPIを制限する.
 * Private Network内からの接続であっても到達可能性だけを認証根拠としない. Public API Server, GameServer, GuildBattleCoordinator, Private API Server, Discord Botおよび運営Component間の内部Requestは, mTLSで検証したService Identityと許可済みAPIの組み合わせが一致する場合だけ受け付ける.
 * Public API ServerがAccessTokenを検証済みであっても, Private API ServerおよびGameServerはPublic API ServerによるDomain認可結果を信頼しない. Private API ServerはDatabase上の現在状態からAccount/Guildの認可と不変条件を再評価し, GameServerは自身が所有する現在ゲーム状態からArena/GuildBattleの操作可否と不変条件を再評価する.
@@ -95,7 +95,7 @@ flowchart TD
 * Databaseへ直接接続できるのはPrivate API Serverだけとする. Public API Server, GameServerおよびGuildBattleCoordinatorからDatabaseへ直接接続しない.
 * 認証用秘密鍵, Database認証情報, Discord Bot Token, TLS秘密鍵等の秘密情報をソースコードおよび公開リポジトリへ保存しない.
 * AccessToken署名用秘密鍵はPrivate API Serverだけが保持する. DiscordAuthorizationToken署名用秘密鍵はDiscord Botだけが保持する. Public API Serverは各Tokenの検証用公開鍵だけを保持する.
-* Discord Bot連携はOptionとする. `DiscordAuthorizationRequired`と`DiscordNotificationEnabled`は独立して設定する. 現在の運用では`DiscordAuthorizationRequired=true`とする.
+* Discord Bot連携はOptionとする. `AdditionalAuthorizationProvider`と`DiscordNotificationEnabled`は独立して設定する。現在の運用では追加認可を`DISCORD`とする。
 
 ### 本番環境
 
@@ -177,7 +177,7 @@ flowchart TD
 * GameServerは進行中のゲーム状態をメモリ上に保持するstateful構成とする. 騎士団戦は`GuildBattleCoordinator`が`GuildBattleID`単位で1つのGameServerへ割り当て, 同一騎士団戦の処理を複数GameServerで同時に行わない.
 * GuildBattleCoordinatorは騎士団戦の生成・マッチング・GameServer割当・Preload開始指示だけを担当し, Clientからの通常騎士団戦要求の経路には入らない. 詳細は「[騎士団戦コーディネーター](../server/guild_battle_coordinator.md)」を参照する.
 * Public API Serverは`GuildBattleID -> GameServerInstanceID`を使用して騎士団戦要求を所有GameServerへ中継する. 本番環境では`GameServerInstanceID`にKubernetes Pod UIDを使用し, Public API ServerはEndpointSliceをwatchしてPod UIDから接続先Endpointを解決する. 通常のService Load Balancingを騎士団戦要求の所有GameServer選択には使用しない. 詳細は「[ゲームサーバー](../server/game_server.md)」を参照する.
-* KubernetesではNetworkPolicyを使用し, Internetから到達可能な対象をIngress/Public API Serverだけに制限する. GameServer, GuildBattleCoordinator, Private API Server, DatabaseをInternetへ直接公開しない. Discord BotはDiscordとの通信に必要な外向き通信, GameServer・GuildBattleCoordinator・Private API Serverからの運営通知受信, `DiscordAuthorizationRequired=true`時のPrivate API Server `RevokeDiscordSessions`呼び出しだけを許可する.
+* KubernetesではNetworkPolicyを使用し, Internetから到達可能な対象をIngress/Public API Serverだけに制限する. GameServer, GuildBattleCoordinator, Private API Server, DatabaseをInternetへ直接公開しない. Discord BotはDiscordとの通信に必要な外向き通信, GameServer・GuildBattleCoordinator・Private API Serverからの運営通知受信, `AdditionalAuthorizationProvider=DISCORD`時のPrivate API Server `RevokeDiscordSessions`呼び出しだけを許可する.
 * Discord Botの本番配置先は本仕様では固定しない. Discordへ接続可能で, GameServer・GuildBattleCoordinator・Private API Serverからの運営通知を受信可能かつ必要時にPrivate API ServerへmTLS接続可能な運営管理下環境へ配置する.
 * Public API Server, GameServerおよびGuildBattleCoordinator Podはnon-root Userで実行し, privilege escalationを禁止し, Linux Capabilityをすべてdropし, `RuntimeDefault` seccompを使用する.
 * Public API Server, GameServerおよびGuildBattleCoordinator Podはroot filesystemをread-onlyとする. System/Access/Security Logは`stdout` / `stderr`へ出力し, Container RuntimeおよびNode上のログ収集Agentが非同期に収集する. 騎士団戦リプレイログ用の`./log/guild_battle`だけを必要なGameServerへ専用Writable Volumeとしてmountする. GameServerのDatabase障害時保存は`/var/lib/game-server/recovery`へmountした専用Persistent Volumeへの書き込みを許可する.

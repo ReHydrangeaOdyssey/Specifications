@@ -74,7 +74,7 @@
 | `Attack` | `u16` | `uint32` | `integer` | 攻撃力 |
 | `Defense` | `u16` | `uint32` | `integer` | 防御力 |
 | `Gold` | `u32` | `uint32` | `bigint` | Playerが保有するゴールド. 新規Playerの初期値は0 |
-| `TavernUseCount` | `u8` | `uint32` | `smallint` | 酒場の使用回数. 0～3だけを許可する |
+| `TavernUseCount` | `u8` | `uint32` | `smallint` | 酒場のストック残回数. 初期3、0～3だけを許可する。消費1回分は2時間で再充填 |
 | `BP` | `u16` | `uint32` | `integer` | BP. 受信時は0～65535を検証する. 通常Player初期最大BPは200, ダミーPlayer最大BPは500 |
 | `TP` | `u8` | `uint32` | `smallint` | TP. 型としての絶対上限は255. 騎士団戦での通常最大値は100で, 最大TP補正適用後も255を超えない |
 | `Score` | `u64` | `uint64` | `numeric(20,0)` | 騎士団合計pt・個人累計騎士団スコアおよび永続最終スコア. 出撃の32bit浮動小数点計算値を騎士団合計に加算する際に限り小数部分を切り捨てる |

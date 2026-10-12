@@ -104,7 +104,7 @@ Password HashはArgon2idを使用し、仕様の最低設定を満たします�
 
 ## Discord Authorization
 
-`DiscordAuthorizationRequired=true`の場合、Account作成とLoginでDiscordAuthorizationTokenを要求します。
+`AdditionalAuthorizationProvider=DISCORD`の場合、Account作成とLoginでDiscordAuthorizationTokenを要求します。`POCKETBASE`の場合は検証Adapterの導入を必須とし、未実装ならServerを起動しません。`NONE`の場合は追加Tokenを要求しませんがLoginID/Passwordによる本人認証とSession発行は従来どおり行います。
 
 Tokenは以下の性質を持ちます。
 

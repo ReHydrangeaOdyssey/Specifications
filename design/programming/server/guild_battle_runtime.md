@@ -120,7 +120,9 @@ flowchart TD
     RS --> DUR[作業状態のRequestSequence仮加算 専用Workerへ出撃Replay Event保存要求]
     DUR --> ACK{DB COMMIT確認?}
     ACK -->|成功| RESP[要求元へ出撃結果Response]
-    ACK -->|失敗| ERR[出撃を不成立としてエラー 応答]
+    ACK -->|障害・5秒確定不能| LOCAL[Recovery Journalへ非同期書込]
+    LOCAL -->|永続化成功| RESP
+    LOCAL -->|失敗| ERR[出撃を不成立としてエラー 応答]
     RESP --> B[出撃完了BattleSpecial BP/TP回復]
     B --> SC[acquired_score加算]
     SC --> CH[両Guild Score Chain確定]
@@ -133,7 +135,7 @@ flowchart TD
 
 殲滅では`GuildBattleAnnihilationResponse`に戦闘開始時点の`OwnCharacters`, `EnemyCharacters`, `EnemyPlayerID`, `EnemyFormationID`, 戦闘に関係する`BattleTacticsEffects`, `Seed`を格納する. ClientはJoin時同期済み自身の編成とこの入力で同一`game-core`を実行する. 表示済みの古いHPやTacticsを流用せず, 関係しない継続効果・最終HP・行動履歴を追加送信しない.
 
-出撃EventはGameServerが非同期I/O Workerを使ってPrivate APIの`SaveGuildBattleSortieLog`でDBへ先行永続化し、WorkerのCOMMIT確認後に成功Responseを返す。保存結果のTimeoutなど確定不明時は同一`X-Operation-ID`でPrivate APIの冪等記録を再照合し、DB確定を確認した場合は成立済みとして処理を進める。保存不成立を確認するまで作業状態を破棄せず、確定不明の間は当該GuildBattleの後続状態変更要求を保留する。成功確定前は次の騎士団戦操作を適用しない。出撃のPRNG計算と状態遷移は未確定の作業状態で算出し、保存成功時にだけRuntimeの正本へ反映する。DBへの未保存が確定した場合は作業状態を破棄し、PRNG・RequestSequence・攻撃回数を進めず要求を失敗とする。出撃結果Responseはこの耐久化より後で、以下の後処理より先に送るが, その後のBattle Special回復, `acquired_score`, スコア・チェイン確定, Replay Event追加まで同一出撃の直列実行範囲とする. GameServerにおける騎士団合計スコアの正本はResponseの未切り捨て`SortieScore`ではなくRuntimeの確定済み`Score`である.  先行保存した出撃Eventは後処理完了後のReplayQueueで同じ`event_index`を用い、Private APIでは既保存として重複書込みをしない。GameServer再起動時は保存済みEventを順にReplay適用してResponse後の未適用BP/TP・Score・Chain等を復元する。送信通知の失敗によって出撃を巻き戻さない.
+出撃EventはGameServerが非同期I/O Workerを使ってPrivate APIの`SaveGuildBattleSortieLog`でDBへ先行永続化し、通常時はWorkerのCOMMIT確認後に成功Responseを返す。初回送信開始から5秒以内にCOMMIT確認できない場合はDB/NW障害として当該騎士団戦のDB送信を終了時まで停止し、永続ローカルJournalへの書込成功後に限って応答する。5秒の判定前に保存結果が確定不明な場合は同一`X-Operation-ID`でPrivate APIの冪等記録を再照合する。5秒を超えた場合は即時再照合を止め、ローカルJournalに同一Operation IDで記録し、騎士団戦終了後の一括再送時にDB重複を照合する。正常送信中の確定不明では作業状態を保持し、同GuildBattleの後続状態変更要求を保留する。5秒超過でRecoveryへ移行した場合はJournal確定を持って次の要求の処理に進む。成功確定前は次の騎士団戦操作を適用しない。出撃のPRNG計算と状態遷移は未確定の作業状態で算出し、通常時はDB COMMIT、Recovery時はローカルJournalの永続化完了によりRuntimeの正本へ反映する。DBへの未保存が確定した場合は作業状態を破棄し、PRNG・RequestSequence・攻撃回数を進めず要求を失敗とする。出撃結果ResponseはDBまたはRecovery Journalの耐久化より後で、以下の後処理より先に送るが, その後のBattle Special回復, `acquired_score`, スコア・チェイン確定, Replay Event追加まで同一出撃の直列実行範囲とする. GameServerにおける騎士団合計スコアの正本はResponseの未切り捨て`SortieScore`ではなくRuntimeの確定済み`Score`である.  先行保存した出撃Eventは後処理完了後のReplayQueueで同じ`event_index`を用い、Private APIでは既保存として重複書込みをしない。GameServer再起動時は保存済みEventを順にReplay適用してResponse後の未適用BP/TP・Score・Chain等を復元する。送信通知の失敗によって出撃を巻き戻さない.
 出撃計算式はすべて`f32`で評価し, 出撃の最終`SortieScore`が負数・NaN・正負Infinityの場合は0.0へ正規化してからResponseとPlayerの`acquired_score`へ反映する. 出撃Responseの`Score`およびPlayerの`acquired_score`は`SortieScore`（`f32`）で保持する. 騎士団合計ptだけ, 1出撃ごとに小数点以下を切り捨てて`Score`（`u64`）へ加算する. 出撃成立回数`attack_count`を勝敗・参加判定へ渡す。通常Playerの勝敗数は出撃1回以上、参加回数は出撃3回以上を条件とする。個人累計戦績へ加算する値は騎士団戦終了時点の未切り捨て`acquired_score`を1回だけ小数点以下切り捨てして`u64`に変換する. `u64`へ変換する値と合計値には`u64::MAX`を上限とする飽和変換・飽和加算を使用する.
 
 
@@ -181,7 +183,7 @@ sequenceDiagram
 
 `UseTactics`成立時にはUseCondition・TP・残使用回数を確認する. Random要素ありの場合だけGuildBattle本体PRNGから専用Seedを1回生成し, `Random::new(Seed)`のTactics専用PRNGで固有抽選を行う. Random要素なしはResponse Seedを0とするが, Seedの数値からRandom使用有無を判定しない. Active Effectsは`TacticsActiveEffectState`として, 終了時刻・残回数・発動元PlayerID/GuildIDとともに保持する. DURATIONは絶対時刻, COUNTは`remaining_count`と`count_consume_trigger`を使用し, `OPPONENT_PARTY`は各出撃時の現在の対戦相手へ解決する.
 
-Item使用はRuntimeの所持数・条件を検証し, 永続数の更新はPrivate API経由で`X-Operation-ID`の冪等性を適用する. BP50回復薬の日次配布は現段階では実施しない. 酒場の`UseTavernRecovery`は通常のRequestSequence検証・直列処理・成功時Event記録に従う. GameServerは適用される利用回数を`TavernUseCount`（0～3）で管理し, JST 0:00を跨ぐ場合は使用回数をリセットする. 成立時はBPを最大BPへクランプし, 回復量が0でも1回使用として記録する. 回復後BP・残回数・RequestSequenceをClientへ返す. 成立操作のPlayerID・GuildID・時刻・回復後BP・使用後回数をReplay Eventに保存し, 復元時は同じイベントを成立順に適用する.
+Item使用はRuntimeの所持数・条件を検証し, 永続数の更新はPrivate API経由で`X-Operation-ID`の冪等性を適用する. BP50回復薬の日次配布は現段階では実施しない. 酒場の`UseTavernRecovery`は通常のRequestSequence検証・直列処理・成功時Event記録に従う. GameServerは適用される利用回数を`TavernUseCount`（0～3）で管理し, Playerごとの残回数を0～3で保持し、2時間ごとに1回分の時間経過回復を適用する. 成立時はBPを最大BPへクランプし, 回復量が0でも1回使用として記録する. 回復後BP・残回数・次回回復時刻・RequestSequenceをClientへ返す. 成立操作のPlayerID・GuildID・時刻・回復後BP・使用後残回数・次回回復時刻をReplay Eventに保存し, 復元時は同じイベントを成立順に適用する.
 
 Heal / Reviveは仕様の状態遷移と待機時間に従う. Start, Cancel, Completeが成立した場合だけRequestSequenceを加算しReplayへ記録する. 出撃待機時間はHeal / Reviveとは独立して保持する. 具体的な状態と時刻処理は`specification/game/guild_battle.md`および`design/server/guild_battle.md`の各APIシーケンスを正本とする.
 
@@ -201,7 +203,7 @@ stateDiagram-v2
 
 ## DB障害・不変条件
 
-騎士団戦中DB送信は初回失敗後に同じ要求を1回Retryし, 再失敗時はDB障害状態へ遷移して以後のDB送信を止めRecoveryへ保存する. Replay / Recovery fileの書込・再送は専用Workerの責務とし, 正本仕様は`design/system/log.md`と`design/server/guild_battle.md`を参照する. `CompleteGuildBattle`の失敗処理は別の専用規則を使用する.
+騎士団戦中DB送信は初回開始から5秒以内に確定できない場合、または再試行の失敗が早く確定した場合にDB/NW障害状態へ移行し、当該Battle終了までDB送信を停止する。以降は専用Workerの永続ローカルJournal書込完了を成立条件とし、Battle終了後にEvent番号順で一括送信する。通常時の出撃は引き続きDB COMMIT完了が成功条件となる。 Replay / Recovery fileの書込・再送は専用Workerの責務とし, 正本仕様は`design/system/log.md`と`design/server/guild_battle.md`を参照する. `CompleteGuildBattle`の失敗処理は別の専用規則を使用する.
 
 - 1つの`GuildBattleID`を同時に複数のGameServerが所有しない.
 - 成功したPlayerの状態変更だけでRequestSequenceを進める.
@@ -210,7 +212,7 @@ stateDiagram-v2
 - Replay Eventは成立順で追加し, LiveとReplayで状態が一致する.
 - 30:00以降は新規受付を増やさず, それ以前の受付済みQueueを最後まで解決する.
 
-酒場使用回数の正本キーは`PlayerID`とJST日付とする。Guild全体で回数を共有しない。`GetGuildBattleStatus.tavern_remaining_uses`は呼出元Playerの残回数を返す。
+酒場ストックの正本キーは`PlayerID`単独とする。満量3・消費後0～2の状態から2時間ごとに1回分補充し、Guild全体で共有しない。`GetGuildBattleStatus.tavern_remaining_uses`は呼出元の残回数、`tavern_next_recovery_at`は次回補充のUTC epoch microseconds（満量では0）を返す。RuntimeのキャッシュはDB正本と成立Replay Eventで復元する。
 
 ## 参照資料
 

@@ -391,7 +391,8 @@ message CreateAccountRequest {
   string login_id = 1;
   string password = 2;
   string user_name = 3;
-  string discord_authorization_token = 4;
+  string discord_authorization_token = 4; // DISCORDモードの場合の追加認可Token.
+  string additional_authorization_token = 5; // 非Discord追加認可Adapter用. NONEでは不要.
 }
 
 message CreateAccountResponse {
@@ -402,7 +403,8 @@ message LoginRequest {
   string login_id = 1;
   string password = 2;
   string client_version = 3;
-  string discord_authorization_token = 4;
+  string discord_authorization_token = 4; // DISCORDモードの場合の追加認可Token.
+  string additional_authorization_token = 5; // 非Discord追加認可Adapter用. NONEでは不要.
 }
 
 message LoginResponse {
@@ -602,6 +604,7 @@ message GetGuildBattleStatusResponse {
   GuildBattleCbcStatus cbc_status = 17;
   uint64 request_sequence = 18;
   uint32 tavern_remaining_uses = 19; // 0..3, current callerに適用される酒場使用残回数.
+  uint64 tavern_next_recovery_at = 20; // 次の1回分が回復するUTC epoch microseconds. 満量なら0.
 }
 
 message GuildBattleSortieRequest {
@@ -690,6 +693,7 @@ message UseTavernRecoveryResponse {
   uint32 bp = 1; // 最大BP以下の回復後BP.
   uint32 remaining_uses = 2; // 0..3. 成立した使用は回復0でも減らす.
   uint64 next_request_sequence = 3;
+  uint64 next_recovery_at = 4; // 次の1回分が回復するUTC epoch microseconds. 満量なら0.
 }
 
 message StartHealRequest {

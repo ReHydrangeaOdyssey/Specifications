@@ -7,7 +7,7 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 - Private Network 内に配置される.
 - 認証・Account・Guild・騎士団戦ルーティング関連要求はPublic API Serverから受ける.
 - Database保存・取得要求はGameServerおよびGuildBattleCoordinatorから受ける.
-- `DiscordAuthorizationRequired=true`の場合, Discord BotからはRole喪失時の`RevokeDiscordSessions`だけを受け付ける.
+- `AdditionalAuthorizationProvider=DISCORD`の場合, Discord BotからはRole喪失時の`RevokeDiscordSessions`だけを受け付ける.
 - Public API Server, GameServer, GuildBattleCoordinatorおよびDiscord BotとPrivate API Server間の通信はmTLSを必須とし, 双方が信頼済みCAによる証明書を検証する. Clientからの直接接続を受け付けない.
 - mTLS証明書のService Identityを検証し, Public API Serverからは認証・Account・Guild・騎士団戦ルーティング関連API, GameServerからはゲームデータ関連API, GuildBattleCoordinatorからは騎士団戦生成・割当・再抽選に必要なAPI, Discord Botからは`RevokeDiscordSessions`だけを受け付ける. 運営用APIはmTLSで識別した運営Componentからだけ受け付ける.
 - Databaseへ直接接続できるApplication ComponentはPrivate API Serverだけとする.
@@ -16,7 +16,7 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 - Database上の`GUILD_BATTLE.status`遷移はPrivate API Server内の`GuildBattleLifecycleService`が所有する. 状態遷移規則は「[騎士団戦永続ライフサイクル](guild_battle_lifecycle.md)」を正とし, 任意statusを指定する汎用更新APIは公開しない.
 - 要求/レスポンスのデータ構造は[API Payload](api_payload.md)を参照する. Private APIの要求・レスポンスPayloadはProtocol Buffersで表現する. 各メソッドのfield number・wire schemaは`design/system/private_api.proto`, HTTP Method/Pathは`design/system/api_transport.md`を正とする.
 - Public API Serverから受信するAccessToken認証済みのAccount/Guild系内部要求では`AuthenticatedContext`を内部Request Contextとして必須とする. Caller Identityは`AuthenticatedContext.PlayerID`を正とし, Client由来のPlayerIDをCaller Identityとして使用しない. 内部PayloadにCaller PlayerIDと同義のフィールドが存在する場合はPublic API Serverが`AuthenticatedContext`から設定し, Private API Serverは不一致を拒否する.
-- 騎士団戦中のDatabase送信失敗時は同一要求を1回だけ再試行する. Replay Workerによるリプレイログ送信も同じ規則を使用する. 再試行も失敗した場合, GameServerはDB障害発生状態へ移行し, それ以降の騎士団戦中DB送信を行わず, 本来送信するデータを`/var/lib/game-server/recovery`配下のUTF-8 JSONファイルへ保存する. Replay EventのRecovery保存はReplay Worker側で行い, 騎士団戦処理スレッドはファイルI/O完了を待機しない. 本番Kubernetes環境では同PathをGameServer専用Persistent Volumeへmountし, GameServer実行Userだけが読み書き可能とする. Recovery保存領域にはGameServer Instanceごとに運用設定で容量上限およびファイル数上限を必須設定し, 推奨初期値を2 GiBおよび1,000 filesとする. 無制限に増加させない. ファイルはGameServer再起動後も保持する. 騎士団戦終了時およびGameServer起動時に残存Recoveryファイルを保存順に再送し, 全件成功時だけ対応ファイルを削除し, 途中失敗時は削除せず残す.
+- 騎士団戦中のDatabase送信では初回送信開始から5秒以内にCOMMITを確認できない場合、DB/NW障害と判定する。同一要求のRetryは合計5秒以内で最大1回とし、Recovery移行後は当該Battle終了までDBへ再接続しない。 Replay Workerによるリプレイログ送信も同じ規則を使用する. 再試行も失敗した場合, GameServerはDB障害発生状態へ移行し, それ以降の騎士団戦中DB送信を行わず, 本来送信するデータを`/var/lib/game-server/recovery`配下のUTF-8 JSONファイルへ保存する. Replay EventのRecovery保存はReplay Worker側で行い, 騎士団戦処理スレッドはファイルI/O完了を待機しない. 本番Kubernetes環境では同PathをGameServer専用Persistent Volumeへmountし, GameServer実行Userだけが読み書き可能とする. Recovery保存領域にはGameServer Instanceごとに運用設定で容量上限およびファイル数上限を必須設定し, 推奨初期値を2 GiBおよび1,000 filesとする. 無制限に増加させない. ファイルはGameServer再起動後も保持する. 騎士団戦終了後に残存RecoveryファイルをEvent番号・保存順で一括再送し、GameServer起動時には終了済みBattleの残存ファイルだけ再送し, 全件成功時だけ対応ファイルを削除し, 途中失敗時は削除せず残す.
 - `GuildBattleLifecycleService`による状態変更および騎士団戦中にDatabase状態を変更する要求は共通HTTP Header `X-Operation-ID`を必須とする. 値は128bit UUIDとし, 同一論理操作の初回送信, 1回再試行, Recovery再送で同じ値を使用する. Private API ServerはDatabaseトランザクション内でOperation IDの重複を検査し, 処理済みの場合は更新を再適用せず初回成功時レスポンスを返す.
 - `CompleteGuildBattle`は専用の失敗処理を使用し, 1回再試行しても失敗した場合はErrorLogを保存し, `DiscordNotificationEnabled=true`の場合はBot通知を行った後, 運営による手動復旧対象とする.
 
@@ -48,13 +48,13 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 
 - LoginIDの重複をDatabaseで確認する.
 - LoginID重複時は作成せず, ClientへLoginID重複を区別して返さない.
-- `DiscordAuthorizationRequired=true`の場合は要求DiscordAuthorizationTokenIDが未使用であることを確認する.
+- `AdditionalAuthorizationProvider=DISCORD`の場合は要求DiscordAuthorizationTokenIDが未使用であることを確認する.
 - Passwordごとに16byte以上の暗号学的乱数Saltを生成し, PasswordをArgon2idでPasswordHashへ変換する.
 - Argon2id処理は認証専用の同時実行制限対象とし, 設定済み最大同時実行数を超えて開始しない. 空きがない場合は待機キューを無制限に増加させず, `API_ERROR_RATE_LIMIT_EXCEEDED`として拒否する.
 - AccountIDおよびPlayerIDを生成する.
   - `0`と`u64::MAX`は予約済み無効値のため生成対象外.
   - Databaseの一意制約に衝突した場合は再生成する.
-- `ACCOUNT`と`PLAYER`を同一トランザクションで保存する. `DiscordAuthorizationRequired=true`の場合はDiscordUserID BindingとDiscordAuthorizationTokenID使用済み記録も同一トランザクションで保存する.
+- `ACCOUNT`と`PLAYER`を同一トランザクションで保存する. `AdditionalAuthorizationProvider=DISCORD`の場合はDiscordUserID BindingとDiscordAuthorizationTokenID使用済み記録も同一トランザクションで保存する.
 - `PLAYER.max_bp`は200, `guild_battle_win_count`・`guild_battle_lose_count`・`guild_battle_participation_count`・`guild_battle_total_score`は0で初期化する.
 
 #### 要求・レスポンス
@@ -70,7 +70,7 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 #### 処理内容
 
 - LoginIDに対応する`ACCOUNT`および`PLAYER`を取得する.
-- `DiscordAuthorizationRequired=true`の場合は要求DiscordUserIDが`ACCOUNT.discord_user_id`と一致し, 要求DiscordAuthorizationTokenIDが未使用であることを確認する.
+- `AdditionalAuthorizationProvider=DISCORD`の場合は要求DiscordUserIDが`ACCOUNT.discord_user_id`と一致し, 要求DiscordAuthorizationTokenIDが未使用であることを確認する.
 - Argon2id処理は認証専用の同時実行制限対象とし, 設定済み最大同時実行数を超えて開始しない. 空きがない場合は待機キューを無制限に増加させず, `API_ERROR_RATE_LIMIT_EXCEEDED`として拒否する.
 - Argon2idでPasswordを検証する.
 - LoginID不存在, Password不一致およびDiscordUserID Binding不一致を呼び出し元へ区別して返さない.
@@ -79,7 +79,7 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 - 32byteのRefreshTokenを暗号学的乱数で生成する.
 - `SHA-256(RefreshToken)`を`refresh_token_hash`として保存し, `previous_refresh_token_hash=NULL`で初期化する.
 - `ACCOUNT_SESSION.expires_at`を認証成功時刻から24時間後として保存する.
-- `DiscordAuthorizationRequired=true`の場合は認証成功と同一トランザクションでDiscordAuthorizationTokenIDを使用済みとして保存する.
+- `AdditionalAuthorizationProvider=DISCORD`の場合は認証成功と同一トランザクションでDiscordAuthorizationTokenIDを使用済みとして保存する.
 - AccessTokenを生成してEd25519で署名する. AccessTokenの有効期限は発行時刻から5分とする.
 
 #### 要求・レスポンス
@@ -147,7 +147,7 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 
 #### 処理内容
 
-- `DiscordAuthorizationRequired=true`の場合にDiscord Botからだけ受け付ける.
+- `AdditionalAuthorizationProvider=DISCORD`の場合にDiscord Botからだけ受け付ける.
 - mTLS証明書のService IdentityがDiscord Botであることを確認する.
 - 指定DiscordUserIDと一致する`ACCOUNT.discord_user_id`を持つAccountの`ACCOUNT_SESSION`をすべて削除する.
 - 既に発行済みのAccessTokenは個別失効させず, 自身の`exp`到達まで最大5分間有効とする.
@@ -899,3 +899,11 @@ ReplayQueueおよびDatabase送信失敗時の扱いは「[ログ仕様](../syst
 Public API経由で本人性を検証した`AuthenticatedContext`を要求する。更新は既存Private APIの`X-Operation-ID`冪等化とDB Transactionの規則を使う。wire形式は`design/system/private_api.proto`を正とする。
 
 `GetGuildDetailPrivate`は`GUILD`の開始時刻予約を読み取るときに、適用開始を経過した予約を同じDBトランザクションで有効値へ反映し、予約値を消去してから応答を構成する。未適用の予約は`GetGuildDetailResponse`の`pending_daytime_start_time`・`pending_nighttime_start_time`・`pending_start_time_effective_at`として返す。未予約時はこれらのoptionalフィールドを設定しない。
+
+### SaveGuildBattleTavernRecoveryLog
+
+Private RPC `SaveGuildBattleTavernRecoveryLog`は`SaveGuildBattleTavernRecoveryLogRequest`（`payload`, `event_index`）を受け、`SaveGuildBattleTavernRecoveryLogResponse`を返す。`X-Operation-ID`を必須とし、`GuildBattleID`・`event_index`・PlayerIDの整合性および成立時刻を検証する。`GUILD_BATTLE_REPLAY_LOG`へのEnvelope保存とPlayerの酒場残回数/次回回復時刻更新を、既存Operation IDの重複判定と同一DB Transactionで確定する。同一Operationの再送は初回結果を返し、回数を再消費しない。Recoveryモードでは同じRequestとOperation IDを永続キューへ記録する。
+
+### 追加認可Providerを用いるAccount作成・Login
+
+Public APIはServer設定`AdditionalAuthorizationProvider`に従って追加認可Tokenを検証し、検証済み`provider`・`subject`をPrivate APIへ渡す。Private APIはサービス間mTLS Caller Identityを確認し、現在有効なServer設定と一致しない方式を拒否する。`DISCORD`については従来のToken使用済み検証とDiscordUserID Bindingを維持する。`POCKETBASE`は検証Adapterが明示的に提供される構成でのみ使用可能とし、追加認可の検証に失敗した場合は既存AccountのLoginID/Passwordが一致してもLoginさせない。`NONE`は追加認可を要求しないが本人認証は引き続き必須とする。

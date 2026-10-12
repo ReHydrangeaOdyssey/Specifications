@@ -13,7 +13,7 @@ Account/Guild系の業務処理はPrivate API Server, Arena/騎士団戦の業�
 * Request BodyおよびToken長の上限適用.
 * Application Level Rate LimitとIngress側Network Level Rate Limitとの連携.
 * AccessTokenのローカル検証と`PlayerID` Binding.
-* `DiscordAuthorizationRequired=true`の場合のDiscordAuthorizationToken署名・期限等のローカル検証.
+* `AdditionalAuthorizationProvider=DISCORD`の場合のDiscordAuthorizationToken署名・期限等のローカル検証.
 * `RefreshAccessToken`および`Logout`のOrigin検証.
 * RefreshTokenの`__Host-RefreshToken` HttpOnly Cookie入出力.
 * Login時のClientVersionとPublic API要求Versionの互換性判定.

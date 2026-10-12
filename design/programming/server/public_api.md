@@ -89,7 +89,7 @@ Public API ServerはAccessTokenをDatabaseへ問い合わせずローカル検�
 
 ## CreateAccount / Login
 
-`DiscordAuthorizationRequired=true`ではDiscord Botが発行した`DiscordAuthorizationToken`をPublic API Serverでローカル検証します。
+`AdditionalAuthorizationProvider=DISCORD`ではDiscord Botが発行した`DiscordAuthorizationToken`をPublic API Serverでローカル検証します。
 
 LoginではClientVersionをPublic API Serverが要求するVersionと比較し、不一致時は定義済みVersion Errorを返します。
 

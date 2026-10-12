@@ -10,7 +10,7 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 - Public API Serverは認証状態およびゲーム状態を正本として保持しないstateless構成とする.
 - テスト環境では Private Network の外側に配置される.
 - 要求/レスポンスの意味・制約は[API Payload](api_payload.md), Protocol Buffersのwire schemaとfield numberは「[public_api.proto](../system/public_api.proto)」を参照する. `public_api.proto`はPayload schemaを定義し, gRPC Service・HTTP method・HTTP pathは追加定義しない.
-- `DiscordAuthorizationRequired=true`の場合, `CreateAccount`および`Login`は処理前にDiscordAuthorizationTokenを「[セッション仕様](session.md)」に従って検証する.
+- `CreateAccount`および`Login`の追加認可は`AdditionalAuthorizationProvider`の選択値に従い、「[セッション仕様](session.md)」の検証済み主体だけをPrivate APIへ渡す。`NONE`では追加認可Tokenを必須としない。
 - `AccessToken`を要求するPublicAPIは, 処理前にAccessTokenを検証する.
   - 署名, `alg`, `iss`, `aud`, `exp`, `player_id`を「[セッション仕様](session.md)」に従って検証する.
   - AccessToken検証のためにPrivate API ServerまたはDatabaseへ問い合わせない.
@@ -55,15 +55,15 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 #### 処理内容
 
 - LoginID, Password, UserName, DiscordAuthorizationTokenを受け取る.
-- `DiscordAuthorizationRequired=true`の場合はDiscordAuthorizationTokenを検証する. 未指定の場合は`API_ERROR_DISCORD_AUTHORIZATION_REQUIRED`, 不正または期限切れの場合は`API_ERROR_INVALID_DISCORD_AUTHORIZATION_TOKEN`を返す.
-- `DiscordAuthorizationRequired=false`の場合はDiscordAuthorizationTokenを要求しない.
+- `AdditionalAuthorizationProvider=DISCORD`の場合はDiscordAuthorizationTokenを検証する. 未指定の場合は`API_ERROR_DISCORD_AUTHORIZATION_REQUIRED`, 不正または期限切れの場合は`API_ERROR_INVALID_DISCORD_AUTHORIZATION_TOKEN`を返す.
+- `AdditionalAuthorizationProvider=NONE`の場合はDiscordAuthorizationTokenを要求しない.
 - LoginIDおよびPasswordは「[セッション仕様](session.md)」に従って検証する.
 - UserNameをチェックする.
   - 有効なUTF-8である.
   - 10文字以下である.
   - 空文字ではない.
   - ユーザー名の重複は許可する.
-- `DiscordAuthorizationRequired=true`の場合は検証済みTokenからDiscordUserIDとDiscordAuthorizationTokenIDを取得する.
+- `AdditionalAuthorizationProvider=DISCORD`の場合は検証済みTokenからDiscordUserIDとDiscordAuthorizationTokenIDを取得する.
 - Private API Serverの`CreateAccount`へLoginID, Password, UserNameと, 必要な場合DiscordUserID, DiscordAuthorizationTokenIDを要求する.
 - Private API ServerはAccountIDおよびPlayerIDを生成し, `ACCOUNT`と`PLAYER`を同一トランザクションで保存する. Discord追加認可を使用する場合はAccountへのDiscordUserID BindingおよびToken使用済み記録も同一トランザクションで保存する.
 - `PLAYER.max_bp`は200で初期化する.
@@ -91,9 +91,9 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 - `LoginRequest.ClientVersion`とPublic API Serverが要求する`Version`を比較する.
   - 一致しない場合は認証処理を行わず, `LoginVersionErrorResponse`で`API_ERROR_CLIENT_VERSION_MISMATCH`と要求Versionを返す.
   - Clientは本エラーを受け取った場合, ゲームデータおよびClientの更新をユーザーへ促す.
-- `DiscordAuthorizationRequired=true`の場合はDiscordAuthorizationTokenを検証する. 未指定の場合は`API_ERROR_DISCORD_AUTHORIZATION_REQUIRED`, 不正または期限切れの場合は`API_ERROR_INVALID_DISCORD_AUTHORIZATION_TOKEN`を返す.
-- `DiscordAuthorizationRequired=false`の場合はDiscordAuthorizationTokenを要求しない.
-- `DiscordAuthorizationRequired=true`の場合は検証済みTokenからDiscordUserIDとDiscordAuthorizationTokenIDを取得する.
+- `AdditionalAuthorizationProvider=DISCORD`の場合はDiscordAuthorizationTokenを検証する. 未指定の場合は`API_ERROR_DISCORD_AUTHORIZATION_REQUIRED`, 不正または期限切れの場合は`API_ERROR_INVALID_DISCORD_AUTHORIZATION_TOKEN`を返す.
+- `AdditionalAuthorizationProvider=NONE`の場合はDiscordAuthorizationTokenを要求しない.
+- `AdditionalAuthorizationProvider=DISCORD`の場合は検証済みTokenからDiscordUserIDとDiscordAuthorizationTokenIDを取得する.
 - Private API Serverの`AuthenticateAccount`へLoginID, Passwordと, 必要な場合DiscordUserID, DiscordAuthorizationTokenIDを送信する.
 - Private API ServerはDiscord追加認可が有効な場合にAccountへBindingされたDiscordUserIDとの一致およびToken未使用を確認する.
 - Private API ServerはPassword検証成功時に既存Refresh Sessionを無効化し, 新しいSessionID, AccessToken, RefreshTokenを生成する.
@@ -630,7 +630,7 @@ GameServer側のチェック.
 
 - ClientからのAccessToken・PlayerID・GuildBattleID・RequestSequenceを検証し, Join済みの当該騎士団戦GameServerへ中継する.
 - GameServerは要求受信順に現在の使用回数と所属Guildの酒場レベルを検証する. 受付不可または使用回数上限到達時には状態を変更せず`API_ERROR_TAVERN_RECOVERY_NOT_AVAILABLE`を返す.
-- 成功時は`min(現在BP + floor(酒場レベル / 3), 最大BP)`をBPへ反映し, 回復量0でも使用回数を1増やす. RequestSequenceを1増やし, 同一の操作結果をReplayへ記録する.
+- 成功時は`min(現在BP + floor(酒場レベル / 3), 最大BP)`をBPへ反映し、回復量0でも残回数を1減らす。RequestSequenceを1増やし、同一結果をReplayへ記録する。回数はPlayer単位で最大3、消費分は2時間ごとに1回分回復し、日付でリセットしない。
 - 回復後BP, 適用対象に残る使用回数, 更新後のRequestSequenceを返す. 成立した要求を別のRequestSequenceで自動再送しない.
 
 #### 要求データ

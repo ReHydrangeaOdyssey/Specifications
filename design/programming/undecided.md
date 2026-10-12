@@ -7,7 +7,7 @@
 - [U-03] Public API ServerのHTTPS Origin（静的Clientの配布先は`https://rehydrangeaodyssey.github.io/`）.
 - [U-05] HTTP/2 + TLS 1.3の対象ブラウザでの実通信検証結果.
 - [U-07/08] 最小対応ブラウザを含む各端末でのフォルダ一括選択・元ファイル削除権限と実装可否（未対応環境はコピーのみ）.
-- [U-09] AssetDictionaryリポジトリ内の辞書配布ファイルURL, シリアライズ形式, 更新時の整合検証.
+- [U-09] AssetDictionaryリポジトリ内の具体的な辞書配布ファイルURLと、配布物の完全性/Version検証方法。辞書JSON Schemaは`design/client/client.md`で確定済み。
 - [U-11/12] ユーザー用素材区分から具体的Pathへの対応, 任意素材に関する割当メタデータの形式.
 - [U-14/15] `game_info.json`のVersion差分移行規則と, 途中停止後の整合性回復手順.
 - [U-19] `cridecoder`のiPhone Safari/WASM実機動作・依存ライセンス検証後の最終採否.
