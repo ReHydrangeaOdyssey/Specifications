@@ -110,6 +110,8 @@ message GuildBattleItemLogPayload {
   uint64 guild_battle_id = 2;
   uint64 player_id = 3;
   uint32 item_id = 4;
+  uint32 quantity_before = 5; // 当該Battle内の消費前Item数。
+  uint32 quantity_after = 6; // 消費後Item数（1減）。後追いDB確定時の検証入力。
 }
 
 message GuildBattleHealLogPayload {

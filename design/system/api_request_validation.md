@@ -7,9 +7,34 @@ HTTP 400は構文/型/許容値の不正、401は認証不成立、403は権限�
 
 各表の「検証」は既存の`design/server/api_payload.md`・`design/shared/types.md`の個別制約より広い値域を許可する意味ではない。通常のProto3スカラーのPresenceを直接検知できない箇所は、既定値の業務上の妥当性で判定する。値0が正当でかつ入力時の明示が必要な開始時刻Enum、およびfalseが明示的な解除操作となる`locked`等は`optional`でPresenceを保持する。
 
+## 利用中RPCの厳密な検証（汎用表より優先）
+
+この節は現在の騎士団戦・ログイン/認証・編成で使用する要求のPresenceおよび業務状態検証を定める。`0`や`false`が合法な値を持つ既存フィールドは、proto3既定値だけで省略と同一視しない。`optional`が必要なときは既存tagを維持する。列挙値を変更する場合も`0`が業務上有効なEnumのPresenceを失わせない。
+
+| RPC / Field | Presence・許容値 | 不正・衝突時 |
+|---|---|---|
+| `GetAdditionalAuthorizationConfig` / 空Request | Message Body必須、Credential不要 | HTTP 400 |
+| `CreateAccount`・`Login` / `login_id`,`password` | 空文字不可。認可Tokenは選択中Providerの契約に従い、`NONE`なら追加Token不要 | 400（形式）、401（認証） |
+| `CreateGuild` / `daytime_start_time`,`nighttime_start_time` | ProtoBuf `optional`のPresence必須。列挙値0が有効なら明示0を許可 | 400（省略/列挙外） |
+| `RespondFriendRequest` / `approve` | `optional bool`を必須。明示`false`は拒否として有効 | 400（省略） |
+| `UseItem` / `player_id`,`guild_battle_id`,`request_sequence`,`item_id` | 既存ID範囲とOwner/Join/Sequence一致を要求。所持数0のときの使用は不成立。Item残数の変更はWAL受理確定後 | 400（型・範囲）、403（他人）、409（残数・順序・対戦状態） |
+| `SaveGuildBattleItemLog` / `payload`,`event_index` | Payload Message必須、Event番号は2以上、Operation ID Header必須、`quantity_before=quantity_after+1`、元残数は1以上 | 400（構造）、409（同番号異Payload/残数競合） |
+| `SaveGuildBattleSortieLog` / `payload`,`event_index` | Payload必須、Event番号2以上、Operation ID必須。受付済みの出撃と一意に照合 | 400（欠落/番号）、409（重複不整合） |
+| `SaveGuildBattleTavernRecoveryLog` / `payload`,`event_index` | Payload必須、Event番号2以上、Operation ID必須。`remaining_uses_after`は0..3でDB正本残数と照合 | 400（範囲/欠落）、409（状態競合） |
+| `CompleteGuildBattle` / 対戦ID・結果・記録 | Player/対戦ID一致、全WAL/Journal反映・署名/連鎖・Replay検証完了を要求 | 400（不正）、409（未確定Event） |
+
+その他の既存RPCについては下表および各API Payloadの制約を適用する。各Requestの`0`/`false`に新たな意味が確認されない限り、値だけを理由として新しいゲームルールを追加しない。
+
 ## フィールド一覧
 
 追加認可Tokenの必須性は`design/server/session.md`の`AdditionalAuthorizationProvider`を正本とする。`DISCORD`では従来Field 4、`POCKETBASE`ではField 5を用い、`NONE`では両者の省略を認める。検証Adapter未実装の方式は許可しない。
+
+### Public `GetAdditionalAuthorizationConfig` — `GetAdditionalAuthorizationConfigRequest`
+
+| Field | Wire型 | Presence/必須性 | 有効値/制限 | 不正時 |
+|---|---|---|---|---|
+| （フィールドなし） | - | 空MessageのRequest Bodyを必須とする | ログイン前に使用可能。認証Tokenは不要。 | 400（Body省略/破損） |
+
 
 ### Public `CreateAccount` — `CreateAccountRequest`
 
@@ -956,3 +981,11 @@ HTTP 400は構文/型/許容値の不正、401は認証不成立、403は権限�
 | `event_index` | `uint64`（2） | 必須、0は禁止 | GuildBattleIDごとに連番。DBでOperation IDと合わせて重複検証 | 400 / 409 |
 
 `X-Operation-ID`はUUID 128bitを必須とする。Replay Eventと`PLAYER_TAVERN_RECOVERY`更新は同一Transactionに含める。
+
+## 運用中の認証RPCに適用する具体規則
+
+- `GetAdditionalAuthorizationConfig`は空のRequest Message Bodyのみを許可し、AccessTokenを要求しない。Provider列挙はServer側設定値に従い、ClientのRequestから選択しない。
+- `CreateAccount.login_id`および`Login.login_id`は非空で、`design/server/session.md`の3～64文字制約を満たすこと。`password`は空文字を許可せずSession仕様に従う。登録時`user_name`も空文字を拒否する。
+- `Login.client_version`は空文字を拒否してServerの要求Versionと比較し、不一致を専用Version Errorとして返す。
+- 追加認可Tokenは現在選択されたProviderに応じて1系統だけを検証する。`NONE`ならTokenの存在自体を認可成立とは扱わない。未実装Adapterの構成はServerの起動時に拒否し、Clientの自己申告で変えない。
+- `RespondFriendRequest.approve`など、**明示0/falseと省略が業務上異なるフィールドだけ**はProtoBufの`optional`のPresenceも確認する。その他のRPCの完全な値域について未提示のゲームルールを一括補完することはせず、実装に採用するAPIから個別の既存Payload制約を適用する。

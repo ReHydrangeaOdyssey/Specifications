@@ -340,7 +340,7 @@ GameServerが受信するあらゆる要求は先に到達した順に処理す�
 #### ログ・Metric
 
 騎士団戦のログ・Metric・Trace処理は「[ログ仕様](../system/log.md)」に従う.
-通常操作では状態反映とRequestSequence更新後にReplay Eventを成立順にReplayQueueへ追加し、Replay WorkerがFileとDBへ保存する。出撃だけは例外とし、非同期Workerによる`SaveGuildBattleSortieLog`のDB COMMIT完了を成功Response前に確認し、その同じEventを後続Fileへ成立順で追記する。DB保存に失敗した出撃を成功扱いにしない。
+通常の非出撃操作は作業状態の仮計算後、専用Workerの署名付きReplay WAL耐久化を待ち、成功時にだけ状態とRequestSequenceを確定する。Replay WorkerはFileとDBへ後追い保存する。出撃は固有の例外とし、非同期Workerによる`SaveGuildBattleSortieLog`のDB COMMIT（Recovery時は署名付きJournalの耐久化）を成功Response前に確認し、その同じEventを後続Fileへ成立順で追記する。DB保存に失敗した出撃を成功扱いにしない。
 正常なゲームルール拒否は要求単位のApplication Logへ出力せずMetricへ集約する. `RequestSequence`不一致, 不正CharacterID, 不正TacticsID等は要求ごとに同期ログ出力せずMemory上で集約する.
 
 
@@ -422,16 +422,19 @@ sequenceDiagram
     GameServer->>GameServer: 所持数チェック
 
     alt 使用可能
-        GameServer->>GameServer: アイテム使用処理
-        GameServer->>PrivateAPIServer: UpdatePlayerItem(PlayerID, ItemID, 更新後所持数)
-        PrivateAPIServer->>Database: PLAYER_ITEM更新
-        Database-->>PrivateAPIServer: 更新完了
-        PrivateAPIServer-->>GameServer: UpdatePlayerItem
-        GameServer->>GameServer: 成功した要求のRequestSequenceを1加算
+        GameServer->>GameServer: 消費後残数・BPを作業状態で計算しEvent番号とOperation IDを予約
+        GameServer->>GameServer: Replay Workerへ署名付きWALの耐久保存を依頼
+        GameServer->>GameServer: 専用WorkerのWAL署名・fsync・原子的保存の完了通知を待つ
+        GameServer->>GameServer: 成功時のみ在庫・BP・RequestSequenceを確定
         GameServer-->>PublicAPIServer: UseItemResponse
         PublicAPIServer-->>Client: UseItemResponse
-
-        GameServer ->> GameServer: アイテム使用成立Replay EventをReplayQueueへ追加
+        par 成立済みEventを非同期でDBへ反映
+            GameServer->>PrivateAPIServer: SaveGuildBattleItemLog(同じOperation ID/イベント番号)
+            PrivateAPIServer->>Database: PlayerItem残数減算とReplay保存を同一Transactionで冪等確定
+            Database-->>PrivateAPIServer: 更新結果
+            PrivateAPIServer-->>GameServer: SaveGuildBattleItemLogResponse
+        end
+        Note over GameServer: DB失敗時はWALを残して番号順にRetry/Recoveryへ移行。未保存は結果確定へ進めない
     else 使用不可
         GameServer-->>PublicAPIServer: ApiErrorResponse
         PublicAPIServer-->>Client: ApiErrorResponse
@@ -654,7 +657,7 @@ sequenceDiagram
 
 騎士団戦中にDatabaseへの送信が失敗した場合は, Retry可能な一時障害に限り、同一Operation IDで初回から合計5秒以内に1回だけ再試行する。確定失敗・再試行失敗・5秒上限でRecoveryへ移行する。 Replay Workerによるリプレイログ送信も同じ規則を使用する. 再試行も失敗した場合, GameServerは当該騎士団戦についてDB障害発生状態へ移行する.
 
-DB障害発生状態では, それ以降の騎士団戦中Database送信を行わず, 本来送信するデータをGameServerローカルのファイルへ保存する. Replay EventのRecovery保存はReplay Worker側で行い, 騎士団戦処理スレッドはファイルI/O完了を待機しない.
+DB障害発生状態では, それ以降の騎士団戦中Database送信を行わず, 本来送信するデータをGameServerローカルのファイルへ保存する. Replay EventのRecovery保存はReplay Worker側で行う。処理スレッド自体はファイルI/Oをしないが、操作成功応答はWorkerの署名付き耐久書込完了後に限る。
 保存形式はUTF-8 JSONとし, 保存先は`/var/lib/game-server/recovery`とする. 本番Kubernetes環境では同PathをGameServer専用Persistent Volumeへmountする.
 保存形式は`guild_battle_<GuildBattleID>_<InstanceID>/event_<EventIndex>_<OperationID>.json`の不変Eventファイルとする。Eventごとに要求、Operation ID、番号、検査用Hashを保持し、一時ファイル→fsync→atomic rename→ディレクトリfsyncで確定する。
 ローカルファイルはGameServer再起動後も保持する.
@@ -688,6 +691,7 @@ sequenceDiagram
 
     GameServer->>GameServer: 最終合計pt算出
     GameServer->>GameServer: 勝敗判定
+    GameServer->>GameServer: 署名付きReplay WAL・Recovery Journalの検証とDB未確定Event収集
 
     opt 当該騎士団戦のRecoveryファイルが存在
         GameServer->>GameServer: Recoveryファイルを保存順に読込
@@ -699,24 +703,25 @@ sequenceDiagram
         alt 全Recoveryレコード再送成功
             GameServer->>GameServer: Recoveryファイル削除
         else 1件以上再送失敗
-            Note over GameServer: Recoveryファイルを保持したまま終了処理を継続
+            Note over GameServer: 再送不成立。検証可能な記録を保持してresolvingを維持し、CompleteGuildBattleを要求しない
         end
     end
 
-    GameServer->>GameServer: GuildResults[2]・PlayerRecords[]・Participants[]を生成
-    GameServer->>PrivateAPIServer: CompleteGuildBattle(GuildBattleID, GameServerInstanceID, GuildResults, PlayerRecords, Participants)
-    PrivateAPIServer->>Database: 結果・参加回数・勝敗数・個人累計スコア更新 + completed + 対戦2Guildロック解除; 同時間帯全対戦完了時だけexcluded解除・削除
-    Database-->>PrivateAPIServer: 完了結果
-    PrivateAPIServer-->>GameServer: CompleteGuildBattle
-
-    alt CompleteGuildBattle成功
-        Note over GameServer: 騎士団戦の永続終了処理完了
-    else 初回失敗
-        GameServer->>PrivateAPIServer: CompleteGuildBattle 同一X-Operation-IDで再試行（1回）
-        PrivateAPIServer->>Database: 同一Transactionを再実行
-        Database-->>PrivateAPIServer: 再試行結果
+    opt 全Replay WAL・Recovery Journalの検証、欠番検査、DB冪等反映が完了した場合のみ
+        GameServer->>GameServer: GuildResults[2]・PlayerRecords[]・Participants[]を生成
+        GameServer->>PrivateAPIServer: CompleteGuildBattle(GuildBattleID, GameServerInstanceID, GuildResults, PlayerRecords, Participants)
+        PrivateAPIServer->>Database: 結果・参加回数・勝敗数・個人累計スコア更新 + completed + 対戦2Guildロック解除; 同時間帯全対戦完了時だけexcluded解除・削除
+        Database-->>PrivateAPIServer: 完了結果
         PrivateAPIServer-->>GameServer: CompleteGuildBattle
-        opt 再試行も失敗
+
+        alt CompleteGuildBattle成功
+            Note over GameServer: 騎士団戦の永続終了処理完了
+        else 初回失敗
+            GameServer->>PrivateAPIServer: CompleteGuildBattle 同一X-Operation-IDで再試行（1回）
+            PrivateAPIServer->>Database: 同一Transactionを再実行
+            Database-->>PrivateAPIServer: 再試行結果
+            PrivateAPIServer-->>GameServer: CompleteGuildBattle
+            opt 再試行も失敗
             GameServer->>GameServer: エラーログ追記
             GameServer->>PrivateAPIServer: SaveErrorLog
             PrivateAPIServer->>Database: エラーログ保存
@@ -725,9 +730,21 @@ sequenceDiagram
             end
             Note over GameServer: TransactionはRollbackされcompletedへ遷移しない. 原因調査および復旧は運営が手動で行う
         end
+        end
     end
+
 ```
 
 ## DB/NW障害時の5秒判定
 
-当該騎士団戦の最初のDB送信開始から各操作のDB COMMIT確認まで5秒を超えた場合、その操作以降はBattle終了までDB送信を停止する。GameServerは新規成立Eventを永続ローカルJournalへ保存し、保存完了後にのみ成功応答する。Battle終了後、Operation IDとEvent Indexで冪等に一括送信する。通常時はDB COMMIT確認後に成功を返す。
+当該騎士団戦の最初のDB送信開始から各操作のDB COMMIT確認まで5秒を超えた場合、その操作以降はBattle終了までDB送信を停止する。GameServerは新規成立Eventを永続ローカルJournalへ保存し、保存完了後にのみ成功応答する。Battle終了後、Operation IDとEvent Indexで冪等に一括送信する。通常時の出撃はDB COMMIT確認後に成功を返す。通常の非出撃Eventは署名付きWALの耐久化後に成功を返し、DB反映を非同期とする。
+
+### 酒場回復のDB障害時受付
+
+`UseTavernRecovery`はPlayerの共有ストックをDB行の排他Transactionで更新するため、対象GuildBattleがRecovery中は要求を受付不可として`API_ERROR_TAVERN_RECOVERY_NOT_AVAILABLE`を返す。BP/使用残数/RequestSequenceは変更せず、Replay Eventも作成しない。ローカルに別のPlayerストックを設けたり、復旧時に酒場消費を一括適用したりしない。
+
+**終了処理の前提：** GameServerは署名・Hash連鎖・Event Index・Operation IDを照合し、当該Battleの受理済みReplay WALとRecovery Journalの全イベントがDBへ冪等に確定していることを確認してから`CompleteGuildBattle`を発行する。1件でも失敗・不明・隔離中なら`resolving`を維持し、結果・勝敗・参加回数・ロック解除を確定しない。再試行・Owner喪失時の引継ぎは同一Eventの重複適用を禁止する。
+
+### Replay WALと応答待機
+
+通常の非出撃操作はGameServerの作業状態で先に計算し、署名付きのローカルReplay WALが耐久書込み済みになってから正本状態・RequestSequenceを確定して成功Responseを返す。Private API経由のDB保存とReplay File書込は非同期Workerで行い、DBの往復を応答の条件としない。出撃と酒場等のDB Transactionが必要な操作は、それぞれのより強い固有確定条件を優先する。WALの形式・再起動検証・冪等性は`design/programming/server/logging_recovery.md`を正本とする。

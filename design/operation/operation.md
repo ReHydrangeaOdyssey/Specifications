@@ -309,3 +309,8 @@ PlayerIDやGuildBattleID等の高Cardinality値をMetric Labelへ使用しない
 大規模なチケット管理システムを必須としない. 個人開発ではMarkdown, Issue等の追跡可能な方法でよい.
 
 `CompleteGuildBattle`が自動再試行後も保存に失敗した場合、運営担当者がGameServerに直接アクセスし、Databaseの現在状態を確認して同じ結果の再保存を試みる。再保存できない場合はその対戦を未確定のまま維持する。成功していない処理を`completed`として扱わない。
+
+
+### WAL / Journalと異常終了時の安全境界
+
+GameServerのReplay WALとRecovery Journalは再起動でも残る専用Persistent Volumeを使用する。署名鍵世代・DB確定Anchorを検証できない場合は自動再送・完了へ進まず隔離する。`CompleteGuildBattle`は全ての成功済みEventのDB確定とReplay照合完了後に限る。Ownerが失われても、Coordinatorは署名検証不能なローカル記録を無条件に正本へ昇格させない。容量・同期失敗時は未成立の操作を成功扱いせず、状況を調査可能な記録として残す。

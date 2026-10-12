@@ -1420,3 +1420,7 @@ Private APIは再抽選を行わない. `GuildBattleID[]`と`Battles[]`のID集�
 ## 追加認可用Payloadの互換性
 
 `CreateAccountRequest`と`LoginRequest`の`discord_authorization_token`は`AdditionalAuthorizationProvider=DISCORD`のときだけ使用し、非Discord Adapterへ渡すTokenは`additional_authorization_token`とする。`NONE`では追加認可Tokenの省略を許可する。Private APIの`additional_authorization_provider`と`additional_authorization_subject`はPublic APIが認可Adapterで検証済みの結果を渡す内部値であり、Clientの自己申告値は使用しない。
+
+### GetAdditionalAuthorizationConfigRequest / Response
+
+`GetAdditionalAuthorizationConfigRequest`は空Messageとし、ログイン前の認証Origin画面がCookie・AccessTokenなしで取得できる。Responseは`provider`（`DISCORD` / `POCKETBASE` / `OTHER` / `NONE`）、`additional_authorization_required`（`provider != NONE`）、`provider_available`（選択Adapterが有効化・検証可能な場合だけ`true`）を返す。`NONE`の場合もLoginID/Passwordは必須であり、匿名ログインを認めない。Clientが方式を要求ごとに変更することはできない。

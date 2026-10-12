@@ -49,8 +49,8 @@ GameServerはシステムログ用Queueと騎士団戦リプレイログ用Repla
 
 ### ReplayQueue
 
-* 騎士団戦で処理が成立した場合, GameServerは状態反映および`RequestSequence`更新後に対応Replay EventをReplayQueueへ追加する.
-* Replay Event追加順は騎士団戦処理成立順と一致させる。GuildBattle単位の確定キューで前EventのDB COMMITまたはJournalの耐久化完了を確認してから次Eventを成立確定する。`GuildBattleReplayEnvelope.event_index`はGuildBattleIDごとにCreateを1として成立順に連番採番し、同じ番号をDBとFileに保存する。
+* 騎士団戦の通常非出撃Eventは作業状態で仮評価し、Replay WAL耐久保存が確定した場合にのみ状態・`RequestSequence`を本確定する。WAL保存失敗時はReplay成立として扱わない。
+* Replay Event追加順は騎士団戦処理成立順と一致させる。`GuildBattleReplayEnvelope.event_index`はCreateを1とする連番とし、DB・File・Recovery記録で番号を共通化する。出撃成功時だけDB COMMIT（Recovery中は検証可能なローカル耐久記録）を応答前に保証する。非出撃はbounded ReplayQueueへ予約登録した後、専用Workerが署名付きローカルReplay WALを耐久化し正本状態が確定した時点で応答し、DB/File保存は番号順に非同期処理する。通常の操作応答でDB往復を待たず、GameServerの処理スレッドもI/Oを実行しない。Replay WAL保存に失敗したEventは成功扱いせず、プロセス異常終了後は署名検証に合格した耐久レコードから復旧する。
 * GameServerの騎士団戦処理スレッドはReplay EventのSerializeや同期ファイルI/Oを実行しない。出撃Eventに限り非同期WorkerによるPrivate APIのDB保存完了通知を待って成功Responseを返す。COMMIT結果が不明な場合は同一Operation IDの冪等性記録を照合し、確定したEventを失敗として破棄しない。その他の成立EventのReplay保存は非同期とする。
 * Replay WorkerはReplayQueueを成立順に読み出し, リプレイログファイルへの追記およびPrivate API Server経由のDatabase保存を行う.
 * Replay Logは完全再現に使用するためReplay Eventを破棄しない.
@@ -229,3 +229,7 @@ GameServer受信時刻, `GuildBattleID`, `GuildBattleReplayProcessType`, 使用P
 * 集約後の不正TacticsID.
 
 BP不足等の正常なゲームルール拒否は本ログへ要求単位で保存せずMetricへ集約する.
+
+### Recovery記録の認証
+
+通常のSHA-256による破損検出だけでは悪意ある書換えに耐えない。GameServerは回復レコードのEvent番号・操作ID・Payload・前レコードHashを秘密鍵でEd25519署名し、読込時に公開鍵で検証する。署名鍵は記録ファイルやログに同梱しない。署名・連鎖・DB照合に失敗したEventは自動的に成功扱いしない。詳細は`design/programming/server/logging_recovery.md`を正本とする。

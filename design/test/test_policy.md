@@ -178,7 +178,7 @@ GuildBattle Replayは「[リプレイProtocol Buffers定義](../system/guild_bat
 
 Clientの選定済み実装方式については, `design/programming/test/test_design.md`の「ブラウザ実装・アセット・音声の検証」を参照し, iPhone Safari/PWA, Android Chrome/PWA, WebGL 2, PNG, OPFS, HCA/音声を検証する. PWAのインストール・起動等を含め, 対象OS・ブラウザの組合せで回帰試験を実施する. PNG/HCAファイル本体のOPFS保存は定義済みである一方, HCAデコーダーの最終採用には実機検証を要する. ClientとPublic API Server間のHTTP/2 over TLS 1.3・Protocol Buffersおよび騎士団戦通知のHTTP/2 Response streamを通信仕様として確認し, WebSocketをPublic API通信方式として使用しない.
 
-HCA 22,050Hz・1ch入力左右複製・2ch入力の左右保持・鍵キャッシュと失敗時の再探索・`hca_config.json`のループ設定・SE同時最大5を検証する. PCM先読みの初期500ms/補充250msを実機で調整する. 性能合否はFPS30以上（連続60秒平均, 初期10秒除外）・CIの非圧縮WASM500MB以下とし, 50MB超で最適化を検討する. GPU・RAMは参考計測とする.
+HCA 22,050Hz・1ch入力左右複製・2ch入力の左右保持・鍵キャッシュと失敗時の再探索・BGM専用フォルダのループ判定・SE同時最大5を検証する. PCM先読みの初期500ms/補充250msを実機で調整する. 性能合否はFPS30以上（連続60秒平均, 初期10秒除外）・CIの非圧縮WASM500MB以下とし, 50MB超で最適化を検討する. GPU・RAMは参考計測とする.
 
 ### 騎士団施設・配布のテスト対象
 

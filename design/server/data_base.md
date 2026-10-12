@@ -656,3 +656,13 @@ Private API Serverは更新対象Databaseトランザクション内で`GUILD_BA
 
 開始時刻を参照・マッチングに使用するトランザクションでは、現在時刻が`pending_start_time_effective_at`以上であれば、予約値を`daytime_start_time`・`nighttime_start_time`へ確定し、予約3カラムをNULLに戻す。その後の`GetGuildDetail`は有効値を通常フィールドへ返し、予約中の場合に限り3つの`pending_*`フィールドを返す。適用前の読み取りは現行値と予約値を混同しない。作成済みの対戦レコードは変更しない。
 
+### DB障害中の酒場ストック
+
+対象GuildBattleがRecoveryへ移行した場合、その間の`UseTavernRecovery`を拒否する。残数更新をGameServerのローカル記録へ振り替えず、後からストック消費をDBへ一括適用しない。正常時は従来どおりPlayerID行の排他・時間経過補充・消費・Replay記録を同一Transactionで確定する。
+
+
+## Replay確定アンカーとItem後追い更新
+
+- 騎士団戦ごとに`last_committed_event_index`、`last_record_hash`、`signing_key_id`をDBの検証済み確定アンカーとして保持する。先行Eventが確定した順に同一Transactionで更新し、WALからRecovery Journalへの切替時にも旧Anchorとの署名連鎖を維持する。Hashまたは署名だけを正本性の唯一の根拠とはしない。同じOperation ID/Indexの異Payloadを検出した場合は上書きせず隔離する。
+- `SaveGuildBattleItemLog`は`GuildBattleItemLogPayload.quantity_before/quantity_after`の連続減算（1個）とEvent/Operation IDの冪等検証、`PLAYER_ITEM`の非負残数・当該Battleで予約済みの順序・Event Indexを検証して、Item在庫の減算とReplay Event保存を同一Transactionにする。GameServerのItem使用成功応答は署名付きReplay WAL耐久化後とし、本Transactionの完了は後追いでよい。処理待ちEventを含む同一Playerの在庫を別経路で同時消費して二重引落ししないよう、同一Playerの未確定消費との排他を設ける。競合・不正・署名不一致で後追い適用できない場合はWALを残して隔離し、当該GuildBattleの最終確定を禁止する。
+- `CompleteGuildBattle`前に当該Battleで成功応答済みの全WAL・Journal Eventの署名/番号/DB反映とReplay File整合性を検証する。未反映が1件でもあれば`resolving`のままにして結果を確定しない。

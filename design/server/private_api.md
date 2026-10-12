@@ -902,8 +902,17 @@ Public API経由で本人性を検証した`AuthenticatedContext`を要求する
 
 ### SaveGuildBattleTavernRecoveryLog
 
-Private RPC `SaveGuildBattleTavernRecoveryLog`は`SaveGuildBattleTavernRecoveryLogRequest`（`payload`, `event_index`）を受け、`SaveGuildBattleTavernRecoveryLogResponse`を返す。`X-Operation-ID`を必須とし、`GuildBattleID`・`event_index`・PlayerIDの整合性および成立時刻を検証する。`GUILD_BATTLE_REPLAY_LOG`へのEnvelope保存とPlayerの酒場残回数/次回回復時刻更新を、既存Operation IDの重複判定と同一DB Transactionで確定する。同一Operationの再送は初回結果を返し、回数を再消費しない。Recoveryモードでは同じRequestとOperation IDを永続キューへ記録する。
+Private RPC `SaveGuildBattleTavernRecoveryLog`は`SaveGuildBattleTavernRecoveryLogRequest`（`payload`, `event_index`）を受け、`SaveGuildBattleTavernRecoveryLogResponse`を返す。`X-Operation-ID`を必須とし、`GuildBattleID`・`event_index`・PlayerIDの整合性および成立時刻を検証する。`GUILD_BATTLE_REPLAY_LOG`へのEnvelope保存とPlayerの酒場残回数/次回回復時刻更新を、既存Operation IDの重複判定と同一DB Transactionで確定する。同一Operationの再送は初回結果を返し、回数を再消費しない。Recoveryモードの新規`UseTavernRecovery`はGameServer入口で拒否し、消費Eventを作成しない。本Private RPCはRecovery移行前にDBで成立済みの操作について、同じOperation IDの冪等照合・再送を行う場合に限る。Recovery移行後に新規酒場消費を後追い成立させない。
 
 ### 追加認可Providerを用いるAccount作成・Login
 
 Public APIはServer設定`AdditionalAuthorizationProvider`に従って追加認可Tokenを検証し、検証済み`provider`・`subject`をPrivate APIへ渡す。Private APIはサービス間mTLS Caller Identityを確認し、現在有効なServer設定と一致しない方式を拒否する。`DISCORD`については従来のToken使用済み検証とDiscordUserID Bindingを維持する。`POCKETBASE`は検証Adapterが明示的に提供される構成でのみ使用可能とし、追加認可の検証に失敗した場合は既存AccountのLoginID/Passwordが一致してもLoginさせない。`NONE`は追加認可を要求しないが本人認証は引き続き必須とする。
+
+## 回復記録の真正性と再適用の制限
+
+GameServerのRecovery記録は専用秘密鍵を使ってEventの正規化Payloadと連鎖HashをEd25519署名し、再起動時に署名・連続番号・Operation IDを検証する。不一致、署名不能、DB上の同番号異Payloadは自動再適用を拒否して隔離し、署名のないローカル情報をDBの確定結果に優先させない。DBへの再送は署名検証に合格したEventについて、既存の冪等Transactionでのみ行う。`UseTavernRecovery`はRecovery中に拒否するためローカル再適用対象には含めない。正本の詳細は`design/programming/server/logging_recovery.md`を参照する。
+
+
+### Item使用ログと所持数の後追いTransaction
+
+`SaveGuildBattleItemLog`は通常のItem使用で署名付きWALに耐久化済みとなったEventを、Private APIから後追い送信する。`X-Operation-ID`とEvent Index、PlayerID、ItemID、`quantity_before`・`quantity_after`（差は1）と現在のDB確定残数を検証し、DBの`PLAYER_ITEM`更新と`GUILD_BATTLE_REPLAY_LOG`へのEvent保存を同一Transactionにまとめる。重複Operation IDは既存の確定結果だけを返し、同じEventを再消費しない。異なるPayload・DB残数競合・検証不能の場合は自動上書きせず失敗・隔離対象とする。通常のItem使用成功応答をこの後追いTransactionの完了待機にはしない。酒場は従来どおりDB同一Transactionの完了を条件とする。

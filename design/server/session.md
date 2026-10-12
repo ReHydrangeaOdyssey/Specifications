@@ -151,26 +151,21 @@ Accountの`LoginID`・`Password`による本人認証と、運営者が構成時
 ```mermaid
 sequenceDiagram
     actor User
-    participant Discord
-    participant DiscordBot as Discord Bot
+    participant AuthProvider as 設定済み追加認可Provider
     participant Client
     participant PublicAPIServer as Public API Server
     participant PrivateAPIServer as Private API Server
     participant Database
 
     opt AdditionalAuthorizationProvider=DISCORD
-        User->>Discord: Discord追加認可Token要求
-        Discord->>DiscordBot: DiscordUserID
-        DiscordBot->>DiscordBot: Guild・Role・前回要求時刻を検証
-        DiscordBot->>DiscordBot: DiscordAuthorizationToken生成・Ed25519署名
-        DiscordBot-->>Discord: DiscordAuthorizationToken返答
-        Discord-->>User: DiscordAuthorizationToken返答(DM)
+        User->>AuthProvider: Discord用追加認可Tokenを要求
+        AuthProvider-->>User: Discord用の検証可能なToken
     end
 
     User->>Client: LoginID・Password・ユーザー名入力
-    Client->>PublicAPIServer: CreateAccount(LoginID, Password, UserName, DiscordAuthorizationToken)
-    PublicAPIServer->>PublicAPIServer: 選択した追加認可方式のTokenを検証
-    PublicAPIServer->>PrivateAPIServer: CreateAccount(LoginID, Password, UserName, DiscordUserID, DiscordAuthorizationTokenID)
+    Client->>PublicAPIServer: CreateAccount(LoginID, Password, UserName, 選択Provider用Tokenまたは省略)
+    PublicAPIServer->>PublicAPIServer: Server設定に応じたAdapterで検証 (NONE時は追加認可なし)
+    PublicAPIServer->>PrivateAPIServer: CreateAccount(LoginID, Password, UserName, Providerと検証済みSubject/Token識別子)
     PrivateAPIServer->>PrivateAPIServer: LoginID・Password・UserName検証
     PrivateAPIServer->>PrivateAPIServer: Argon2idでPasswordHash生成
     PrivateAPIServer->>PrivateAPIServer: AccountID・PlayerID生成
@@ -197,20 +192,15 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     actor User
-    participant Discord
-    participant DiscordBot as Discord Bot
+    participant AuthProvider as 設定済み追加認可Provider
     participant Client
     participant PublicAPIServer as Public API Server
     participant PrivateAPIServer as Private API Server
     participant Database
 
     opt AdditionalAuthorizationProvider=DISCORD
-        User->>Discord: Discord追加認可Token要求
-        Discord->>DiscordBot: DiscordUserID
-        DiscordBot->>DiscordBot: Guild・Role・前回要求時刻を検証
-        DiscordBot->>DiscordBot: DiscordAuthorizationToken生成・Ed25519署名
-        DiscordBot-->>Discord: DiscordAuthorizationToken返答
-        Discord-->>User: DiscordAuthorizationToken返答(DM)
+        User->>AuthProvider: Discord用追加認可Tokenを要求
+        AuthProvider-->>User: Discord用の検証可能なToken
     end
 
     User->>Client: ログイン操作
@@ -334,3 +324,8 @@ sequenceDiagram
 
 CreateGuildへの応答が失われた場合、Clientは`GetInitialGuildStatus`でDB上の作成完了を照会し、作成済みなら通常フローへ、未作成なら初期Guild作成画面へ戻る。CreateGuild要求そのものは再試行しない。
 
+## 追加認可方式のClient通知
+
+Public APIの`GetAdditionalAuthorizationConfig`は認証不要・読取専用で、現在の選択値、追加認可の要否、およびAdapterの利用可否だけを提供する。ログイン・新規登録の第一者認証画面はこの応答に従って必要な認可入力を案内する。Provider選択はServer設定だけで確定し、ClientからのProvider自己申告による切替は認めない。
+
+`ACCOUNT`の`additional_authorization_provider`に旧ProviderのBindingがあり、現在のServer設定が別Providerである場合は、自動的にAccountのBindingを更新しない。**そのAccountのログインは拒否**し、異なるProviderのSubjectを同一Accountとして扱わない。管理者による移行契約が別途追加されるまでは既存Bindingを保持する。

@@ -83,3 +83,8 @@ Rust/WASM製Web Clientの静的配布を定義する。
 ## アセット辞書の運営設定
 
 Web配布ルートに`./config.cfg`をYAMLで設置する。運営は配布ファイルを差し替えて辞書更新を一時停止できる。`update_asset_dictionary`の既定値は`true`、`asset_dictionary_version`の既定値は`latest`。この設定は静的配布物であり、Clientから変更してServerへ書き戻す機能は設けない。辞書のReleaseの探索は`design/client/client.md`の「アセット辞書取得の設定」に従う。
+
+
+## 端末側の例外設定
+
+Web配布ルートの`config.cfg`（運営側YAML）とは独立に、ユーザーが端末内OPFSの`./config.cnf`（YAML）で`verify_asset_dictionary_source`と`allow_user_asset_override`を明示設定できる。両者の初期値はそれぞれ`true`・`false`であり、設定の省略や不正時は安全側の初期値とする。Clientが静的配布ファイルをユーザー権限で上書きする経路は設けない。外部配布物の検証を無効化してもPath/Schema等の構造検証は必須とする。

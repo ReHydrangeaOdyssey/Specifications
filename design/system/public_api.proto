@@ -852,3 +852,12 @@ message ListFriendsRequest { string access_token = 1; uint64 player_id = 2; }
 message ListFriendsResponse { repeated FriendListEntry friends = 1; }
 message RemoveFriendRequest { string access_token = 1; uint64 player_id = 2; uint64 friend_player_id = 3; }
 message RemoveFriendResponse {}
+
+// Public unauthenticated read-only authentication-policy discovery.
+// Does not reveal provider signing keys, secrets or detailed server configuration.
+message GetAdditionalAuthorizationConfigRequest {}
+message GetAdditionalAuthorizationConfigResponse {
+  string provider = 1; // DISCORD / POCKETBASE / OTHER / NONE
+  bool additional_authorization_required = 2;
+  bool provider_available = 3; // Only implemented/validated providers may be true.
+}

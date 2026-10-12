@@ -152,3 +152,8 @@ Endpoint不在判定時間について仕様の推奨初期値はConfiguration�
 - `design/server/guild_battle_lifecycle.md`
 - `design/server/private_api.md`
 - `design/test/test_policy.md`
+
+
+## Owner消失後の終結責務
+
+`in_progress`以降のBattleを無条件に別Ownerへ引き継いで続行しない。Owner失効と予定終了時刻を検知したCoordinatorはPrivate API経由で状態とReplay確定Anchorを照会し、検証可能なBattleだけを`resolving`の復旧処理へ送る。署名付きWAL/Journal/DBの整合性が失われているBattleは`resolving`に保持し、結果確定・Guildロック解除を実行しない。復旧を実行する主体はOwner排他を獲得してから順序照合と冪等追記を行い、検証が済んで初めて`CompleteGuildBattle`を呼ぶ。

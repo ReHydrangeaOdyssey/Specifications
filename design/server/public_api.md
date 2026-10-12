@@ -10,6 +10,8 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 - Public API Serverは認証状態およびゲーム状態を正本として保持しないstateless構成とする.
 - テスト環境では Private Network の外側に配置される.
 - 要求/レスポンスの意味・制約は[API Payload](api_payload.md), Protocol Buffersのwire schemaとfield numberは「[public_api.proto](../system/public_api.proto)」を参照する. `public_api.proto`はPayload schemaを定義し, gRPC Service・HTTP method・HTTP pathは追加定義しない.
+- 認証前の読み取り専用`GetAdditionalAuthorizationConfig`はAccessTokenなしで許可し、`AdditionalAuthorizationProvider`の`DISCORD`/`POCKETBASE`/`OTHER`/`NONE`と認可要否・利用可否だけを返す。認可Tokenの検証やProviderの切替をClientへ委ねない。サーバー構成に未実装Adapterが指定されていた場合はServerを起動失敗させ、`provider_available=true`を虚偽表示しない。APIは構成値から返し、秘密鍵やProviderの内部資格情報を含めない。
+
 - `CreateAccount`および`Login`の追加認可は`AdditionalAuthorizationProvider`の選択値に従い、「[セッション仕様](session.md)」の検証済み主体だけをPrivate APIへ渡す。`NONE`では追加認可Tokenを必須としない。
 - `AccessToken`を要求するPublicAPIは, 処理前にAccessTokenを検証する.
   - 署名, `alg`, `iss`, `aud`, `exp`, `player_id`を「[セッション仕様](session.md)」に従って検証する.
@@ -629,7 +631,7 @@ GameServer側のチェック.
 #### 処理内容
 
 - ClientからのAccessToken・PlayerID・GuildBattleID・RequestSequenceを検証し, Join済みの当該騎士団戦GameServerへ中継する.
-- GameServerは要求受信順に現在の使用回数と所属Guildの酒場レベルを検証する. 受付不可または使用回数上限到達時には状態を変更せず`API_ERROR_TAVERN_RECOVERY_NOT_AVAILABLE`を返す.
+- GameServerは対象GuildBattleがRecovery中なら状態変更なしで`API_ERROR_TAVERN_RECOVERY_NOT_AVAILABLE`を返し、正常時は要求受信順に現在の使用回数と所属Guildの酒場レベルを検証する. 受付不可または使用回数上限到達時には状態を変更せず`API_ERROR_TAVERN_RECOVERY_NOT_AVAILABLE`を返す.
 - 成功時は`min(現在BP + floor(酒場レベル / 3), 最大BP)`をBPへ反映し、回復量0でも残回数を1減らす。RequestSequenceを1増やし、同一結果をReplayへ記録する。回数はPlayer単位で最大3、消費分は2時間ごとに1回分回復し、日付でリセットしない。
 - 回復後BP, 適用対象に残る使用回数, 更新後のRequestSequenceを返す. 成立した要求を別のRequestSequenceで自動再送しない.
 
@@ -834,3 +836,10 @@ GameServer側のチェック.
 | `RemoveFriend` | `RemoveFriendPrivate` | 認証済み本人のフレンド関係を解除する |
 
 すべて既存のBearer認証で本人の`PlayerID`とToken subjectを照合する。プロフィール参照対象は通常Playerとする。自分への申請は拒否する。同一組が既にフレンドである場合は新規申請を成立させない。申請承認・拒否は受信者本人だけが操作でき、申請者に拒否通知を送らない。同方向の未処理申請へ再送した場合は`SendFriendRequestResponse.already_requested=true`を返す。逆方向同時申請は許可し、片方の承認後に残った逆方向申請を操作したときは`RespondFriendRequestResponse.already_friends=true`を返して再承認・再拒否は行わない。申請に有効期限を設けない。`RemoveFriend`は当事者本人からの要求のみ許可し、成立済み相互関係を解除する。`ListNotifications`に表示する申請は未処理のものだけとする。プロフィールおよびフレンド一覧は`design/system/public_api.proto`をwire正本とする。`ListFriends`の`player_id`を選択したときは既存の`StartArenaBattle`をFriendモードで要求する。
+
+## GetAdditionalAuthorizationConfig
+
+- 認証前に呼べるRead-only Public API。`GetAdditionalAuthorizationConfigRequest`は空Messageとする。
+- Responseは`provider`、`additional_authorization_required`、`provider_available`を返す。Tokenや秘密情報は返さない。
+- 運営者が選択したProviderが未実装の場合、Serverの起動を拒否する。Client側で勝手に`NONE`へフォールバックしない。
+- 認証Originのログイン/登録画面はこの値を取得して必要な入力を案内する。既存の認可コード・PKCE手順は維持する。

@@ -107,7 +107,7 @@ IEEE-754 32bit浮動小数点として、仕様に記載された演算順を変
 - 40キャラクターと代表的エフェクトをWebGL 2で描画し, 開始10秒を除外した連続60秒の平均FPSが30以上かを測定します。GPU利用率とブラウザ全体のRAM消費は合否判定に使用せず, 可能な場合に参考値として記録します。
 - HCA→PCMデコード後のWeb Audio再生を確認します。選定候補`cridecoder`のWASMビルド, iPhone Safariにおける再生とピークメモリの合格を最終採用条件として個別検証します。
 - 短いSE・ボイスの`AudioBuffer`再利用, 長いBGM・ボイスのPCM逐次供給（`AudioWorklet` / `MessagePort`）, 長尺音声を全体PCM展開せず再生することを確認します。
-- 22,050Hzの対象HCA, 辞書指定素材だけのループ, 左右2チャンネルのステレオ再生, SE同時最大5, 欠音・遅延を検証します。長尺音声のPCM先読み初期500ms/残量250msを用い, `AudioWorklet.process()`内でHCAデコードや大容量確保を行わないことを検証します。
+- 22,050Hzの対象HCA, BGM専用フォルダHCAの全体ループと非BGMフォルダHCAの非ループ, 左右2チャンネルのステレオ再生, SE同時最大5, 欠音・遅延を検証します。長尺音声のPCM先読み初期500ms/残量250msを用い, `AudioWorklet.process()`内でHCAデコードや大容量確保を行わないことを検証します。
 - GPUテクスチャ, デコード済みPCM, WASMヒープ, ブラウザ一時メモリを分けて観測します。iOS端末での長時間騎士団戦における強制再読込の有無を確認します。
 - CIで`cargo build --release --locked --target wasm32-unknown-unknown`を実行して非圧縮WASMサイズを確認し, 50MB超は最適化の検討契機, 500MB超はサイズ要件不合格として扱います。Client依存ライセンスの生成・同梱・表示も検証します。
 
@@ -367,9 +367,16 @@ Recovery fileからの再送でも同じテストを行います。
 - ファイル名の拡張子を除く部分で`A-Z`・`a-z`・`0-9`・`_`・`-`・`(`・`)`以外を拒否し、元の大文字小文字を変えずに辞書照合することを確認する。
 - 必須画像の欠落・読込失敗、未知フィールド値・必須構造欠落によるアニメーション読込失敗時は、事前に用意した画像へ切り替えて当該アニメーションを再生しないことを確認する。
 - 個人スコアは対戦終了時に未切り捨て合計を1回切り捨てて`u64`で累計へ加算し、`u64::MAX`を超える場合は飽和させる。出撃ごとの切り捨てとは独立させることを検証する。
-- スプライトアトラスの矩形・トリミング余白・元画像サイズ・明示された時計回り/反時計回りの回転復元、ピボット、ボーン親子成分継承、離散display_index、Z順、フレーム間補間・loop/停止を`design/client/sprite_animation_runtime.md`に照らして検証する。未知のフレームIndexや循環する親参照を正しく扱う。
+- スプライトアトラスの矩形・トリミング余白・元画像サイズ・無回転/時計回り90度格納の復元および未知・反時計回り指定の拒否、ピボット、ボーン親子成分継承、離散display_index、Z順、フレーム間補間・loop/停止を`design/client/sprite_animation_runtime.md`に照らして検証する。未知のフレームIndexや循環する親参照を正しく扱う。
 - `kX`が変換行列の第2列、`kY`が第1列に作用することを、`kX`と`kY`が異なる姿勢で検証する。負倍率・非一様倍率・傾きが共存する親子ボーンについて、親行列と子行列の単純な積ではなく、位置変換後の倍率乗算・傾き加算からワールド行列を再構成した結果と一致することを確認する。スキン行列は完成したボーンワールド行列へ乗じる。
 - アニメーションの論理60フレーム/秒、最終フレームの停止/ループ時の0への復帰、静止値とフレーム値の合成、画素Y下向きから骨格Y上向きへの変換、UVと画面の独立した座標変換を検証する。左右向き別の骨格・アトラスを使うキャラクターは、片側画像の左右反転ではなく、それぞれの参照データで描画する。
+- 表示モーションは`design/client/character_motion_state.md`に従い、`attack`/`attack2`/`attack_in`/`attack_out`/`damage`/`dead`/`def_damage`/`def_wait`/`entry`/`escape`/`flatline`/`landing`/`run`/`skill_all`/`skill_in`/`skill_out`/`wait`/`win`の18名称を検証する。`def_damage`・`entry`・`skill_all`の役割は推定であり、根拠のない自動遷移を追加しない。
+- 待機選択時は`wait`/`def_wait`/`flatline`の分岐と通常条件の`wait`フォールバックを確認し、未確定な条件を特定の状態異常ID・防御ルールへ決め打ちしない。`runTo`/`runExecute`要求時の`run`再生と、移動後に無条件で待機へ戻さないことを検証する。
+- `attack`と条件付き`attack2`がそれぞれ再生完了イベントで攻撃処理完了へ進むこと、および完了後の待機復帰は呼出元の次アクション指示を必要とすることを確認する。`attack2`の判定式・確率や追加の攻撃モーション名を推測で固定しない。
+- 前進側は`attack_out`再生→イベント種別`1`/`2`→跳躍移動→`landing`再生→イベント種別`1`/`2`→完了通知→待機選択へ進む。帰還側は`attack_in`→イベント種別`1`/`2`→跳躍移動→攻撃処理完了までで、`landing`・自動待機復帰を発生させない。
+- 被弾処理の`damage`完了イベントと、条件付き`escape`完了コールバックから生死判定へ進み、生存時は待機選択、死亡時は`dead`へ進むことを確認する。`escape`の全再生で判定が必ず呼ばれるとみなさない。`dead`は関連アクション・エフェクトを停止し、未定義の死亡後自動復帰は追加しない。
+- `useSkill`で`skill_in`を選択し、別途`endSkill`が指示された場合だけ`skill_out`へ切り替えることを確認する。`win`を勝利・回復・能力上昇・復活の演出で使用できること、`skill_out`/`win`の再生終了だけでは自動待機復帰させないことを検証する。
+- 再生制御のイベント種別`1`/`2`は`FrameData.event_name`とは独立し、重複通知・古いモーションからの通知で跳躍移動・生死判定・完了通知が多重実行されないことを確認する。Client演出完了を`game-core`の計算結果・PRNG消費順に影響させない。
 - 音源未配置またはデコードエラー時に無音とし、戦闘状態の確定を変更しないことを確認する。
 - `game_info.json`のu32のmajor/minor/patch、前回値、初期値、不正な値からの再生成を確認する。
 
@@ -396,9 +403,30 @@ Recovery fileからの再送でも同じテストを行います。
 
 - `./config.cfg`のYAML既定値、更新停止、`latest`/固定tagのRelease選択、Release不存在・曖昧Asset・1回Retry・旧辞書復帰を検証する。
 - 辞書JSONの`path`非空／空、`paths`のHash Object、非法Path、Hash不一致、元ファイル名の大文字/小文字、異なる同名ファイルを検証する。`./cache/temp/user_impoert/`→`./assets/`／`./cache/unknown_resouce/`の遷移を検査する。
-- HCA 1ch→2ch複製、`hca_config.json`の`loop`、鍵キャッシュ命中・旧鍵失効時再探索・復号失敗の無音を検証する。
+- HCA 1ch→2ch複製、BGM専用フォルダに基づく全体ループ、鍵キャッシュ命中・旧鍵失効時再探索・復号失敗の無音を検証する。
 - DB保存で一時障害→同一Operation IDの1回Retry成功、Retry失敗、明示的確定失敗、合計5秒TimeoutのRecovery遷移を検証する。
 - Recovery Eventはファイル書込→fsync→atomic rename→directory fsync完了までは成功応答しない。部分一時ファイル・ハッシュ不一致は有効Eventとして扱わないことを確認する。
 - GuildBattleごとのEvent Indexの順序確定、再起動時の終了済みBattleのみ再送、未完了Battleの保全、同一Operationの再送冪等性を確認する。
 - 酒場では同一Playerからの同時要求が排他され、参照だけではDB行を書き換えず、2時間補充と成立消費が同一Transactionになることを検証する。
 - `FrameData.display_index`の省略／明示0、時計回り90度格納、Characterの参照不足時の代替表示を検証する。
+
+### 今回確定した境界条件
+
+- `GetAdditionalAuthorizationConfig`で`DISCORD`/`POCKETBASE`/`OTHER`/`NONE`の表示を切り替え、認可Tokenの要否はServerが決める。未実装Adapter起動拒否と、Config取得失敗時に無認可へフォールバックしないことを確認する。
+- Recovery移行中の`UseTavernRecovery`は拒否され、Playerの残ストック、RequestSequence、BP、Replay Eventが変化しないことを確認する。
+- 出撃は永続化成功→Response→後処理の順、通常EventはReplayQueue登録→Response→Workerによる順序保存であることを確認する。通常Eventの署名付きReplay WAL耐久化→成功Response→DB非同期COMMITを検証する。WAL未確定Eventには成功応答を返さない。再起動後の署名・順序検証と重複適用拒否を確認する。
+- `asset_dictionary.json`がないRelease/複数あるRelease/不正JSON/誤Path/途中ダウンロード失敗を受けても前Generationが維持されること、ログイン失敗時も手動素材取り込みが可能なことを確認する。
+- 同名・内容違いのHCA鍵は混用されず、誤鍵キャッシュは探索へ戻す。BGMフォルダだけがループし、設定JSONの有無では挙動を変更しない。キャッシュクリアで辞書、保留割当、鍵探索キャッシュが消えることを確認する。
+- Replay Recovery記録のPayload改変、署名/連鎖Hash不一致、DB側との同一番号異Payloadは自動適用せず隔離する。
+
+
+## 回答反映後の境界テスト
+
+- Recovery Replayの1件再送が失敗する場合、`CompleteGuildBattle`を発行せず`resolving`を保持すること。全件の署名・Hash鎖・Event Index・DB確定が成功した場合だけ完了要求すること。
+- 通常Eventは受付→仮状態/番号予約→署名付きWALの耐久保存→Runtime/RequestSequence確定→成功応答→DB非同期保存の順となること。WAL書込・fsync・署名/空き容量に失敗した場合、PRNG/残数/RequestSequenceとEvent番号を進めず成功応答しないこと。
+- Item使用では所持数を仮減算し、WAL確定後にのみ表示残数と成功応答を更新すること。Private APIの`SaveGuildBattleItemLog`が後追いTransactionでItem残数・Replay Eventを同時確定し、同じOperation IDのRetryで二重消費しないこと。酒場利用はDB即時Transactionのまま、Recovery中には拒否すること。
+- WAL/Journal跨ぎの鍵ID変更・連鎖Anchor不一致・途中Event削除・同一番号異Payload・署名不正を検出し、DBの確定値を上書きせず隔離すること。GameServer異常終了後、未確定Battleを無条件にcompletedへ遷移しないこと。
+- BGM専用フォルダのHCAだけが音源全体ループし、その他の音源は非ループとなること。`hca_config.json`の存在有無で再生方法を変更しないこと。
+- `SpriteAnimationData`・`PlistRoot`・参照PNGの端末内セット取り込みはPublic/Private RPCを呼ばず完結すること。壊れたFrame 1件でセット全体を拒否し、独立した正常セットは維持すること。Armature重複、Skin選択、`content_scale`、Atlas省略値を個別確認すること。
+- ローカル`config.cnf`の既定値は検証ON・素材代替OFFであり、明示設定に限り未検証辞書とユーザー代替素材を受け入れること。未検証時でもサイズ/構造/Path検証を省略しないこと。
+- 表示モーションの取消済みコールバックで二重通知しないこと。`attack2`を恣意的に選ばないこと。演出引数不足時に既存戦闘結果を変更しないこと。

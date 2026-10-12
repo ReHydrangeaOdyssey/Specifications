@@ -77,7 +77,23 @@ OPFSのPNG → File / Blob → createImageBitmap() → WebGL 2 texImage2D()
 - ボーンおよびフレームの座標・拡縮・傾き、表示Index、補間を評価して描画します。静止値とフレーム値を合成した後、親ボーンから位置・倍率・傾きの成分を継承してワールド行列を構築し、最後にスキン行列を乗じます。行列を単純に親子乗算する方式は採用しません。色・ブレンド・イベント等のフィールドは保持しますが、姿勢評価への適用範囲は実行規則に従います。PNGの画像本体・アトラスファイル本体は別アセットとし、既定のOPFS読込み・WebGL 2テクスチャ描画の経路を使用します。
 - スプライトのアトラスデータは`design/system/plist.proto`の`PlistRoot`・`Frames`・`FramesFrame`・`Metadata`・`Texture`で表現します。フレームのキーと切り出し矩形・元画像サイズ・オフセットを保持し、アニメーションの`DisplayData`・`TextureData`が持つ画像参照情報と区別します。
 - 骨格・スプライトアトラスの復元、モーション評価、補間、親子成分継承、表示Index・Z順の確定規則は`design/client/sprite_animation_runtime.md`に従います。アトラス回転は`FramesFrame.packing_rotation`の明示値だけを使用し、画像名称や行列の符号から推定しません。描画はWebGL 2の四角形・通常アルファ合成で行います。
+- キャラクターの表示状態制御には`design/client/character_motion_state.md`で定義した18種のモーション名・受理条件・完了通知順序を使用します。待機選択は`wait`/`def_wait`/`flatline`、走行は`runTo`/`runExecute`で`run`、通常攻撃は`attack`、条件付き第2攻撃は`attack2`を使用します。前進側は`attack_out → 跳躍移動 → landing → 完了通知 → 待機選択`、帰還側は`attack_in → 跳躍移動 → 攻撃処理完了`とし、自動で待機へ戻しません。`damage`完了時および条件付き`escape`完了時は`actionDead`に相当する生死判定から、生存時`setWait`、死亡時`dead`へ進めます。`useSkill`は`skill_in`、別途`endSkill`が届いたときだけ`skill_out`へ切り替えます。`win`は勝利専用ではなく回復・能力上昇・復活でも使用します。`def_damage`/`entry`/`skill_all`の推定用途や、`run`/`skill_out`/`win`等からの推定復帰を無条件の自動遷移として実装しません。再生制御イベント種別`1`/`2`と`FrameData.event_name`を区別し、段階済み・旧要求の重複コールバックを無視します。
 - アニメーションはClientのイベントキューに連動した表示処理とし、画像・UV・アニメーションデータをGameServerの`ProcessedMasterData`に含めません。骨格・アニメーション・アトラス・PNG本体は原則ユーザーが各自用意し、例外的な代替画像などClient配布素材は別リポジトリから取得します。
+
+### キャラクター構成セットのClient専用取り込み
+
+アセット追加画面からユーザー提供の骨格ProtoBuf、アトラスProtoBuf、参照PNGをセットで取り込み、セットの検証・原子的な登録・差替え・削除をOPFS内で完結させます。対応するゲームのPublic/Private RPCは作りません。`design/client/local_asset_storage.md`のセットManifestに従い、アニメーション構造検証が失敗したセットは登録せず、既存の検証済みセットを維持します。CharacterID・Actionへの機械生成不能な対応Schemaは追加せず、明示されたユーザーの表示選択をもとに必要な参照を解決します。
+
+### 表示モーション制御の実装詳細
+
+状態名と状態間の接続は`design/client/character_motion_state.md`を正本とします。演出要求の識別子、位置移動の開始/終了・所要時間、演出種別の伝達、再生完了コールバックの抑止はこの実装境界で扱い、状態遷移書には引数値・フラグbit・座標式を列挙しません。
+
+- 戦闘表示イベントが攻撃演出種別を**明示しているときだけ**、指定された`attack`または`attack2`を選択します。根拠のない確率やキャラクター名から`attack2`を選択しません。演出種別未指定時の恣意的な第2攻撃への切替は行いません。
+- 再生制御から届く既存のイベント種別`1`・`2`は完了関連通知の対象として受け取り、モーション再生要求ID・現在段階と照合します。自然終了・停止・ループ切替と各番号の厳密な意味は元資料では未確定のため、その番号だけで新しい自然終了条件を発明しません。`FrameData.event_name`は別のデータ通知であり完了を代用しません。
+- 死亡が確定した表示要求を優先し、古い再生要求の完了通知は破棄します。被弾・スキル・移動間で優先を確定できない場合は新しい要求を一律に割り込ませず、表示イベントの順序・既存ロック状態に従い拒否または保留します。取消時に古い要求の完了通知を再発火させません。戦闘演算を再計算しません。
+- 待機要求は現在Battleの確定した表示条件だけで`wait/def_wait/flatline`を選択し、未定義のフラグ値を推定しません。条件が解決できない場合は`wait`を表示上のフォールバックとし、被弾の可否や死亡の判定を待機モーション名から計算しません。
+- 移動演出の開始/目標位置と時間は呼出元の戦闘表示イベントから受け取り、未提示の固定距離・跳躍高さ・durationを導入しません。位置情報が足りない場合は不正な移動を捏造せず当該移動演出を不成立表示として扱い、ゲーム状態はそのまま維持します。
+
 
 ### HCAデコード・音声パイプライン
 
@@ -85,7 +101,7 @@ OPFSのPNG → File / Blob → createImageBitmap() → WebGL 2 texImage2D()
 - HCAからPCMへ変換した音声をWeb Audio APIへ渡します。短いSE/ボイスでは必要に応じて全体を`AudioBuffer`へデコードして再利用します。
 - 長いBGM/ボイスはOPFSから必要な圧縮ブロックを読み, 小容量PCMバッファへ逐次デコードします。`AudioWorkletNode`へ`MessagePort`経由でPCMチャンクを供給し, `AudioWorkletProcessor`の小容量キューから再生します。
 - `AudioWorkletProcessor.process()`内でHCAデコードや大容量のメモリ確保を行いません。制御側または専用Workerが先読みし, 音声出力側と役割を分離します。
-- HCAは22,050Hzとし、暗号化されている場合は鍵キャッシュを先に試してから必要に応じて鍵探索します。ループは対象音源の`hca_config.json`の`loop`で決定し、`true`は音源全体の繰り返しです。SEの同時再生上限は5です。ステレオ2チャンネル（左・右）を再生対象とし, HCAの左右音声を保持したPCMをWeb Audio APIへ供給します。1チャンネル入力はPCMを左右に複製して出力します。ステレオの実機動作は別途検証します。長尺音声のPCM先読みは初期500ms, 残り250ms到達前に補充する暫定設定を採用し, 欠音・メモリ使用・I/O遅延から調整します。`SharedArrayBuffer`は初期実装では使用しません。
+- HCAは22,050Hzとし、暗号化されている場合は鍵キャッシュを先に試してから必要に応じて鍵探索します。ループはOPFSのBGM専用フォルダに配置されたHCAに限り音源全体を繰り返し、その他のHCAでは無効にします。`hca_config.json`は使用しません。SEの同時再生上限は5です。ステレオ2チャンネル（左・右）を再生対象とし, HCAの左右音声を保持したPCMをWeb Audio APIへ供給します。1チャンネル入力はPCMを左右に複製して出力します。ステレオの実機動作は別途検証します。長尺音声のPCM先読みは初期500ms, 残り250ms到達前に補充する暫定設定を採用し, 欠音・メモリ使用・I/O遅延から調整します。`SharedArrayBuffer`は初期実装では使用しません。
 - HCAのiPhone Safari/WASMでのコンパイル・正しい再生・ピークメモリは未検証です。`cridecoder`は検証合格を最終採用条件とする候補であり, 動作確認済みとは記載しません。
 - `cridecoder`リポジトリはMIT Licenseを掲示していますが, Client配布物に含める当該ライブラリと推移的依存ライブラリのライセンスを確認します。一方, PNG/HCAの音源・画像ファイルは各ユーザーが用意して自端末へ取り込むため, 個別素材のライセンスをClientが自動審査する機能は設けません。ユーザー持ち込み素材の権利と, Clientが配布するソフトウェア/同梱素材の権利は区別します（参照: https://github.com/seiunx-dev/cridecoder）。
 
@@ -103,7 +119,7 @@ OPFSのPNG → File / Blob → createImageBitmap() → WebGL 2 texImage2D()
 - OPFSでは非同期APIと`FileSystemSyncAccessHandle`を利用可能な処理で選択します。非同期のほうが効率的な処理には非同期APIを使い, 同期APIはWorker内でのアクセスに限定します。用途別の性能・互換性測定は継続します。
 - 圧縮HCAファイル全体と全体PCMを同時に常駐させません。デコード済みPCM, GPU資源, WASMメモリは用途別に管理し, 不要な`AudioBuffer`の参照を解除します。
 - 取り込みはまず`./cache/temp/user_impoert/`で行います。辞書の第1キーは拡張子付き元ファイル名の完全一致とし、エントリの`path`が非空なら一意Pathへ、空なら内容SHA-256で`paths` Objectの対応Pathを選びます。辞書一致時だけ`./assets/`へ移し、不一致は`./cache/unknown_resouce/`へ保留します。ユーザーは区分「BGM」「SE」「Voice」「Character」「SD Character」「Character Icon」を指定でき、Characterでは対象IDを記録しますが、辞書不一致のままRuntimeでは使用しません。元ファイル名は照合用に保存し、一意IDによる強制改名はしません。既存Pathの上書きはユーザー確認を要し、一括上書き/キャンセルも実装します。
-- PNG/HCAは辞書Pathに基づきOPFSの`./assets/`へ保存・復元します。タイトル画面からのアセット削除では任意の素材を個別・一括で削除できます。自動的な容量調整削除はせず, 容量不足時はゲームを利用不可にして削除操作を有効にします。キャッシュクリアはVersion移行中は拒否し、それ以外は`./cache/`のみを対象とします。辞書形式は`design/client/client.md`で確定しており、具体的Release Asset名が未確定です。辞書保留素材は`./cache/unknown_resouce/`、取込一時領域は`./cache/temp/user_impoert/`です。
+- PNG/HCAは辞書Pathに基づきOPFSの`./assets/`へ保存・復元します。タイトル画面からのアセット削除では任意の素材を個別・一括で削除できます。自動的な容量調整削除はせず, 容量不足時はゲームを利用不可にして削除操作を有効にします。キャッシュクリアはVersion移行中は拒否し、それ以外は`./cache/`のみを対象とします。辞書形式は`design/client/client.md`で確定しており、取得するRelease Asset名は`asset_dictionary.json`に固定します。辞書保留素材は`./cache/unknown_resouce/`、取込一時領域は`./cache/temp/user_impoert/`です。
 
 ### 依存・ビルド・検証条件
 
@@ -311,9 +327,13 @@ Seedが`0`かどうかだけでランダム要素の有無を判定しません�
 
 ## HCA音声の復号準備
 
-- 1ch入力は左右同値の2ch PCM、2ch入力は左右そのままのPCMを出力する。`hca_config.json`の`loop`が`true`なら全曲ループ、`false`なら単発とする。
-- 鍵が必要なら`./cache/temp/decode/keys.json`から元HCAファイル名を検索し、キャッシュ鍵で復号できなければ鍵探索へフォールバックする。探索成功鍵はJSONに更新し、キャッシュクリアで消す。復号失敗は無音とする。
+- 1ch入力は左右同値の2ch PCM、2ch入力は左右そのままのPCMを出力する。OPFS上のBGM専用フォルダに配置されたHCAだけが全曲ループ、その他は単発とする。
+- 鍵が必要なら`./cache/temp/decode/keys.json`から元HCAファイル名と内容SHA-256の複合キーを検索し、キャッシュ鍵で復号できなければ鍵探索へフォールバックする。探索成功鍵はJSONに更新し、キャッシュクリアで消す。復号失敗は無音とする。
 
 ## Client側の描画Fallback
 
 キャラクターの骨格・アニメーション・アトラス・PNGが読み込めない場合は、別リポジトリから取得した代替画像を表示する。CharacterID/向き/Movementの対応情報が存在しない場合は代替画像へ切り替え、照合辞書の`path`/`paths`から生成しない。`FrameData.display_index`はPresenceを確認し、明示0と省略を区別する。90度の格納回転は時計回りだけを対象とし、未知方向を推測しない。
+
+### 資産辞書・割当・HCAの正本保存方式
+
+`design/client/local_asset_storage.md`を正本とする。Release Assetは`asset_dictionary.json`を唯一の選択名とし、全件Validation後に`./cache/temp/asset_dictionary/`でGeneration切替する。未一致割当は`./cache/unknown_resouce/assignments.json`にID別に保存し、素材側の存在とHashも確認する。HCAループは保存先のBGM専用フォルダで判定し、鍵は元ファイル名と内容SHA-256の複合識別子で検証済みの値だけを原子的にキャッシュする。

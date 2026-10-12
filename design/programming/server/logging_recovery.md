@@ -9,14 +9,15 @@ System Log、GuildBattle Replay、DB Recoveryは目的と耐欠損性が異な�
 ```mermaid
 flowchart LR
     Hot[GuildBattle Hot Path] -->|Log Event| LQ[System Log Queue]
-    Hot -->|成立Replay Event| RQ[ReplayQueue]
+    Hot -->|仮成立EventとOperation ID| RQ[ReplayQueue予約]
     Hot -->|DB送信予定| DBW[DB送信処理]
 
     LQ --> LW[Log Worker]
     LW --> OUT[stdout / stderr JSON]
 
     RQ --> RW[Replay Worker]
-    RW --> FILE[Replay .pb]
+    RW --> WAL[/署名付きPersistent Replay WAL/ ]
+    WAL --> FILE[Replay .pb]
     RW --> PA[Private API]
 
     DBW --> PA
@@ -41,12 +42,12 @@ flowchart LR
 ## ReplayQueue
 
 - bounded queueです。
-- 成立した操作だけを追加します。
-- 状態反映とRequestSequence更新後に追加します。
+- 通常非出撃Eventは仮状態と予約Indexを先にキューへ送り、WALの署名付き耐久書込後に正本状態とRequestSequenceを確定します。
+- WALに耐久化できない予約は成立Eventとして扱わず、状態とSequenceを元に戻します。
 - 追加順は処理成立順と一致させます。
 - Eventを破棄しません。
 - Queue満杯時だけ、空きができるまで要求処理を待機します。
-- Replay WorkerがSerialize、file追記、Private API保存を担当します。出撃Eventは成功Responseより前に同Worker経由でDB保存を完了し、後続の通常QueueではDBを重複書込みせずFile追記だけを行います。
+- Replay WorkerがSerialize、署名付きWAL耐久書込、file追記、Private API保存を担当します。出撃Eventは成功Responseより前に同Worker経由でDB保存を完了し、後続の通常QueueではDBを重複書込みせずFile追記だけを行います。
 
 System Log Queueの大量発生でReplayを阻害しないよう、Queueを共有しません。
 
@@ -127,9 +128,24 @@ Recovery状態では、それ以降の対象GuildBattle中DB送信を停止し�
 
 ## Event採番と耐久確定順序
 
-同一GuildBattleの成立操作はGameServer上の単一のEvent確定キューで番号を順に予約し、番号`n`のDB COMMIT（正常時）またはJournal耐久保存（Recovery時）が確定するまで番号`n+1`の成立確定・成功応答を行わない。Createは`event_index=1`とする。Event番号・Operation ID・Payloadの対応はDBとJournalとReplay fileで同一に維持する。DBへは同一Operation ID・Event Indexを使うため、Retry/再送で二重加算をしない。
+同一GuildBattleの操作を単一の順序確定キューで受け付け、`event_index=1`はCreate、以降は単調連続採番する。**出撃**は従来どおりDB COMMIT（Recovery中はローカル耐久記録）確定後に成功Responseを返す。**非出撃の通常Event**は仮状態に操作を適用し、Event Index・Operation ID・Payloadを順序キューへ予約した後、**専用Workerが署名付きローカル先行ログ（Replay WAL）へ耐久化した時点でのみ正本状態・RequestSequenceを確定して応答**し、DB/File保存を非同期に進める。通常Eventの応答はDB COMMITを意味しないが、署名付きReplay WALの耐久保存完了を保証する。Workerは番号順に保存を進め、先行番号のDB保存確定前に後続番号をDBへCOMMITしない。処理スレッドはDB応答やディスクI/Oを同期実行せず、保存遅延・Queue高水位は監視し、Queue上限時だけ受付を待機する。DB障害でRecoveryに移行した後は、**新たな成立Eventの成功応答を返す前に**専用Workerが署名付きローカル記録の耐久化を完了する。各Eventの番号とOperation IDはDB・Replay File・回復レコード間で変えず、Retry/再送は冪等に照合する。非出撃の先行ログ書込みが未完了なら成功応答せず、プロセス停止時には耐久済みReplay WALを署名・連続番号で検証してDBへ冪等に反映する。DB確定前にWALを削除しない。
 
 ローカルJournalはEventごとのJSON不変レコードとし、`/var/lib/game-server/recovery/guild_battle_<GuildBattleID>_<InstanceID>/event_<index>_<operation-id>.json`へ保存する。一時ファイル作成→Payloadと検査用SHA-256書込→ファイル`fsync`→原子的rename→親ディレクトリ`fsync`完了を1レコードの成立境界とする。永続化が未完了なら成功応答を返さない。再起動時にはHash・Event Index・Operation ID・Payloadを検証し、未完成の一時ファイルは成立扱いしない。
+
+## 低遅延Replay WAL（通常時の非出撃Event）
+
+GameServerはDB送信を待たずに非出撃の状態変更へ応答するため、`/var/lib/game-server/replay_wal/guild_battle_<GuildBattleID>_<InstanceID>/`にイベント単位の先行記録を持つ。専用Workerが`event_<index>_<operation-id>.json`を一時ファイルから書込み、正規Payload・Event Index・Operation ID・前記録HashをEd25519署名し、ファイル`fsync`→原子的rename→親ディレクトリ`fsync`まで完了した時点を**通常Eventの受理確定**とする。ゲームの操作スレッドはディスクI/Oを実行せず、非同期完了通知を利用する。複数Eventを1回の`fsync`で確定するGroup Commitは順序を保持する場合のみ可能とし、DB往復による待機を受付の必須条件にしない。ストレージの遅延が大きい場合はローカルI/O完了待ちが残るため、恒常的な0ms応答は保証しない。
+
+署名検証用鍵はRecovery記録と同じ保護鍵体系を使用する。DBの同一Operation ID/番号へのCOMMITおよびReplay File追記が確認できるまで先行記録を消去しない。起動時はReplay WALを検証し、DBの確定済みEventとPayloadまで一致したものは二重適用せず、DB未反映のものは順序・署名照合後に既存Private APIの冪等Transactionで保存する。同番号異Payload・署名/連鎖不正は自動適用せず隔離する。Recovery中の専用Journalは別Pathに置き、二重記録の有無を同一Operation IDで照合する。通常Eventも耐久先行ログが保存できない場合は不成立として扱う。
+
+## 永続Volume・検証アンカー・状態遷移
+
+- Replay WALおよびRecovery Journalは**別ディレクトリの専用Persistent Volume**上に格納し、プロセス・Pod再起動で失われないことを前提にする。GameServer Instanceの署名秘密鍵はVolumeのログ本文には置かず、認可済み実行主体のみ参照できる別管理領域に保持する。検証公開鍵は鍵IDとともに保持し、署名後の古い鍵世代も未処理記録の検証が終わるまで残す。
+- Battleごとにイベントの`(last_committed_event_index, last_record_hash, signing_key_id)`をDB確定アンカーとして保持する。DB確定済み番号までの連鎖を検査し、WALからJournalへの移行レコードにも直前Hashと署名鍵IDを入れる。DB障害中に新しいDBアンカーを確定できない場合は最後の検証済みアンカーからの連鎖をローカルで維持し、復帰後にDB確定履歴との一致を確認する。Hashだけ、または署名だけの一致を完全性の証明として単独採用しない。
+- Eventの保存状態は`wal_durable`、`db_unknown`、`db_committed`、`file_confirmed`、`recovery_pending`として扱い、同一`(GuildBattleID,event_index,OperationID)`を全段階で追跡する。DB結果不明時は同じ操作の確定照会・許可されたRetryで判定し、WALとJournalの両方に同一Eventが存在しても新Eventを作らない。同番号異Payload、番号欠損、署名・Hash鎖不正は隔離する。
+- Volume容量上限・ファイル数上限・fsync/rename失敗では新規操作を成功扱いせず、受付にバックプレッシャーを掛ける。未検証レコードを自動削除しない。DBの同一Payload確定とReplay Fileへの反映を確認するまで対応WALを削除しない。再起動後は一時ファイルを不成立として分離し、WAL・Journal→署名/順序検証→既存DBアンカー/Operation ID照合→冪等DB追記→Replay File検証、の順で復旧する。検証不能な記録は削除・成功扱いせず隔離する。
+- Replay WALの保存要求に失敗した**未成立Event**は正本Runtime・PRNG・RequestSequenceを変更しない。直列キューは当該予約を解放し、同じ連続番号を次の**未成立**要求にだけ割り当て直す。既に成功応答済みのイベント番号は再利用しない。
+
 
 ## Recovery file
 
@@ -175,6 +191,10 @@ CompleteGuildBattleは一般Recovery送信規則と別です。
 - 原因調査・復旧は運営手動です。
 - 完了Transactionが部分Commitされないことを保証します。
 
+## 異常終了後のBattle終結
+
+CoordinatorはOwnerの消失を検出し、DBのBattle状態・予定終了時刻・最後の確定Event IndexとReplay復元可否を照会する。`in_progress`を新しいOwnerへ無条件に再割当してバトルを続行しない。終了時刻超過かつ署名付きWAL/JournalとDBの整合を検証できる場合に限り、同一Battleの未反映Eventを冪等回収し、`resolving`から通常の結果確定手順へ進める責務を明示する。検証不能または操作の未確定がある場合は`resolving`に保留して自動完了せず、異常原因を確認する。引継ぎOwnerは旧Ownerと同一Battleを同時所有しない。
+
 ## Metrics
 
 少なくとも仕様にある以下をCollectorへ渡します。
@@ -205,3 +225,11 @@ PlayerID、GuildBattleID、Request ID等を高Cardinality Metric Labelにしま�
 - 正常時の出撃の成立条件はDB COMMIT、Recovery移行後は専用永続Journalのファイル`fsync`・原子的rename・親ディレクトリ`fsync`完了とする。ローカル保存に失敗した要求は成功応答しない。
 - Eventの番号・Operation ID・要求Payloadを失わないようReplayQueueとRecovery Workerを連携し、DB結果不明時も同一Operation IDで保存する。Battle終了後にEvent番号順で一括再送し、DB側で既存COMMIT済みのEventを冪等に照合する。
 - 旧図の「Retry失敗」だけでなく**5秒経過**もRecovery遷移条件とする。GameServer起動時に進行中BattleのDB送信を勝手に再開しない。
+
+### Recovery中の酒場操作
+
+`UseTavernRecovery`はPlayer単位のDB行ロックとReplay Eventを同一Transactionで確定する操作である。対象GuildBattleがRecovery状態のときは要求を**拒否**し、BP・残ストック・次回補充時刻・RequestSequenceを更新せず、酒場Replay Eventもローカル保存しない。Player単位の代替ローカル排他カウンターは設けず、終了後の一括再適用対象にも含めない。正常時に先行してDB確定していた酒場操作は、Operation IDによる既存の冪等性を保持する。
+
+### Recovery記録の真正性と照合拒否
+
+Recovery記録はDBの無条件の代替正本ではない。各JSON不変レコードの長さ・Schema・SHA-256に加え、**GameServerだけが保持する署名秘密鍵によるEd25519署名**を付与する。署名対象は正規化した`GuildBattleID`・`InstanceID`・`event_index`・`OperationID`・`Payload`・直前Eventの署名済み記録Hash・鍵識別子の組とする。検証用公開鍵を署名記録とは独立した管理領域に保持し、秘密鍵をJournal内・Client・System Logへ記録しない。再起動時は署名・連鎖Hash・イベントの連続番号を先に検証する。いずれかが不正なら**自動復旧せず隔離**する。DBに同一Operation IDまたは同一番号のEventがあればPayload一致を必須とし、異なる場合はDB側を勝手に上書きせず隔離・明示的な再調査対象とする。署名のあるローカル記録だけを理由に、DBの既存確定値より優先して採用しない。DBへ未確定の記録は署名検証および順序照合が完了した場合に限り、Private APIの冪等Transactionによる追記を試行する。保留・改ざん疑いを単純なSHA-256一致だけで復旧成功とみなさない。鍵紛失/検証不能時も自動承認しない。
