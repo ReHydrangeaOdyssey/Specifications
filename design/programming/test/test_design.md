@@ -31,6 +31,8 @@ tests/
 
 CIでは`cargo fmt --check`、`cargo clippy --workspace --all-targets -- -D warnings`、`cargo test --workspace --all-targets`を基本とし、WASM Clientの対象端末/ブラウザ側テストを別途行います。第三者依存の必要な通知、MIT `LICENSE`とSecret非混入も公開前に確認します。
 
+実装レビューでは`../implementation_rules.md`に従い、ゲーム規則等のマジックナンバー混入、コメントが処理の言い換えや一時メモになっていないこと、計算ロジックに実際の計算式（演算順序・丸め・Clampを含む）がコメントとして記載されていることを確認します。100行以上の関数は原則不適合とし、分割不能または分割によって可読性を損なう場合に限り、その根拠と単体テストを確認します。
+
 外部I/Oを伴わない処理を対象にします。
 
 ### 数値・戦闘

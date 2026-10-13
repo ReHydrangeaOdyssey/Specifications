@@ -10,6 +10,13 @@
 
 HTTPステータスコードは標準の3桁整数であり任意の細分類値を追加できない。Requestの構文不正は400、認証失敗は401、権限違反は403、対象不在は404、更新競合は409、制限超過は429等とする。業務固有エラー（施設最大Lv、ゴールド不足など）は該当HTTPコードのBodyに`ApiErrorResponse.error_code`を設定して区別する。失敗Bodyは`Content-Type: application/x-protobuf`とする。
 
+### 通常認証Public RPCのBearer Header/Body AccessToken整合
+
+- 認証を要するPublic RPCでは`Authorization: Bearer <AccessToken>`のAccessTokenを認証正本とする。
+- Request Bodyに`access_token`が定義される既存RPCでは、移行期間中はBodyの値も必須とし、Headerとバイト単位で一致することを検証する。片方の欠落または不一致は認証不正（HTTP 401）として処理を中断し、Bodyによる認証上書きを行わない。`ApiErrorResponse.error_code`は既存の認証不正定義を使用する。
+- 認証を要する新規Public RPCはBearer Headerを必須とし、Header/Bodyの両方を欠いた新規RPCを作成しない。既存Body `access_token`の廃止時期は別途Version管理で決定する。
+- この一致検証は通常のBearer認証を要するPublic RPCに適用し、`GetAdditionalAuthorizationConfig`や認証Origin上のCreateAccount/Login等の既存の別認証手順を変更しない。
+
 ## Method名
 
 Public API: `GetAdditionalAuthorizationConfig`, `CreateAccount`, `Login`, `RefreshAccessToken`, `Logout`, `CreateGuild`, `UpdateGuildLeadership`, `ApplyGuildJoin`, `ApproveGuildJoinApplication`, `SendGuildInvitation`, `AcceptGuildInvitation`, `LeaveGuild`, `UpdateArenaParty`, `StartArenaBattle`, `UpdateGuildBattleParty`, `JoinGuildBattle`, `GetGuildBattleStatus`, `SubscribeGuildBattleUpdates`, `GuildBattleSortie`, `UseTactics`, `UseItem`, `UseTavernRecovery`, `StartHeal`, `CancelHeal`, `CompleteHeal`, `StartRevive`, `CancelRevive`, `CompleteRevive`, `IssueAuthorizationCode`, `ExchangeAuthorizationCode`, `GetGuildFacilityUpgradeCost`, `UpgradeGuildFacility`, `SearchGuilds`, `SearchPlayers`, `ListGuildJoinApplications`, `ListGuildInvitations`, `GetGuildDetail`, `UpdateGuildBattleStartTimes`, `GetMyGuildBattle`, `GetGuildBattleResult`, `GetArenaParty`, `GetGuildBattleParty`, `ListMyGuildBattleReplays`, `GetMyGuildBattleReplay`, `GetInitialGuildStatus`, `GetPlayerProfile`, `SendFriendRequest`, `ListNotifications`, `RespondFriendRequest`, `ListFriends`, `RemoveFriend`
