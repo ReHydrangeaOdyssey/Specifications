@@ -18,7 +18,8 @@ game-core/src/
 ├── formation/
 ├── follower/
 ├── party_rank/
-└── pseudorandom/
+├── pseudorandom/
+└── guild_battle/（騎士団戦の純粋計算のみ）
 ```
 
 ## 論理クラス図
@@ -91,6 +92,17 @@ HTTP Context、Database Connection、System Clock取得、Kubernetes情報は渡
 `BuffDebuffEffectState`はSkill / Ability由来の攻撃・防御補正だけを保持します。FormationやTactics補正をこの状態へ混在させません。
 
 `StatusAbnormalityState[]`は状態異常ごとの経過ターンと毒周期を保持します。
+
+## 詳細プログラミング設計
+
+- `deterministic_contract.md`：純粋計算層の入出力、Commit境界、Error、AI実装と単体テスト。
+- `formation_stats.md`：Formation、Follower、PartyRank、編成時Status。
+- `damage_and_targets.md`：Arena / GuildBattleの`f32` Damage、対象選定、補正順序。
+- `effects_and_status.md`：Skill / Abilityの条件・発動回数、Buff / Debuff、状態異常。
+- `guild_battle_calculations.md`：GuildBattleの出撃・CB・Score・Item等の純粋計算境界。
+- 既存の`battle_runtime.md`、`pseudorandom.md`、`tactics_runtime.md`を各実行順とPRNGの詳細正本として引き続き用いる。
+
+各ModuleはI/Oを持たず、暗黙の時刻・乱数・プロセス例外を使用しない。外部入力の不備は型付きErrorで返し、失敗した計算から部分状態・PRNG変更を正本に反映しない。ClientとGameServerが同じ実装をリンクし、すべてのModuleに単体テストを持たせる。全体規約は`../implementation_rules.md`を参照する。
 
 ## I/O禁止境界
 

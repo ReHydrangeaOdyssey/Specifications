@@ -21,7 +21,8 @@ workspace/
 │   │       ├── formation/
 │   │       ├── follower/
 │   │       ├── party_rank/
-│   │       └── pseudorandom/
+│   │       ├── pseudorandom/
+│   │       └── guild_battle/
 │   ├── server-common/
 │   └── auth-common/
 │
@@ -95,6 +96,18 @@ workspace/
 - GameServerの`guild_battle`からReplay/Eventを生成しても、Serialize・ファイルI/O・DB送信は`replay` Worker側へ渡します。
 - Coordinatorの`matching`と`assignment`を分離し、GameServer容量選択と対戦ペア生成を混在させません。
 - `public_api.proto`と`guild_battle_replay.proto`は各対象のwire schemaの正本とします。`game_types.proto`と`master_data.proto`は, `design/shared/types.md`と`design/game/master_data.md`にfield numberが明記された共通型と加工済みMasterDataの定義を実装したものです。これら4ファイルの設計上の保存先は`design/system/`とし, 開発Workspaceでは`proto/`に対応して配置します。Private APIを含むComponent間通信PayloadにもProtocol Buffersを使用します。
+
+## 共通ゲーム計算の実装単位
+
+`game-core`の各フォルダは`game_core.md`と以下の詳細設計を参照する。実際のRustファイル名を過度に固定せず、入出力・Errorとテストを責務単位で分離する。
+
+- `game/deterministic_contract.md`
+- `game/formation_stats.md`
+- `game/damage_and_targets.md`
+- `game/effects_and_status.md`
+- `game/guild_battle_calculations.md`
+
+公開するソースとMITライセンスの範囲は`../system/source_publication.md`、panic・stdout・非同期I/O・AI実装・単体テスト規約は`implementation_rules.md`を適用する。
 
 ## 制約
 

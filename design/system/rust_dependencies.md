@@ -1,5 +1,7 @@
 # コンポーネント別 Rust ライブラリ一覧
 
+すべての独自Rust実装（Client、Server、Coordinator、Bot、共通crate、Tool）をMIT Licenseで公開する。依存crateはそれぞれのライセンスを維持する。共通のpanic禁止・stdout制約・非同期I/O・単体テストは`../programming/implementation_rules.md`を正とする。
+
 | コンポーネント | 使用を推奨するcrate | 用途 | 備考 |
 |---|---|---|---|
 | **Client（Rust/WASM）** | `wasm-bindgen` | Rust/WASMとJavaScript/ブラウザの結合 | 選定済み |

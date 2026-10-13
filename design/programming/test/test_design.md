@@ -27,10 +27,15 @@ tests/
 
 ## 単体テスト
 
+**全独自crate / Applicationで単体テスト必須**とします。Game / Server / Client / Pipelineを例外なく対象にし、AI生成コードも実装変更と同時にテストを追加します。共通計算は`../game/deterministic_contract.md`と各詳細設計の入力・出力・Error契約に基づき、成功・境界・失敗・再現性を検証します。API/DB/Browser Adapterの単体テストはStubで非同期I/O失敗、Cancellation、Timeout、Error変換、非同期Workerの容量超過を確認します。デバッグ以外のstdoutへの直接出力と、実行経路のpanic/unwrap/expect等は静的検査でも拒否します（テスト内assertは許容）。
+
+CIでは`cargo fmt --check`、`cargo clippy --workspace --all-targets -- -D warnings`、`cargo test --workspace --all-targets`を基本とし、WASM Clientの対象端末/ブラウザ側テストを別途行います。第三者依存の必要な通知、MIT `LICENSE`とSecret非混入も公開前に確認します。
+
 外部I/Oを伴わない処理を対象にします。
 
 ### 数値・戦闘
 
+- 入力Error時の正本状態/PRNG非変更と、GameServer・Clientでの同一結果検証
 - Damage計算
 - Skill Damage
 - HP / BP / TP Clamp

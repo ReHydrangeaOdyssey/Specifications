@@ -10,10 +10,16 @@
 |---|---|---|
 | `architecture.md` | Component責務、正本、Data / Control Path | `design/server/api.md`, `design/system/network.md`, 各Server設計 |
 | `directory_structure.md` | Rust Workspace上の責務分割 | `design/system/rust_dependencies.md`, 各Component責務 |
+| `../system/source_publication.md` | 全独自ソース公開、MIT License、秘密と第三者素材の分離 | 全Componentの公開方針 |
 | `implementation_rules.md` | 型変換、PRNG、Replay、Operation ID等の横断規則 | `design/shared/types.md`, `design/system/log.md`, `design/server/data_base.md` |
 | `shared/shared_crates.md` | `game-core`, `protocol`, `common-types`, `server-common`, `auth-common` | `design/system/rust_dependencies.md` |
 | `shared/types.md` | Wire / logical / DB型の境界 | `design/shared/types.md`, `design/shared/common_data_struct.md` |
 | `shared/error_model.md` | Public Errorと内部Errorの境界 | `design/server/api_payload.md`, `design/server/public_api_responsibility.md` |
+| `game/deterministic_contract.md` | 共通計算の入出力、純粋性、失敗時のCommit、単体テスト | `design/game/battle.md`, `design/game/pseudorandom.md`, `specification/game/` |
+| `game/formation_stats.md` | Formation、Follower、PartyRankの純粋計算 | `specification/game/formation.md`, `specification/game/follower.md`, `specification/game/party_rank.md` |
+| `game/damage_and_targets.md` | Damage式、Mode別補正、攻撃対象順 | `specification/game/battle.md`, `specification/game/character.md` |
+| `game/effects_and_status.md` | Skill、Ability、状態異常・乱数順 | `specification/game/skill.md`, `specification/game/ability.md`, `specification/game/status_abnormality.md` |
+| `game/guild_battle_calculations.md` | GuildBattleの数値計算とApplication側確定境界の分離 | `specification/game/guild_battle.md`, `specification/game/tactics.md` |
 | `game/game_core.md` | Pure game logicの責務 | `design/game/battle.md`, `design/game/pseudorandom.md`, `specification/game/skill.md`, `specification/game/ability.md`, `specification/game/tactics.md` |
 | `game/battle_runtime.md` | Character / Skill / Ability / Status runtime | `design/game/battle.md`, `design/shared/common_data_struct.md` |
 | `game/pseudorandom.md` | PRNG実装・Seed・消費順 | `design/game/pseudorandom.md`, `design/test/test_policy.md` |

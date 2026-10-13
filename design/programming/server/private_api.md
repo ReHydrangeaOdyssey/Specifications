@@ -1,5 +1,8 @@
 # Private API Serverプログラミング設計
 
+本Componentの独自ソースコードはMIT Licenseで公開する。panic等を処理経路に使用せず、デバッグ以外の標準出力を禁止し、I/Oを原則非同期とする。疎結合・AI実装・単体テストの共通規約は`../implementation_rules.md`を適用する。
+
+
 ## 概要
 
 Private API ServerはAccount / Session / GuildのDomain処理、GuildBattle永続Lifecycle、Database Transaction、永続データ取得・保存の正本Applicationです。Application ComponentからPostgreSQLへ直接接続する入口をここへ集中させます。

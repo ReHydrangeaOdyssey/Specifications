@@ -18,6 +18,8 @@
 8. GameServerの騎士団戦処理スレッドから、Database、ファイル、Telemetryの同期I/Oを分離します。
 9. ReplayはSystem Logと別経路とし、成立した操作の順序を保持します。
 10. 現仕様が未定義の事項は`undecided.md`で明示し、実装側で挙動を決めません。
+11. すべての独自プログラムのソースコードを公開し、MIT Licenseを適用します。詳細は`design/system/source_publication.md`を正とします。
+12. 全Componentでpanicを意図的に使用せず、デバッグ以外のstdout出力を禁止し、I/Oを原則非同期にします。AIによる実装を前提として小さな疎結合Module・単体テスト必須を`implementation_rules.md`に定義します。
 
 ## 文書構成
 
@@ -33,6 +35,11 @@ design/programming/
 │   └── web_delivery.md
 ├── game/
 │   ├── game_core.md
+│   ├── deterministic_contract.md
+│   ├── formation_stats.md
+│   ├── damage_and_targets.md
+│   ├── effects_and_status.md
+│   ├── guild_battle_calculations.md
 │   ├── battle_runtime.md
 │   ├── pseudorandom.md
 │   ├── tactics_runtime.md
@@ -101,5 +108,6 @@ flowchart LR
 - `design/system/log.md`
 - `design/system/network.md`
 - `design/system/rust_dependencies.md`
+- `design/system/source_publication.md`
 - `design/test/test_policy.md`
 - `specification/game/`配下

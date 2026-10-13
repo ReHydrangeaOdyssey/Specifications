@@ -32,7 +32,7 @@ flowchart TD
     AC --> CT
 ```
 
-`game-core`は原則`std`だけへ依存するという既存方針を維持します。
+`game-core`は原則`std`だけへ依存するという既存方針を維持します。共通規約は`../implementation_rules.md`、純粋計算の入出力と疎結合境界は`../game/deterministic_contract.md`を正とし、各crateに単体テストを必須とします。共有crateも独自コードとしてMIT Licenseで公開します。
 
 ## 外部crate
 

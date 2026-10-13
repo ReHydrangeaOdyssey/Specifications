@@ -1,5 +1,8 @@
 # Public API Serverプログラミング設計
 
+本Componentの独自ソースコードはMIT Licenseで公開する。panic等を処理経路に使用せず、デバッグ以外の標準出力を禁止し、I/Oを原則非同期とする。疎結合・AI実装・単体テストの共通規約は`../implementation_rules.md`を適用する。
+
+
 ## 概要
 
 Public API ServerはstatelessなEdge Adapterとして実装し、Domain状態・Database transaction・戦闘状態を所有しません。

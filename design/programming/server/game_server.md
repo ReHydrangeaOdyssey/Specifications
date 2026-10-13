@@ -1,5 +1,8 @@
 # GameServerプログラミング設計
 
+本Componentの独自ソースコードはMIT Licenseで公開する。panic等を処理経路に使用せず、デバッグ以外の標準出力を禁止し、I/Oを原則非同期とする。疎結合・AI実装・単体テストの共通規約は`../implementation_rules.md`を適用する。
+
+
 ## 概要
 
 GameServerはArenaとGuildBattleのゲーム計算結果の正本です。Arena処理、GuildBattle所有状態、専用処理Thread、Replay / Log / Recoveryの非同期Worker、Private API Clientを明確に分離します。

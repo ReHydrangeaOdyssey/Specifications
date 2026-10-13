@@ -1,5 +1,8 @@
 # 騎士団戦コーディネーター
 
+独自実装のソースコードはClient・Serverを含めすべて公開し、MIT Licenseで提供する。公開範囲・秘密情報・第三者素材の扱いは[ソースコードの公開とライセンス](../system/source_publication.md)を正とする。
+
+
 * `GuildBattleCoordinator`は騎士団戦の生成, マッチング, GameServer割当および開戦前Preload開始指示を担当する.
 * `GuildBattleCoordinator`は騎士団戦のControl Path専用Componentとし, Clientからの通常ゲーム要求の中継経路には配置しない.
 * 本番Kubernetes環境では`replicas=1`の専用Workloadとして稼働させる.

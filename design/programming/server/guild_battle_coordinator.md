@@ -1,5 +1,8 @@
 # GuildBattleCoordinatorプログラミング設計
 
+本Componentの独自ソースコードはMIT Licenseで公開する。panic等を処理経路に使用せず、デバッグ以外の標準出力を禁止し、I/Oを原則非同期とする。疎結合・AI実装・単体テストの共通規約は`../implementation_rules.md`を適用する。
+
+
 ## 概要
 
 GuildBattleCoordinatorはGuildBattleのControl Pathだけを担当します。マッチング生成、GameServer検出、容量比較、割当、Preload開始指示、未割当`scheduled`のReconcile、Scale out開始判断を持ち、戦闘Runtime・RequestSequence・Replayは持ちません。

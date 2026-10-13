@@ -1,5 +1,8 @@
 # Public API仕様
 
+独自実装のソースコードはClient・Serverを含めすべて公開し、MIT Licenseで提供する。公開範囲・秘密情報・第三者素材の扱いは[ソースコードの公開とライセンス](../system/source_publication.md)を正とする。
+
+
 Methodごとの通信Pathは`POST /v1/public/{MethodName}`とし、Transportは`design/system/api_transport.md`を正とする。
 
 API全体の分類は「[API仕様](api.md)」を参照する.

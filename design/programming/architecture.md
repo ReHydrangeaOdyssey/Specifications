@@ -6,6 +6,8 @@
 
 責務分離の基準は「どのComponentが状態の正本を所有するか」です。
 
+Client、すべてのServer、Coordinator、Bot、共有crateと開発用Toolの**独自ソースコードをすべて公開しMIT Licenseで提供する**。稼働中のAPI、秘密情報、DB、第三者素材の公開を意味しない。`../system/source_publication.md`に従う。全Componentに`implementation_rules.md`のエラー処理・非同期I/O・単体テスト規約を適用する。
+
 ## 正本の配置
 
 | 対象 | 正本 |
@@ -101,6 +103,9 @@ classDiagram
         <<shared crate>>
         Battle
         PRNG
+        FormationAndStats
+        SkillAbilityStatus
+        GuildBattleCalculation
     }
     class PostgreSQL {
         <<database>>

@@ -37,7 +37,7 @@
 
 数式, 状態遷移, Enum分岐, Validation等の外部I/Oを必要としない処理を対象とする.
 
-以下は原則として単体テストを持つ.
+以下は必ず単体テストを持つ. さらに本一覧にないComponent / Moduleも、各独自crate / Applicationで正常・境界・異常系の単体テストを実装する. 実行時のpanic/unwrap/expect等・デバッグ以外のstdoutを禁止し、原則非同期のI/OをStubで失敗注入して検証する. AI生成コードも同じ基準で検査する.
 
 * ダメージ計算.
 * Skillダメージ計算.
