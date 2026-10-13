@@ -99,11 +99,19 @@ IEEE-754 32bit浮動小数点として、仕様に記載された演算順を変
 - `createImageBitmap()`によるPNGのデコードとWebGL 2へのテクスチャ転送, 描画, `PointerEvent`によるタップ/マウス操作を確認します。画面比率・回転・Safe Area・入力座標は`design/client/web_application.md`に従って検証します。
 - タイトルのクレジットからライセンス全文をスクロール閲覧し, 戻るボタンでタイトルへ復帰できることを確認します。Clientに同梱する`cargo-about`生成物とRust以外の必要表記も含め, Server通信なしに表示できることを検証します。
 
+### Cloudflare Pages・オフライン・更新・アプリ表示
+
+- Cloudflare Pagesへ配布するHTML/JavaScript/WASMの各ファイルを非圧縮bytesで個別検査し、各ファイル`25,000,000` byteは合格、`25,000,001` byteは不合格とする。複数ファイルの合計が25MBを超えても合格とし、分割JS、認証Callback HTML、Service Worker JSにも同じ単一ファイル制限を適用する。Cloudflare Pages自体の25MiB上限も検証し、PNG/HCA等の後続取得素材はプログラムのサイズ判定に含めない。
+- 初回オンライン起動でOPFS `./game/`へプログラム一式が保存され、SW Cache Storageに同一Versionの起動静的ファイルが存在することを確認する。ネットワークを完全に遮断した状態でPWAを終了・再起動してHTML/JS/WASMとクレジット画面を表示できること、API必須機能をオフラインで成功扱いしないことを確認する。SW未制御/ストレージ消去時はオフライン起動不能を明示する。
+- 更新時は`./game/`配下の旧ファイルが全量削除され新Versionの一式に置換される一方、`./assets/`・`./settings/`は保持されることを検証する。容量不足・更新途中の通信断・ブラウザ強制終了時には旧Versionで起動し、SWのActive CacheとOPFS `./game/`が混在Versionにならないことを確認する。更新中はキャッシュクリア・別更新操作を禁止する。
+- Cloudflare Pagesの`client_origin`と認証Callback `<client_origin>/auth/callback/`・APIの許可Originが一致することを確認する。
+- PWAで`display: fullscreen`および`orientation: landscape`を希望値として設定し、許可環境で全画面・横画面固定が適用されることを確認する。固定API非対応・拒否・通常ブラウザタブでの全画面拒否時でも既存の縦画面・可変レイアウトで動作し、画面外へのUI欠落がないことを確認する。
+
 ### ブラウザ実装・アセット・音声の検証
 
 - iOS 16.3 / Safari 16.3, Android 8.0 / Chrome 120を下限の組合せとして扱い, 当該組合せでPWAのインストール・ホーム画面起動・ブラウザAPI利用・Clientの実行を確認します。
 - `wasm32-unknown-unknown`を対象に依存を解決し, `Cargo.lock`固定後に`cargo tree --target wasm32-unknown-unknown`および`cargo build --target wasm32-unknown-unknown --release --locked`を確認します。`wasm-bindgen`生成ES ModuleとWASMのブラウザ起動を検証します。
-- iPhone Safari/PWAおよびAndroid Chrome/PWAで, PNG/HCAのファイル・フォルダ取り込み, 辞書取得（Login完了時）, OPFSへの保存, 上書きと削除, `game_info.json`のバージョン差分移行を検証します。ブラウザの容量不足・保存失敗も別条件として検証します。
+- iPhone Safari/PWAおよびAndroid Chrome/PWAで, PNG/HCAのファイル・フォルダ取り込み, 辞書取得（Login完了時）, OPFSへの保存, 上書きと削除, `game_info.json`の現在Version形式を検証します。ブラウザの容量不足・保存失敗も別条件として検証します。
 - `createImageBitmap()`からWebGL 2テクスチャへの転送と描画を確認し, 不要な画像の`ImageBitmap.close()`・`deleteTexture()`による資源解放を確認します。
 - キャラクターのスプライト構成、ボーンと表示データの対応、モーション内のボーンタイムラインとフレームの順序、表示Index・座標・補間・色・ブレンド情報の保持、およびイベントに応じたアニメーション描画を確認します。データ型とフィールド番号は`design/system/sprite_animation.proto`に従います.
 - アトラスデータのフレーム識別名、切り出し矩形、オフセット、元画像サイズ、テクスチャ参照値の読み取りと保持を検証します。各データ型・フィールド番号は`design/system/plist.proto`に従います。
@@ -112,7 +120,7 @@ IEEE-754 32bit浮動小数点として、仕様に記載された演算順を変
 - 短いSE・ボイスの`AudioBuffer`再利用, 長いBGM・ボイスのPCM逐次供給（`AudioWorklet` / `MessagePort`）, 長尺音声を全体PCM展開せず再生することを確認します。
 - 22,050Hzの対象HCA, `./assets/sound/bgm/`（ディレクトリ境界と大文字小文字を区別し、配下のサブディレクトリを含む）HCAの全体ループと非BGMフォルダHCAの非ループ, 左右2チャンネルのステレオ再生, SE同時最大5, 欠音・遅延を検証します。長尺音声のPCM先読み初期500ms/残量250msを用い, `AudioWorklet.process()`内でHCAデコードや大容量確保を行わないことを検証します。
 - GPUテクスチャ, デコード済みPCM, WASMヒープ, ブラウザ一時メモリを分けて観測します。iOS端末での長時間騎士団戦における強制再読込の有無を確認します。
-- CIで`cargo build --release --locked --target wasm32-unknown-unknown`を実行して非圧縮WASMサイズを確認し, 50MB超は最適化の検討契機, 500MB超はサイズ要件不合格として扱います。Client依存ライセンスの生成・同梱・表示も検証します。
+- CIで`cargo build --release --locked --target wasm32-unknown-unknown`を実行し、配布HTML・JavaScript（Service Worker/分割JSを含む）・WASMの各ファイルの非圧縮サイズが25,000,000 byte以下であることと、Cloudflare Pagesの単一ファイル25MiB制限を検証します。合計サイズは制限しません。Client依存ライセンスの生成・同梱・表示も検証します。
 
 #### ローカルファイルと通信失敗境界の追加テスト
 
@@ -461,7 +469,7 @@ Recovery fileからの再送でも同じテストを行います。
 - Create SnapshotのItem数量を開戦時DBと照合し不一致なら開始拒否。対戦中は外部の`UpdatePlayerItem`を拒否し、Item使用の連続要求をOwnerが直列処理することを検証する。Clientから在庫数やBPを改変してもGameServer結果が変わらないこと。
 - 成功したUseItemのWAL耐久後の応答と、非同期DBのReplay・在庫減算の同一Transaction／冪等なRetryを検証する。WAL失敗なら状態・Sequenceが進まず、同一Sequenceの重複は二重使用しない。DB反映不能時に最終結果を確定しないこと。
 - 有効辞書・代替画像のどちらかが欠ければゲームプレイへ入れず、タイトルの取り込み・削除等は継続できること。未取得状態の空辞書を有効辞書に偽装できないこと。
-- タイトル画面の全ゲームプレイ導線（未ログインホーム、ログイン成功後の遷移を含む）が共通アセット検査を通ること。Version移行・辞書差分退避・構成素材入替・ロールバック中はローディングで全操作を無効にし、処理終了後だけ再開すること。未ログインの取込み保留はできても有効辞書なしでRuntimeに投入しないこと。
+- タイトル画面の全ゲームプレイ導線（未ログインホーム、ログイン成功後の遷移を含む）が共通アセット検査を通ること。辞書差分退避・構成素材入替・Clientプログラム更新・ロールバック中はローディングで全操作を無効にし、処理終了後だけ再開すること。未ログインの取込み保留はできても有効辞書なしでRuntimeに投入しないこと。
 - 構成素材の取込みは永続Manifestを要求せず、辞書に許可された既存ファイルの退避・入替・起動後復元を確認する。
 
 ### 辞書更新・Item在庫の回帰検証

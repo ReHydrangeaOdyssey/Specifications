@@ -1417,7 +1417,7 @@ Private APIは再抽選を行わない. `GuildBattleID[]`と`Battles[]`のID集�
 
 通信型・field numberは`design/system/public_api.proto`および`design/system/private_api.proto`を正本とする。`GetPlayerProfile`は対象Playerの名前、騎士団戦参加回数（`Count`）、勝利数（`Count`）、累計騎士団スコア（`Score` = `u64`）を返す。`ListNotifications`は本人が受け取った未処理フレンド申請の送信者ID・名前を含み、`RespondFriendRequest`は送信者PlayerIDと承認/拒否を指定する。`ListFriends`は本人と相互フレンドになったPlayerIDと表示名の組を返す。`SendFriendRequestResponse.already_requested`は同方向の申請済み状態、`RespondFriendRequestResponse.already_friends`は逆方向申請への応答時にすでにフレンドであった状態を表す。`RemoveFriend`は本人と指定Playerの成立済みフレンド関係を解除する。
 
-## 追加認可用Payloadの互換性
+## 追加認可用Payload
 
 `CreateAccountRequest`と`LoginRequest`の`discord_authorization_token`は`AdditionalAuthorizationProvider=DISCORD`のときだけ使用し、非Discord Adapterへ渡すTokenは`additional_authorization_token`とする。`NONE`では追加認可Tokenの省略を許可する。Private APIの`additional_authorization_provider`と`additional_authorization_subject`はPublic APIが認可Adapterで検証済みの結果を渡す内部値であり、Clientの自己申告値は使用しない。
 

@@ -312,8 +312,7 @@ Character / Skill / Ability / TacticsはProtocol BuffersとDatabaseの双方へ�
 GuildBattle Replayでは`Version`がゲームロジックとMasterDataの組み合わせを一意に識別する.
 MasterData変更を実際のゲーム挙動へ反映する場合は, 対応するVersionを更新する.
 
-本プロジェクトでは複数世代間のMasterData互換変換を必須としない.
-Replayを再生する場合はReplayに記録されたVersionに対応するゲームロジックとMasterDataを使用する. 現段階ではPlayer向けリプレイ閲覧を公開しない。将来公開する場合は現行ゲームVersionと一致するReplayだけを対象とし, 旧VersionのReplayはDatabaseへ保持してもPlayerへ再生を提供しない. Playerごとに閲覧できるReplay履歴の上限は過去50件とする.
+Replayを再生する場合は記録されたVersionと実行中のゲームロジック・MasterDataのVersionが完全一致することを要求する。現段階ではPlayer向けリプレイ閲覧を公開しない。将来公開する場合は本人が参加した対戦の最新50件を対象とし、Versionが一致しないReplayは再生対象にしない。
 
 ## Version更新時の停止境界
 

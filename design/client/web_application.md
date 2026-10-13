@@ -14,7 +14,7 @@ ClientはRust/WebAssemblyをブラウザ上で実行する静的Webアプリケ�
 - UIはSafe Areaを考慮した中央の背景領域内へ収め、表示領域の変更時に位置・倍率・入力判定領域を再計算する。
 - Safe Area（画面の切り欠き、ホームインジケータなど）を考慮し、重要な操作部品をその内側へ配置する。ページのViewportは`width=device-width, initial-scale=1, viewport-fit=cover`を採用し、Safe Areaのinset値を参照する。ユーザーによるブラウザの拡大操作を一律禁止しない。
 - 端末回転、ブラウザUIの表示・非表示、ウィンドウリサイズ、PWA表示領域の変化を検知して、Canvasサイズ・ViewPortと入力座標変換を更新する。
-- 起動直後に横画面設定を試みる。画面方向の固定APIが利用できない場合、または固定に失敗した場合も回転案内は表示しない。iOS Safari等ではWebアプリケーションによる端末の画面方向変更が保証されない。
+- アプリ（インストール済みPWA）起動時は全画面表示を使用し、PWA Manifestを`display: fullscreen`・`orientation: landscape`とする。許可される環境では画面方向固定APIにより横画面固定を試みる。通常のブラウザタブでの全画面化はユーザー操作を必要とする場合にのみ要求し、拒否・非対応時は既存の表示領域へ収める。方向固定に失敗した端末でも起動を拒否せず、縦画面の既定レイアウトを適用する。
 - 表示領域が縦長の場合は、16:9の基準ゲーム領域（1280×720）全体が表示領域に収まる等倍率で縮小し、下端中央に配置する。縮小後の領域より上側に生じる余白のみを別の背景画像で埋める。基準ゲーム領域の上下左右は切り取らず、UIと入力判定領域は縮小後のゲーム領域内に収める。上部の補助背景には操作部品を配置しない。
 - 対応する表示領域の高さは最低320px（CSSピクセル）とする。16:9・4:3以外の横画面も同じ背景の切り取り・左右追加・中央UI配置規則に従う。縦画面では上記の縮小・上部補助背景規則を使用する。
 
@@ -25,6 +25,10 @@ ClientはRust/WebAssemblyをブラウザ上で実行する静的Webアプリケ�
 - OS標準のファイル選択、初期ロード・エラー表示, クレジット画面のスクロール可能なライセンス本文表示には必要最小限のHTML要素を利用できる。既定の「追加UI Frameworkを採用しない」方針は維持する。
 - WASM・WebGL 2・OPFS等の初期化に失敗した場合は、白画面で放置せず、失敗した機能と再読込手段を表示する。対応しない機能を利用可能と表示しない。
 
+## オフライン配布の保存
+
+- 初回オンライン取得したプログラム一式をOPFS `./game/`に保存する。オフラインでのページ再起動にはService WorkerとVersion別Cache Storageによる静的URL応答も必要とする。更新時は検証済みの新Versionへ`./game/`を全量置換し、旧Versionへ戻せる状態を保ってからActive Versionを切り替える。アセット、端末設定およびユーザー用cacheは更新で削除しない。詳細は`design/programming/client/web_delivery.md`とする。
+
 ## 音声・保存に関するブラウザ制約
 
 - Web Audioの再生開始と停止中の`AudioContext`の再開は、ブラウザの自動再生制約に従いユーザー操作を契機に実施する。既定のHCA→PCM→Web Audio構成は維持する。
@@ -34,22 +38,22 @@ ClientはRust/WebAssemblyをブラウザ上で実行する静的Webアプリケ�
 ## 配布
 
 - 公開対象はHTML、ES Module JavaScript、WASM、CSS、Manifestおよび試験に必要な静的アセットとし、GameServer・API Serverの処理や秘密鍵を配布しない。
-- 静的Clientの公開URLは`https://rehydrangeaodyssey.github.io/`とし, 配布リポジトリは`https://github.com/ReHydrangeaOdyssey/ReHydrangeaOdyssey.github.io`とする。独自ドメインは採用しない。GitHub ActionsでReleaseビルド・検証・HTTPS静的配布を実行する。静的資源は相対Pathで参照する。GameServerの処理は公開静的配布物に含めず, ClientからGameServerへ直接接続させない。
+- 静的ClientはCloudflare PagesからHTTPS配布する。公開Originは配備時の`client_origin`とし、未確定の実ホスト名を仮定しない。HTML・JavaScript・WASMは各ファイルの非圧縮サイズを25,000,000 byte以下とし、合計サイズには上限を設けない。Cloudflare Pagesの単一ファイル制限も守る。PNG/HCA等のゲーム素材は起動用プログラムと別に後から取得・端末に取り込む。静的参照は配布ルート相対Pathを使用し、GameServer処理を静的配布物へ含めない。詳細は`design/programming/client/web_delivery.md`とする。
 - JavaScriptのES Moduleと`wasm-bindgen --target web`による生成物をブラウザから読み込む。WASMロード処理の成功後に描画初期化する。
-- PWA用Manifestは配布できる構成とする。`start_url`と`scope`は公開ルート内の相対URLで指定する。
+- PWA用Manifestは`display: fullscreen`・`orientation: landscape`を指定し、`start_url`と`scope`はCloudflare Pagesの配布ルート内の相対URLとする。通常タブ上の全画面化・横画面固定はブラウザ許可条件に従う。
 - PWAインストールの操作案内はiOS Safariでは共有メニューの「ホーム画面に追加」、Android Chromeではメニューの「アプリをインストール」または「ホーム画面に追加」とする。インストールおよびホーム画面からの起動は対象ブラウザで動作することを必要とする。アプリ名・アイコン素材は正式名称の確定後に指定する。
 - 公開する試験データは再配布可能なものだけを含め、Token、個人データ、秘密鍵を同梱しない。
 
 ## 検証条件
 
 - 16:9と4:3、16:9より横長の比率で、背景の左右切り取り・追加背景・中央UI配置とタップ座標の整合を確認する。縦画面ではゲーム領域の全体縮小・下端中央配置・上部補助背景・入力判定を確認する。高さ320px以上での表示と画面回転による再配置、Safe Areaへの侵入がないことを確認する。横画面への切替要求結果を実機で記録する。
-- 対象ブラウザの最小バージョンで動作確認を行う。機能を追加する場合は、追加した機能ごとに試験を増やす。
+- 対象ブラウザの最小バージョンで動作確認を行う。PWA起動時の全画面表示・横画面固定要求と拒否時のフォールバック、通信遮断後のオフライン再起動、Client更新時の全量置換・中断復旧も実機検証する。機能を追加する場合は、追加した機能ごとに試験を増やす。
 - WASM・WebGL 2・OPFS・Web Audioの対応有無と実際の動作は対象機能ごとに端末で確認し、数値性能要件を測定なしに合格としない。
 
 ## 制約
 
 - Clientのソースリポジトリは`https://github.com/ReHydrangeaOdyssey/Client.git`、純粋なゲームロジックは`https://github.com/ReHydrangeaOdyssey/GameLogic.git`、Serverは`https://github.com/ReHydrangeaOdyssey/Server.git`とする。
-- 静的ClientのOriginは`https://rehydrangeaodyssey.github.io`とする。Public APIのHTTPS Originは配布設定で指定する。認証画面Pathは`GET /auth/authorize`、認証Callbackは`https://rehydrangeaodyssey.github.io/auth/callback/`とする（`design/system/api_transport.md`）。静的配布OriginとAPI Originが異なる場合の認証は`design/system/network.md`の第一者Cookie・認可コード方式に従う。
+- 静的ClientのOriginはCloudflare Pagesの実配備値`client_origin`とし、Public APIのHTTPS Originは`public_api_origin`で指定する。認証画面Pathは`GET /auth/authorize`、認証Callbackは`<client_origin>/auth/callback/`とする（`design/system/api_transport.md`）。異なるOrigin間の認証は`design/system/network.md`の第一者Cookie・認可コード方式に従う。
 - 最低対応OS・ブラウザの組合せにおけるゲーム動作, 実測による描画解像度上限, 音声・保存容量の実機検証結果は別途確定する。
 
 ## 参照資料

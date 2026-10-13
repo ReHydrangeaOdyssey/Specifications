@@ -32,15 +32,15 @@ Accountの`LoginID`・`Password`による本人認証と、運営者が構成時
 
 | 値 | 追加認可の扱い |
 |---|---|
-| `DISCORD` | 従来のDiscord Role追加認可Tokenの署名、Claim、期限、Binding、再利用防止を実施する。現在の運用既定値。 |
+| `DISCORD` | Discord Role追加認可Tokenの署名、Claim、期限、Binding、再利用防止を実施する。現在の運用既定値。 |
 | `POCKETBASE` | PocketBase側で認証済みであることをServerが検証する追加認可Adapterを使用する。Clientから受け取るユーザーID自体を検証済み主体とはみなさない。 |
 | `OTHER` | 他の認証サービス用の拡張予約値。検証Adapter未実装では有効化を拒否する。 |
 | `NONE` | 追加認可を要求しない。`LoginID`・`Password`認証、AccessToken、RefreshSession、Rate Limitは維持する。公開環境では非推奨。 |
 
-- `DISCORD`は従来の`DiscordAuthorizationRequired=true`、`NONE`は`false`に相当する。`DiscordAuthorizationRequired`との二重設定は許可せず、移行後は`AdditionalAuthorizationProvider`を正本とする。`DiscordNotificationEnabled`はこの設定から独立して有効化できる。
-- `DISCORD`では既存の`discord_authorization_token`を受け付ける。`POCKETBASE`などの非Discord方式ではPublic Requestの`additional_authorization_token`からAdapterが検証する。`NONE`では追加Tokenを必須としない。**選択中の方式の検証済み結果がない場合はAccount作成・Loginを拒否する**（`NONE`を除く）。
+- 追加認可方式は`AdditionalAuthorizationProvider`で指定する。`DiscordNotificationEnabled`はこの設定から独立して有効化できる。
+- `DISCORD`では`discord_authorization_token`を受け付ける。`POCKETBASE`などの非Discord方式ではPublic Requestの`additional_authorization_token`からAdapterが検証する。`NONE`では追加Tokenを必須としない。**選択中の方式の検証済み結果がない場合はAccount作成・Loginを拒否する**（`NONE`を除く）。
 - Adapterが正本のサービスに対して署名・有効期限・発行者・Audience・必要な権限を検証して確定した`provider`と不変の`subject`だけをPrivate APIへ渡す。検証の具体的方式は対象サービスのAdapter契約による。`POCKETBASE`について具体的な資格情報の取得・検証を提供する実装がない場合、構成の起動時に失敗させ、無検証で通過させない。
-- `ACCOUNT`に`additional_authorization_provider`と`additional_authorization_subject`を持ち、追加認可有効時は登録時の組をLogin時に照合する。既存Discord Accountの`discord_user_id`は移行時に`DISCORD`のsubjectへ対応付ける。`NONE`は追加認可のBindingを要求しない。異なる方式への既存Account移行を自動で行わない。
+- `ACCOUNT`に`additional_authorization_provider`と`additional_authorization_subject`を持ち、追加認可有効時は登録時の組をLogin時に照合する。`NONE`は追加認可のBindingを要求しない。異なるProviderの`subject`を同一Accountの主体として扱わない。
 - `NONE`も認証不要な匿名アクセスを意味しない。認証なしの匿名ログインを許可する仕様は追加しない。
 
 ## Discord Bot設定
@@ -185,7 +185,7 @@ sequenceDiagram
 
 ### クロスサイト構成の画面境界
 
-本番のClientと異なる認証Originにおける`CreateAccount`・`Login`・`RefreshAccessToken`・`Logout`は認証Originのトップレベルページで実施する。以下の従来図中でClientが認証Requestを送る部分は、認証Originの第一者画面の処理を表す。静的Clientへ直接AccessTokenを返す経路は使用せず、ログイン後は`IssueAuthorizationCode`→`https://rehydrangeaodyssey.github.io/auth/callback/`→`ExchangeAuthorizationCode`の経路で渡す。
+本番のClientと異なる認証Originにおける`CreateAccount`・`Login`・`RefreshAccessToken`・`Logout`は認証Originのトップレベルページで実施する。以下の従来図中でClientが認証Requestを送る部分は、認証Originの第一者画面の処理を表す。静的Clientへ直接AccessTokenを返す経路は使用せず、ログイン後は`IssueAuthorizationCode`→`<client_origin>/auth/callback/`→`ExchangeAuthorizationCode`の経路で渡す。
 
 ## ログイン
 
@@ -328,4 +328,4 @@ CreateGuildへの応答が失われた場合、Clientは`GetInitialGuildStatus`�
 
 Public APIの`GetAdditionalAuthorizationConfig`は認証不要・読取専用で、現在の選択値、追加認可の要否、およびAdapterの利用可否だけを提供する。ログイン・新規登録の第一者認証画面はこの応答に従って必要な認可入力を案内する。Provider選択はServer設定だけで確定し、ClientからのProvider自己申告による切替は認めない。
 
-`ACCOUNT`の`additional_authorization_provider`に旧ProviderのBindingがあり、現在のServer設定が別Providerである場合は、自動的にAccountのBindingを更新しない。**そのAccountのログインは拒否**し、異なるProviderのSubjectを同一Accountとして扱わない。管理者による移行契約が別途追加されるまでは既存Bindingを保持する。
+Login時は`ACCOUNT.additional_authorization_provider`とServer設定のProviderが一致し、検証済みSubjectが登録時のBindingと一致する場合だけ成立する。ProviderまたはSubjectの不一致は拒否する。

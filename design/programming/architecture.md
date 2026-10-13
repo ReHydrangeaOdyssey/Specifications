@@ -34,9 +34,9 @@
 
 ## Clientのブラウザ処理境界
 
-Clientの実装環境はRust/WASMとし, ブラウザAPIへのアクセスには`wasm-bindgen` / `web-sys` / `js-sys` / `wasm-bindgen-futures`を使用します。画像/音声ファイルをOPFSから読み, WebGL 2およびWeb Audioへ渡します。サーバー正本の戦闘結果は従来どおり`game-core`による再現とGameServerの結果を区別します。
+Clientの実装環境はRust/WASMとし, ブラウザAPIへのアクセスには`wasm-bindgen` / `web-sys` / `js-sys` / `wasm-bindgen-futures`を使用します。画像/音声ファイルをOPFSから読み, WebGL 2およびWeb Audioへ渡します。サーバー正本の戦闘結果は`game-core`によるClient内の再現結果と区別します。
 
-ClientとPublic API Server間は`design/system/network.md`を正とし, HTTP/2 over TLS 1.3とProtocol Buffersを使用します。騎士団戦通知はHTTP/2 Response streamで行い, WebSocketは使用しません。認証CookieはPublic API認証Originの第一者ページだけから使用し, 別SiteのGitHub Pages静的ClientへのAccessToken受け渡しは一度限りの認可コード+PKCE S256とします。HTTP/2/TLS 1.3は実接続で検証します。
+ClientとPublic API Server間は`design/system/network.md`を正とし, HTTP/2 over TLS 1.3とProtocol Buffersを使用します。騎士団戦通知はHTTP/2 Response streamで行い, WebSocketは使用しません。認証CookieはPublic API認証Originの第一者ページだけから使用し, 別SiteのCloudflare Pages静的ClientへのAccessToken受け渡しは一度限りの認可コード+PKCE S256とします。HTTP/2/TLS 1.3は実接続で検証します。
 
 ## Data Path / Control Path
 

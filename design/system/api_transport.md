@@ -23,16 +23,16 @@ Control APIは`GetGameServerCapacity`と`StartGuildBattlePreload`のみをCoordi
 
 
 - Publicの正本は`design/system/public_api.proto`、PrivateおよびControlの正本は`design/system/private_api.proto`とする。固定長配列の個数、予約ID、enum許容値、文字列の長さ、数値の上下限は`design/server/api_payload.md`と`design/shared/types.md`を用いてDeserialize後に検証する。
-- 新規Messageで「未設定」と0等の既定値を区別する場合は`optional`/`oneof`を使用する。無効な論理値や不正固定長をDomainへ渡さずHTTP 400とする。未知フィールドは前方互換性のため読み飛ばす。
+- 新規Messageで「未設定」と0等の既定値を区別する場合は`optional`/`oneof`を使用する。無効な論理値や不正固定長をDomainへ渡さずHTTP 400とする。
 - ClientはService Identityや内部`AuthenticatedContext`を指定できない。認証済みCaller IdentityはPublic APIがTokenから確定し、内部mTLS呼出しへ付与する。
 
 ## Origin、CORS、Cookie
 
-- 静的Clientは`https://rehydrangeaodyssey.github.io`に固定する。Public API Originは静的Clientの配布設定`public_api_origin`にHTTPS Originとして定義する。GameServerにはClientから直接接続しない。
+- 静的ClientはCloudflare Pagesで配布し、配備時の`client_origin`（単一HTTPS Origin）に固定する。Public API Originは静的Clientの配布設定`public_api_origin`にHTTPS Originとして定義する。GameServerにはClientから直接接続しない。
 - Cross-Origin RPCと認可コード交換の`Access-Control-Allow-Origin`には静的Clientの厳密なOriginだけを返す。`Access-Control-Allow-Methods: POST, OPTIONS`、`Access-Control-Allow-Headers: Authorization, Content-Type`、`Vary: Origin`を使用する。Cross-OriginではCookieを送信しない（`credentials: omit`）。任意のOriginを許可しない。
 - Session Cookieが必要なCreateAccount/Login/RefreshAccessToken/Logout/IssueAuthorizationCodeはPublic API Originの第一者トップレベル認証画面から行う。`Secure; HttpOnly; SameSite=Strict; Path=/`、Domain属性なしの`__Host-RefreshToken`を維持し、CookieをCross-Siteで送信しない。Cookie付き状態変更RequestはOrigin完全一致を確認する。
 - 認証Originは`GET /auth/authorize`で認証ページを提供し、`Content-Security-Policy`（`frame-ancestors 'none'`）と`Referrer-Policy: no-referrer`を設定する。状態変更Requestでは`Origin`の完全一致とCSRF防御を必須とする。具体的には、同Originページで生成する32byteの`__Host-CsrfToken`（`Secure`, `SameSite=Strict`, `Path=/`, Domainなし）をCookieと`X-CSRF-Token` Headerの両方で送り、定数時間比較で照合する。認証OriginだけでCookieを設定・利用する。
-- 認証ページのリダイレクトURIとPKCE S256を検証し、未登録URIへリダイレクトしない。認可コードは60秒以内に失効し一度しか使用できない。Callback URIは`https://rehydrangeaodyssey.github.io/auth/callback/`に固定する。
+- 認証ページのリダイレクトURIとPKCE S256を検証し、未登録URIへリダイレクトしない。認可コードは60秒以内に失効し一度しか使用できない。Callback URIは`<client_origin>/auth/callback/`に固定する。
 
 ## 認証コードの手順
 

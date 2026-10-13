@@ -27,7 +27,7 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 - `UpdateGuildBattleStartTimesPrivate`は要求者が現在団長であることと昼夜の許容値を確認し、翌JST 0:00適用の保留設定を更新する。マッチング済み対戦は変更しない。
 - `SearchGuildsPrivate`および`SearchPlayersPrivate`は名前prefix照合で通常Guild/PlayerだけをID昇順・指定Limit以内で返す。`ListGuildJoinApplicationsPrivate`はAuthenticatedContextにより対象Guildの団長/副団長のみ受け付け、`ListGuildInvitationsPrivate`は招待された本人向けに未処理行だけを取得する。Public APIの認証済みCaller Identityを必須とする。
 - `GetMyArenaPartyPrivate`, `GetMyGuildBattlePartyPrivate`は呼出元本人のDB保存編成を返す。未登録の場合は`registered=false`とする。`GetMyGuildBattlePrivate`は所属Guildへの対戦割当をDBから取得し、`GetGuildBattleResultPrivate`は確定済み対戦結果を取得する。
-- `ListMyGuildBattleReplaysPrivate`は現段階でPlayer向けに公開しない。将来公開する場合、本人参加記録が確認できる現行Versionの対戦を開始時刻降順・ID降順で50件まで返す。`GetMyGuildBattleReplayPrivate`は同じアクセス条件を再検証し、当該対戦の`event_index`昇順に、1から連続することを検証してEnvelopeを返す。過去VersionのReplayをプレイヤーへ返さない。
+- `ListMyGuildBattleReplaysPrivate`は現段階でPlayer向けに公開しない。将来公開する場合、本人参加記録が確認できる現行Versionの対戦を開始時刻降順・ID降順で50件まで返す。`GetMyGuildBattleReplayPrivate`は同じアクセス条件を再検証し、当該対戦の`event_index`昇順に、1から連続することを検証してEnvelopeを返す。
 
 
 開始時刻変更の適用時刻は要求を受け付けたJST日付の翌日00:00とする。`GetGuildsForBattleMatching`は対象のJST日付に有効な昼夜時刻を使用し、適用前に生成済みの`GUILD_BATTLE`には遡って変更を加えない。

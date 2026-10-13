@@ -16,7 +16,7 @@ Account/Guild系の業務処理はPrivate API Server, Arena/騎士団戦の業�
 * `AdditionalAuthorizationProvider=DISCORD`の場合のDiscordAuthorizationToken署名・期限等のローカル検証.
 * `RefreshAccessToken`および`Logout`のOrigin検証.
 * RefreshTokenの`__Host-RefreshToken` HttpOnly Cookie入出力.
-* Login時のClientVersionとPublic API要求Versionの互換性判定.
+* Login時のClientVersionとPublic API要求Versionの完全一致判定.
 * `AuthenticatedContext`生成. Clientが送信した`AuthenticatedContext`は使用しない.
 * Public APIから内部APIへのRequest変換と中継.
 * `GuildBattleID -> GameServerInstanceID`解決およびEndpoint解決による所有GameServerへのルーティング.

@@ -164,7 +164,7 @@ Server側処理時間がSlow Request判定閾値を超えた要求はSampling Ra
 Public API ServerからGameServer, 必要な場合はPrivate API Serverまでの粗い処理単位をTrace対象とする.
 Trace Exportは騎士団戦処理スレッドから同期実行しない.
 
-現段階ではPlayer向けReplay一覧・再生は公開しない。将来公開する場合は現行Versionと一致する保存済み履歴だけに制限する。 旧VersionのReplayログはDatabaseから削除せず保持するが, Playerからは視聴不可とする. 各Playerへ提供する履歴は過去50件を上限とする.
+現段階ではPlayer向けReplay一覧・再生は公開しない。将来公開する場合は本人が参加した対戦の最新50件を上限とし、実行中のVersionと一致する履歴だけを再生対象とする。
 
 ## 騎士団戦リプレイログ
 

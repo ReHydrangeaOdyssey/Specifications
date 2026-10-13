@@ -4,7 +4,7 @@
 
 騎士団戦の処理スレッドはディスク・DB I/Oを直接行わない。通常の非出撃Eventは専用Workerが**署名付きReplay WALを耐久保存した後**に正本状態とRequestSequenceを確定して成功応答を返す。DB反映とReplay File保存は成立順に非同期処理する。出撃は通常時DB COMMIT、Recovery中は署名付きJournal耐久保存、酒場は正常時DB同一Transactionを優先する。書込待機を無くすことは保証せず、同期DB往復を通常Eventの成功条件にしない。
 
-**Eventの同一性を表す`event_hash`と、保存媒体ごとの署名済みレコードを表す`record_hash`を分離する。** Event HashはWAL・Journal・DBのいずれに保存しても同一値となる。媒体を切り替える際に同じEventへ新しいEvent番号を振ったり、媒体別Record Hashを次Eventの前Hashに使用したりしない。現段階は実行前の仕様のためv1形式を生成せず、本v2のみを生成・受理する。既存署名記録の互換移行を暗黙に行わない。
+**Eventの同一性を表す`event_hash`と、保存媒体ごとの署名済みレコードを表す`record_hash`を分離する。** Event HashはWAL・Journal・DBのいずれに保存しても同一値となる。媒体を切り替える際に同じEventへ新しいEvent番号を振ったり、媒体別Record Hashを次Eventの前Hashに使用したりしない。記録形式は本書のv2だけを生成・受理する。
 
 ## 共通のByte Encoding
 

@@ -6,6 +6,13 @@ Clientは、ログイン画面・ログイン操作、画面・入力・演出�
 
 戦闘計算そのものはClient専用実装にせず、GameServerと同じ`game-core`とPRNG仕様を使用します。Serverが正本である状態をClient側で独自に確定しません。
 
+
+### プログラムのオフライン保存・更新
+
+- Cloudflare Pagesから初回ロードしたHTML・JavaScript・WASM等をOPFS `./game/`へ一式保存し、Service WorkerのVersion別Cache Storageへも起動用静的URLを用意する。オフライン時はSWから同一Versionの起動資源を返す。既存の`./assets/`は別領域であり、自動ダウンロードする素材が無い場合は既定の開始前検査を適用する。
+- 更新時は一式を先に取得して検証し、旧Versionの復帰手段を維持してから`./game/`を全量削除・新Versionへ再配置する。SWのActive Versionは新旧ファイルの混在を防ぐため最後に切り替える。ローディング中は画面操作を無効化し、失敗時は旧Versionへ戻す。Service Workerの寿命やiOS Safariの利用可能APIに依存するため実機でオフライン再起動を検証する。
+- インストール済みPWAは全画面表示を優先し、横画面固定が許可される場合にのみ`ScreenOrientation.lock("landscape")`を実行する。不可の場合は既存の可変レイアウトを維持する。配信・更新の正本は`web_delivery.md`とする。
+
 ## 論理構成
 
 ```mermaid
@@ -53,7 +60,7 @@ classDiagram
 
 ## Web Client実行方式とブラウザ境界
 
-- ClientはRust/WASM（`wasm32-unknown-unknown`）を対象とし, iPhone Safari/PWAおよびAndroid Chrome/PWA上で動作させます。静的Clientは`https://rehydrangeaodyssey.github.io/`で配布し, 配布リポジトリは`https://github.com/ReHydrangeaOdyssey/ReHydrangeaOdyssey.github.io`とします。独自ドメインは採用しません。ブラウザ下限をiOS Safari 16.3 / Android Chrome 120, 対応するOS下限をiOS 16.3 / Android 8.0とします。OS下限はブラウザの導入可能条件に基づくものであり, 該当OSでの全機能・性能の合格判定には実機試験を要します。対応するブラウザ機能の動作は対象環境ごとの試験で確認します。
+- ClientはRust/WASM（`wasm32-unknown-unknown`）を対象とし, iPhone Safari/PWAおよびAndroid Chrome/PWA上で動作させます。静的ClientはCloudflare Pagesで配布し、HTTPS Originは配備時の`client_origin`とします。HTML・JavaScript・WASMの各ファイルの非圧縮サイズを25,000,000 byte以下とし、合計サイズは制限しません。ブラウザ下限をiOS Safari 16.3 / Android Chrome 120, 対応するOS下限をiOS 16.3 / Android 8.0とします。OS下限はブラウザの導入可能条件に基づくものであり, 該当OSでの全機能・性能の合格判定には実機試験を要します。対応するブラウザ機能の動作は対象環境ごとの試験で確認します。
 - ブラウザとの接続には`wasm-bindgen`, `web-sys`, `js-sys`, `wasm-bindgen-futures`を使用します。Browser APIのPromiseは`wasm-bindgen-futures`を用いてRustの`Future`と連携させます。
 - 描画基盤として汎用2Dエンジンを追加せず, WebGL 2を`web-sys`経由で使用する独自スプライトバッチレンダラーとします。UI Frameworkも使用しません。
 - 戦闘計算は`game-core`、Protocol Buffers生成型は`protocol`、符号化・復号は`prost`を使用する。
@@ -115,11 +122,11 @@ OPFSのPNG → File / Blob → createImageBitmap() → WebGL 2 texImage2D()
 ### OPFSアセット管理
 
 - タイトル画面の「アセットの追加」からPNG/HCAをファイル単位またはディレクトリ単位で一括取り込みします。コピー/移動を選択可能にし, 移動時は「ゲーム内へファイルの移動はゲーム終了時に消える可能性がある」と表示します。元ファイル削除権限が得られる端末では保存成功後のみ削除し, 削除機能がないブラウザではコピーのみ利用可能とします。辞書は`https://github.com/ReHydrangeaOdyssey/AssetDictionary/releases`のRelease Assetから取得し、ログイン成功時に`./config.cfg`が自動更新を有効としている場合にだけ最新または指定Versionを確認します。GameServerから辞書を配布しません。
-- OPFSの基本構造は`./game_info.json`（現在・前回のバージョン）, `./assets/<something>`, `./cache/<something>`とします。通常のアセットPathは維持し, 配置変更が必要なバージョンでだけ`game_info.json`を照合して差分移行を実行します。`game_info.json`の`version`と`previous_version`は`design/client/client.md`で定義したu32 3要素形式で検証し、不正値は初期データに再生成します。必要な差分処理でエラーがなければ更新成功と判定します。**個別の取込中断**は自動再開しません。一方、Version差分移行が中断した場合はマーカーを検出して次回起動時にその移行を最初から自動再実行します。
+- OPFSの基本構造は`./game_info.json`（現在のVersion）, `./assets/<something>`, `./cache/<something>`とします。`game_info.json`の`version`は`design/client/client.md`で定義したu32 3要素形式で検証し、不正値は初期値に再生成します。個別の取込中断は自動再開しません。
 - OPFSでは非同期APIと`FileSystemSyncAccessHandle`を利用可能な処理で選択します。非同期のほうが効率的な処理には非同期APIを使い, 同期APIはWorker内でのアクセスに限定します。用途別の性能・互換性測定は継続します。
 - 圧縮HCAファイル全体と全体PCMを同時に常駐させません。デコード済みPCM, GPU資源, WASMメモリは用途別に管理し, 不要な`AudioBuffer`の参照を解除します。
 - 取り込みはまず`./cache/temp/user_impoert/`で行います。辞書の第1キーは拡張子付き元ファイル名の完全一致とし、エントリの`path`が非空なら一意Pathへ、空なら内容SHA-256で`paths` Objectの対応Pathを選びます。辞書一致時だけ`./assets/`へ移し、不一致は`./cache/unknown_resouce/`へ保留します。ユーザーは区分「BGM」「SE」「Voice」「Character」「SD Character」「Character Icon」を指定でき、Characterでは対象IDを記録しますが、辞書不一致のままRuntimeでは使用しません。元ファイル名は照合用に保存し、一意IDによる強制改名はしません。既存Pathを異なる内容に差し替える場合は`allow_user_asset_override=true`とユーザー確認の両方が必要であり、一括上書き/キャンセルも実装します。設定OFFでも辞書一致の未配置Pathへの新規取込みは可能です。
-- PNG/HCAは辞書Pathに基づきOPFSの`./assets/`へ保存・復元します。タイトル画面からのアセット削除では任意の素材を個別・一括で削除できます。自動的な容量調整削除はせず, 容量不足時はゲームを利用不可にして削除操作を有効にします。キャッシュクリアはVersion移行・辞書差分退避・構成素材入替の処理中は拒否し、それ以外は`./cache/`のみを対象とします。辞書形式は`design/client/client.md`で確定しており、取得するRelease Asset名は`asset_dictionary.json`に固定します。辞書保留素材は`./cache/unknown_resouce/`、取込一時領域は`./cache/temp/user_impoert/`です。
+- PNG/HCAは辞書Pathに基づきOPFSの`./assets/`へ保存・復元します。タイトル画面からのアセット削除では任意の素材を個別・一括で削除できます。自動的な容量調整削除はせず, 容量不足時はゲームを利用不可にして削除操作を有効にします。キャッシュクリアは辞書差分退避・構成素材入替・Clientプログラム更新の処理中は拒否し、それ以外は`./cache/`のみを対象とします。辞書形式は`design/client/client.md`で確定しており、取得するRelease Asset名は`asset_dictionary.json`に固定します。辞書保留素材は`./cache/unknown_resouce/`、取込一時領域は`./cache/temp/user_impoert/`です。
 - 辞書Generation更新時はPath集合だけでなくPathに対応する元名と内容Hash条件を比較し、Pathが共通でも新辞書に不適合な実ファイルは`./cache/obsolete_assets/`へ退避します。内容Hash条件のあるエントリはバイト列を再計算して照合し、`path`一意では配布元Hashを架空に検証しません。退避とActive辞書切替は中断マーカーとロールバックを備え、処理中はユーザー操作・キャッシュクリアを無効化します。配布辞書の`./assets/`はPath値の一部であり、保存時に追加の接頭辞を付けません。
 
 ### 依存・ビルド・検証条件
@@ -127,8 +134,8 @@ OPFSのPNG → File / Blob → createImageBitmap() → WebGL 2 texImage2D()
 - Client用ブラウザ連携の選定crateは`wasm-bindgen`, `web-sys`, `js-sys`, `wasm-bindgen-futures`および採用検証を要する`cridecoder`です。`web-sys`は使用API単位でfeaturesを指定します。
 - 描画用の`image`, `png`, `pix`, `wgpu`, `glow`, 汎用2Dゲームエンジン, オーディオ出力専用Rustライブラリは採用しません。
 - `Cargo.lock`を保存して依存を固定し, `cargo tree --target wasm32-unknown-unknown`で推移的依存を確認します。`cargo build --target wasm32-unknown-unknown --release --locked`でビルドを検証します。
-- Releaseビルドは当面`cargo build --release --locked --target wasm32-unknown-unknown`とし, `Cargo.lock`を固定します。CIで非圧縮`.wasm`ファイルサイズを測定し, 50MBを超えた段階で最適化を検討します。500MBは既存の配布サイズ合否上限として維持し, 50MBの最適化検討ラインと区別します。
-- 実機では40キャラクターと代表的エフェクトの描画, iOS長時間動作, 最大同時SE5, BGM逐次再生, 辞書指定HCAループ・欠音, 依存ライセンスを検証します。合否目標はFPS30以上（初期10秒除外後の連続60秒平均）とCI測定の非圧縮WASM500MB以下です。GPUとRAMは統一計測方式がないため合否閾値に使用せず参考値として測定します。
+- Releaseビルドは`cargo build --release --locked --target wasm32-unknown-unknown`とし、`Cargo.lock`を固定します。CIは配布HTML・JavaScript（分割モジュールとService Worker JSを含む）・WASMの各ファイルの非圧縮byte数を検査し、**25,000,000 byteを超えたファイルがあれば不合格**とします。ファイル群の合計byte数は合否判定に使用しません。Cloudflare Pagesの単一ファイル25MiB上限も検証します。
+- 実機では40キャラクターと代表的エフェクトの描画, iOS長時間動作, 最大同時SE5, BGM逐次再生, 辞書指定HCAループ・欠音, 依存ライセンスを検証します。合否目標はFPS30以上（初期10秒除外後の連続60秒平均）とCI測定のHTML・JavaScript・WASM各ファイル非圧縮25,000,000 byte以下です。GPUとRAMは統一計測方式がないため合否閾値に使用せず参考値として測定します。
 
 ## ログイン・サーバー未接続時
 
@@ -149,7 +156,7 @@ OPFSのPNG → File / Blob → createImageBitmap() → WebGL 2 texImage2D()
 - アセット追加ではまず`./cache/temp/user_impoert/`へ保存し、元ファイル名および必要時に内容SHA-256で辞書一致を検証します。一致すれば辞書Pathへ確定保存し、不一致は区分/対象IDを記録して`./cache/unknown_resouce/`で保留します。
 - 画像・UVデータはClient側資産とし、Server用`ProcessedMasterData`の対象へ追加しません。
 - PNG以外の画像は受け付けません。辞書と一致した画像・音声本体だけを`./assets/`へ保存し、辞書の`path`または`paths`から配置Pathを取得します。辞書に一致しない素材はユーザー区分と対象IDを指定して端末へ記録しても、ゲーム内表示・再生には使用しません。
-- アプリ独自の容量・解像度・保持期間上限を設けません。容量不足は通知し, 解消までゲーム操作を不可にします。任意素材の個別・一括削除を提供し, キャッシュクリアは`./cache/`だけを削除します。
+- ユーザー取込アセットにはアプリ独自の容量・解像度・保持期間上限を設けません。ClientのHTML/JS/WASMはそれぞれ各ファイル25MB以下の配布制限を適用します（合計制限なし）。容量不足は通知し, 解消までゲーム操作を不可にします。任意素材の個別・一括削除を提供し, キャッシュクリアは`./cache/`だけを削除します。
 
 ## 認証状態
 
@@ -165,7 +172,7 @@ Clientが扱う認証情報は以下です。
 
 - Clientは`state`とPKCE `code_verifier`を認証開始時に生成し、同じタブの`sessionStorage`へ一時保存する。Code交換成功後または失敗・キャンセル時に破棄する。AccessTokenはメモリのみへ保持する。
 - `POST /v1/public/{MethodName}`はProtobufのBodyを用いて送受信し、CookieをCross-Originで送信しない。Stream断は`GetGuildBattleStatus`→再購読の順に回復し、1秒から30秒のBackoffを適用する。
-- 認証画面はPublic API Originのトップレベルページを使用し、Callback URIは`https://rehydrangeaodyssey.github.io/auth/callback/`とする。詳細は`design/system/api_transport.md`に従う。
+- 認証画面はPublic API Originのトップレベルページを使用し、Callback URIは`<client_origin>/auth/callback/`とする。詳細は`design/system/api_transport.md`に従う。
 
 ## Arena
 
@@ -259,8 +266,8 @@ Seedが`0`かどうかだけでランダム要素の有無を判定しません�
 
 - 既存の`web-sys`, `wasm-bindgen-futures`, `js-sys`からブラウザ標準`fetch()`を呼び出し, `prost`/`protocol`でRequest/ResponseのProtocol Buffersを処理します。`SubscribeGuildBattleUpdates`は`ReadableStream`を逐次読み, chunk境界を跨ぐvarint長prefixとMessageを復元します。HTTP/2/TLS 1.3はブラウザとServerによるネゴシエーションで, Client JavaScriptから強制しません。
 - WebAssemblyおよびJavaScriptはブラウザ内で実行され, API要求にはブラウザのOrigin・CORS・Cookie制約が適用されます。WASM/JavaScript配布後の通信もPublic API Serverへ行い, GameServerへの直接接続へ変更しません。
-- Refresh/Logout/LoginなどCookieを必要とするRequestは認証Originのトップレベルページ内で同一Originとして実行します。GitHub Pages上の静的ClientからCookieを含むCross-Site Fetchは行わず, 一度限りの認可コードとPKCE S256を使用したコード交換でAccessTokenを取得します。詳細は`design/system/network.md`とします。
-- `__Host-RefreshToken`のHost-only/HttpOnly/Secure/SameSite=Strict制約を維持し, 配布Originと認証Originの別Site配置に対応するトップレベル遷移方式を採用します。認証画面Pathは`GET /auth/authorize`、固定戻り先は`https://rehydrangeaodyssey.github.io/auth/callback/`とする。認可コード発行・交換のwire schemaは`design/system/public_api.proto`を正とする。認証Originの具体的なホスト値のみ環境設定で指定する。
+- Refresh/Logout/LoginなどCookieを必要とするRequestは認証Originのトップレベルページ内で同一Originとして実行します。Cloudflare Pages上の静的ClientからCookieを含むCross-Site Fetchは行わず, 一度限りの認可コードとPKCE S256を使用したコード交換でAccessTokenを取得します。詳細は`design/system/network.md`とします。
+- `__Host-RefreshToken`のHost-only/HttpOnly/Secure/SameSite=Strict制約を維持し, 配布Originと認証Originの別Site配置に対応するトップレベル遷移方式を採用します。認証画面Pathは`GET /auth/authorize`、固定戻り先は`<client_origin>/auth/callback/`とする。認可コード発行・交換のwire schemaは`design/system/public_api.proto`を正とする。認証Originの具体的なホスト値のみ環境設定で指定する。
 - 個別ファイル・フォルダ一括取り込みに対応するUIを設け, ブラウザの対応APIを判定します。元ファイルの削除権限を取得できた場合のみ「移動」を提供します。SafariではブラウザAPI制約により元ファイル削除の提供ができない場合があり, その場合はコピーを利用します。
 - `cridecoder`の採否は`wasm32-unknown-unknown`ビルド、iPhone Safariでの22,050Hz・1ch入力のL/R複製／2ch入力保持・鍵探索の必要なHCA・ループ再生・SE5音同時再生・長時間再生時の欠音・メモリ、およびClient配布物に含まれる依存ライセンス検証の結果で決定します。
 
@@ -273,7 +280,7 @@ Seedが`0`かどうかだけでランダム要素の有無を判定しません�
 - WebKit OPFS: https://webkit.org/blog/12257/the-file-system-access-api-with-origin-private-file-system/
 - MDN FileSystemSyncAccessHandle: https://developer.mozilla.org/en-US/docs/Web/API/FileSystemSyncAccessHandle
 - MDN `webkitdirectory`: https://developer.mozilla.org/en-US/docs/Web/API/HTMLInputElement/webkitdirectory
-- GitHub Pages custom domain: https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site
+- Cloudflare Pages: https://developers.cloudflare.com/pages/platform/limits/
 - cridecoder公式: https://github.com/seiunx-dev/cridecoder
 
 ## 制約
@@ -308,10 +315,9 @@ Seedが`0`かどうかだけでランダム要素の有無を判定しません�
 
 音声ファイル未配置・復号失敗・Web Audio再生失敗時は、その音を無音として扱う。戦闘ロジックとServer上の確定結果は変更しない。
 
-### 配置差分移行の再実行と取り込み中断の区別
+### 素材取込みの中断
 
-- ゲームVersion変更に伴う`./cache/asset_migration/`の移行中マーカーが存在する場合、起動時に同じVersion差分の配置移行を先頭から自動再実行する。作業領域は再構築可能な一時データとし、同じ移行を繰り返しても同じ配置結果になるようにする。全件検証が完了するまで旧配置および`game_info.json`現行Versionを変更しない。
-- 個別PNG/HCA取り込み途中の中断は上記Version移行と区別し、途中取り込みの自動再開を実施しない。
+- 個別PNG/HCAの取り込みが途中終了した場合、その取り込みは自動再開しない。作業途中のファイルは未確定として扱い、Runtimeに渡さない。
 
 ### 辞書照合の正本
 
@@ -323,7 +329,7 @@ Seedが`0`かどうかだけでランダム要素の有無を判定しません�
 1. ユーザー指定ファイルを拡張子/実データ型で検証する。元ファイル名は改名・Unicode正規化せず照合メタデータへ保持する。
 2. `./cache/temp/user_impoert/`に一時保存し、辞書が有効なら`filename`の一致→`path`非空なら直接Path使用／空なら内容SHA-256で`paths` Object照合を実行する。
 3. 一致かつ辞書Pathが`./assets/`から始まる安全な完全Pathである場合は、未配置なら通常取込み、同じバイト列なら変更なし、既存内容と異なるなら設定ONと明示確認がある場合のみ確定保存する。不一致は`./cache/unknown_resouce/`へ移し、区分・対象ID・元名・保留Pathの割当情報を保存するがRuntimeへ渡さない。
-4. キャッシュクリアは`./cache/`全体を消すため、取込途中および辞書未一致の保留素材は失われる。辞書一致済み`./assets/`は残す。Version移行中は別途保護する。
+4. キャッシュクリアは`./cache/`全体を消すため、取込途中および辞書未一致の保留素材は失われる。辞書一致済み`./assets/`は残す。辞書更新・構成素材入替・プログラム更新中はキャッシュクリアを禁止する。
 5. ログイン成功時に`./config.cfg`（YAML）を読み、`update_asset_dictionary=true`ならRelease APIから最新または`asset_dictionary_version`で指定したtagを取得する。具体的Assetを一意に選択できない場合は更新失敗として扱う。初回失敗時は1回Retryし、それでも失敗なら保存済み旧辞書へ戻す。
 
 ## HCA音声の復号準備

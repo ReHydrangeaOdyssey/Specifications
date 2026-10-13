@@ -4,12 +4,11 @@
 
 設計上未確定の実装契約と運用値を以下に列挙する.
 
-- [U-03] Public API ServerのHTTPS Origin（静的Clientの配布先は`https://rehydrangeaodyssey.github.io/`）.
+- [U-03] Public API ServerのHTTPS Origin（静的ClientはCloudflare Pagesで配布し、Originは実配備時に`client_origin`で設定する）.
 - [U-05] HTTP/2 + TLS 1.3の対象ブラウザでの実通信検証結果.
 - [U-07/08] 最小対応ブラウザを含む各端末でのフォルダ一括選択・元ファイル削除権限と実装可否（未対応環境はコピーのみ）.
 - [U-09] AssetDictionaryの実公開Release Assetの有無および実際の配布内容との照合。辞書本体Asset名と同一Release内のSHA-256検査値Asset名との照合方式はClient保存契約で確定済み。
 - [U-11/12] 手動割当メタデータはClient保存契約で定義済み。Character/Actionの機械生成不能な全件対応表は必須要件としない。ユーザー登録済み構成セットの実データに応じてClient内で参照を解決する。
-- [U-14/15] Versionごとの具体的な配置差分、移行対象と衝突時の移行表（実Releaseごとに作成し差分ゼロなら無処理）。中断後は移行マーカーで最初から再実行し、個別取込は自動再開しない。
 - [U-19] `cridecoder`のiPhone Safari/WASM実機動作・依存ライセンス検証後の最終採否.
 - [U-20] HCA出力は常にステレオ2ch、1ch入力は左右へ複製し、ループ真偽は`./assets/sound/bgm/`（ディレクトリ境界と大文字小文字を区別し、配下のサブディレクトリを含む）への配置で判定。個別のループ設定Fileは使用しない。鍵キャッシュ形式はClient保存契約で定義済み。鍵探索ライブラリの採否と実機検証は別途確認する。
 - [U-21] 暫定先読み500ms/補充250msの実機欠音評価結果（数値は最終最適値ではない）.

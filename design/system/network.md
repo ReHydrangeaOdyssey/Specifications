@@ -67,12 +67,12 @@ flowchart TD
 * Public API Serverは接続を可能な限り再利用し, API要求ごとにTLS接続を新規作成する方式とはしない.
 * RefreshTokenは`Secure`, `HttpOnly`, `SameSite=Strict`, `Path=/`, Domain属性なしの`__Host-RefreshToken` CookieだけでClientへ保持させる. Response BodyへRefreshTokenを返さない.
 * Cookieを伴う`RefreshAccessToken`および`Logout`等は認証Origin上の第一者ページから呼び, Public API Serverは`Origin` Headerが設定済み認証Originと完全一致する場合だけ受け付ける. Cookieを伴う認証APIのCross-Site CORS Credential許可は行わない. Cookieを伴わない通常API・認可コード交換のCORSは設定済み静的Client Originだけに限定し, wildcardを使用しない.
-* Clientは選定された静的配布先からJavaScript/WASMを取得してブラウザで実行し, API要求はブラウザのFetch APIを介してPublic API Serverへ送信する. WASM実行への移行は, 通信先Originに関するCORS・Cookieの制約を変更しない. GameServerはClientから直接接続させない.
-* 静的ClientのOriginは`https://rehydrangeaodyssey.github.io`とし, 公開URLは`https://rehydrangeaodyssey.github.io/`, 配布リポジトリは`https://github.com/ReHydrangeaOdyssey/ReHydrangeaOdyssey.github.io`とする. 独自ドメインは採用しない. GameServerはClientから直接アクセスできる公開Endpointを持たず, ClientのAPI通信はPublic API Serverへ送信する. Public APIのHTTPS Originは別途定義する. 異なるSite上のPublic APIと接続する場合は下記のトップレベル認証画面・一度限りの認可コード方式を用い, `SameSite=Strict` CookieをCross-Site要求へ送る方式を採用しない. HTTP/2/TLS 1.3はブラウザとServerがネゴシエーションし, 接続結果を検証する.
+* Clientは選定された静的配布先からJavaScript/WASMを取得してブラウザで実行し, API要求はブラウザのFetch APIを介してPublic API Serverへ送信する. WASM実行でも通信先Originに関するCORS・Cookieの制約に従う. GameServerはClientから直接接続させない.
+* 静的ClientはCloudflare Pagesから配布し、HTTPS Originは実配備時の`client_origin`で設定する。未知のホスト名や独自ドメインを仮定しない。 GameServerはClientから直接アクセスできる公開Endpointを持たず, ClientのAPI通信はPublic API Serverへ送信する. Public APIのHTTPS Originは別途定義する. 異なるSite上のPublic APIと接続する場合は下記のトップレベル認証画面・一度限りの認可コード方式を用い, `SameSite=Strict` CookieをCross-Site要求へ送る方式を採用しない. HTTP/2/TLS 1.3はブラウザとServerがネゴシエーションし, 接続結果を検証する.
 ## 静的Clientと認証Originが異なる場合の認証手順
 
 * 認証画面はPublic API Originの`/auth/authorize`からHTTPSで提供する。Session Cookieは認証Originの第一者ページからだけ送信する。`SameSite=Strict`のCookieをCross-Site fetchで送信しない。
-* ClientのCallback URIは`https://rehydrangeaodyssey.github.io/auth/callback/`とし、AccessTokenは60秒以内・単回使用の認可コードとPKCE S256検証後にだけ渡す。認証コード発行・交換のMethod、Path、wire型、CSRF・CORSの詳細は`api_transport.md`を正とする。
+* ClientのCallback URIは`<client_origin>/auth/callback/`とし、AccessTokenは60秒以内・単回使用の認可コードとPKCE S256検証後にだけ渡す。認証コード発行・交換のMethod、Path、wire型、CSRF・CORSの詳細は`api_transport.md`を正とする。
 * 認証Originは配布時の`public_api_origin`を使用し、認証情報を静的配布URLのQueryに載せない。GameServerはClientから直接アクセスさせない。
 
 根拠: [RFC 9700 OAuth 2.0 Security BCP](https://www.rfc-editor.org/rfc/rfc9700.html), [MDN Cookie SameSite](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Set-Cookie), [MDN Third-party cookies](https://developer.mozilla.org/en-US/docs/Web/Privacy/Guides/Third-party_cookies)。

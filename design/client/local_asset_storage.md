@@ -4,13 +4,18 @@
 
 代替画像は`https://github.com/ReHydrangeaOdyssey/GameAssets/releases`から取得する。Releaseで明示されたAsset名・検査値と有効辞書の有無を検証し、既知の検証済み画像へだけ参照を切り替える。代替画像は通常素材と異なるClient管理物だが、ゲーム開始には有効辞書も必須とする。実配布Asset名は提供側が公開する実体に合わせ、未提示の名称を固定しない。
 
+## プログラム保存領域との分離
+
+- Cloudflare Pagesから取得したClientのHTML/JavaScript/WASM一式はOPFS `./game/`へ保存する。`./game/`はプログラム用であり、辞書許可対象の`./assets/`や一時保存用`./cache/`の規則を流用しない。Service Worker用Version別Cache Storageもオフライン起動に必要であり、OPFS保存だけでは代替しない。
+- Clientのバージョン更新時は`./game/`だけを全量入れ替え、`./assets/`、`./settings/`、`./config.cnf`と現在Versionを記録する`./game_info.json`を削除しない。更新中のキャッシュクリアは拒否し、更新失敗・容量不足時は更新前のプログラムへ復帰する。詳細は`../programming/client/web_delivery.md`を参照。
+
 ## Release辞書の取得・原子的更新
 
 1. ログイン成功後、配布`./config.cfg`とタイトル設定画面で保存した端末上書き値を統合した実効`update_asset_dictionary`が`true`の場合、`asset_dictionary_version=latest`なら最新Release、それ以外は指定tagのReleaseをGitHub Releases APIで取得する。辞書本体は`asset_dictionary.json`という名前のRelease Assetを**ちょうど1件**選び、同じReleaseから検査値を表す**小文字16進64桁のAsset名**を1件取得する（実効`verify_asset_dictionary_sha256=false`では当該Asset不在も許容する）。Assetの実URLはRelease APIの返却値から取得し、任意の未知Assetを辞書として選ばない。
 2. HTTPSレスポンス正常性、Content-Lengthと実受信量、最大受信量上限、UTF-8、JSON Object、すべての`path`/`paths`とハッシュキー形式、相対Path安全性、File名の重複と空値を全件検証する。**辞書本体のRaw Bytes全体**にSHA-256を計算し、同じRelease内でファイル名がこのDigestと完全一致する検査値Assetがちょうど1件だけある場合に照合成功とする。`verify_asset_dictionary_sha256=true`（初期値）で検査値Asset欠落・曖昧・不一致なら切替えない。利用者が設定画面で明示的にfalseとしたときだけ検査値照合を省略できるが、Schema/Path検査は常に実施する。tag・辞書Asset ID・検査値Asset ID・ETag・計算Digest・検証結果を履歴へ保存する。ETagはHashの代用にならず、同一Release内のDigest名ではRelease改ざん自体を検出できない。
 3. `./cache/temp/asset_dictionary/`に`generation_<id>.json`として一時書込みし、読戻し検証後に`active.json`参照（generation ID・tag・SHA-256・Size）を一時ファイルから切替える。旧Generationは新Generationの参照確定まで削除しない。再起動時はActiveのHashとJSONを検証し、不完全なら直前の検証済みGenerationへ戻す。旧辞書と新辞書の全Pathに加え、**各Pathに対応する元ファイル名・`path`/`paths`の方式・要求される内容SHA-256条件**を比較する。旧辞書にのみある保存Pathの素材は`./cache/obsolete_assets/<更新ID>/`へ退避する。共通Pathであっても許可条件が変更された場合は既存実ファイルを読んで再検証し、新辞書が実バイト列と元名を許可すると確認できる場合にだけ残す。旧来歴は旧検証済みGenerationのPath→元名が一意な場合にだけ逆引きし、`paths`の場合は保存実体のHash一致も確認する。旧Generationが消去・破損したか候補が一意でない素材、および`paths` Hash条件に合わない素材は同じ退避領域へ移し、Runtimeへ渡さない。`path`一意のエントリには期待内容Hashがないので、**存在しない配布元Hashを検証したと扱わない**。新規Pathへ旧内容を推測で割り当てない。退避・全件検証・有効辞書参照の切替を更新マーカーで一体化し、途中失敗/再起動時は旧辞書と元の`./assets/`状態へロールバックする。新辞書が有効になった後、退避した素材はRuntimeで使用せず、明示的なキャッシュクリアの対象とする。
 4. `update_asset_dictionary=false`ならネットワーク取得しない。初回に有効辞書がない場合は空辞書として手動割当だけを使う。HTTP失敗は1回だけ再試行してから保存済み正本へ戻す。
-5. `./cache/temp/`配下はプロセス再起動で自動消去しないが、ユーザーが**キャッシュクリアを明示実行した場合は辞書Generationも消去される**。次回ログインで再取得する。Version差分移行中は既存仕様に従いキャッシュクリアを拒否する。
+5. `./cache/temp/`配下はプロセス再起動で自動消去しないが、ユーザーが**キャッシュクリアを明示実行した場合は辞書Generationも消去される**。次回ログインで再取得する。辞書更新・構成素材入替・プログラム更新中はキャッシュクリアを拒否する。
 
 ## 取り込みと割当レコード
 
