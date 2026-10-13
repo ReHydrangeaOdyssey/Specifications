@@ -104,7 +104,7 @@ Password HashはArgon2idを使用し、仕様の最低設定を満たします�
 
 ## Discord Authorization
 
-`AdditionalAuthorizationProvider=DISCORD`の場合、Account作成とLoginでDiscordAuthorizationTokenを要求します。`POCKETBASE`の場合は検証Adapterの導入を必須とし、未実装ならServerを起動しません。`NONE`の場合は追加Tokenを要求しませんがLoginID/Passwordによる本人認証とSession発行は従来どおり行います。
+ClientがAccount作成とLoginで追加認可Providerを選択し、Serverは許可済みProvider集合との一致と選択Adapterの検証を必須とします。`DISCORD`の場合はDiscordAuthorizationTokenを要求します。`POCKETBASE`の場合は検証Adapterの導入を必須とし、未実装Providerを有効化したServerは起動しません。`NONE`の場合は追加Tokenを要求しませんがLoginID/Passwordによる本人認証とSession発行は従来どおり行います。Login時は保存済みProvider・Subject Bindingが一致しなければ認証不成立とします。
 
 Tokenは以下の性質を持ちます。
 

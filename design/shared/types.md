@@ -884,19 +884,7 @@ enum GuildBattleResult {
 
 ### GuildBattleReplayProcessType
 
-```proto
-enum GuildBattleReplayProcessType {
-  GUILD_BATTLE_REPLAY_CREATE = 0; // 騎士団戦作成・初期スナップショット.
-  GUILD_BATTLE_REPLAY_SORTIE = 1; // 出撃処理.
-  GUILD_BATTLE_REPLAY_TACTICS = 2; // タクティクス使用処理.
-  GUILD_BATTLE_REPLAY_HEAL = 3; // 治療処理.
-  GUILD_BATTLE_REPLAY_REVIVE = 4; // 復活処理.
-  GUILD_BATTLE_REPLAY_ITEM = 5; // アイテム使用処理.
-  GUILD_BATTLE_REPLAY_JOIN = 6; // 騎士団戦参加処理. RequestSequence生成による本体PRNG消費を再現する.
-}
-```
-
-この数値をリプレイログの処理種別として使用する.
+騎士団戦Replayの処理種別は「[guild_battle_replay.proto](../system/guild_battle_replay.proto)」の`GuildBattleReplayProcessType`を正本とする。列挙値は`0`（CREATE）から`7`（TAVERN_RECOVERY）までの連番とする。
 
 ### HealState
 

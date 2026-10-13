@@ -550,16 +550,6 @@ enum GuildBattleResult {
   GUILD_BATTLE_RESULT_DRAW = 2; // 引き分け.
 }
 
-enum GuildBattleReplayProcessType {
-  GUILD_BATTLE_REPLAY_CREATE = 0; // 騎士団戦作成・初期スナップショット.
-  GUILD_BATTLE_REPLAY_SORTIE = 1; // 出撃処理.
-  GUILD_BATTLE_REPLAY_TACTICS = 2; // タクティクス使用処理.
-  GUILD_BATTLE_REPLAY_HEAL = 3; // 治療処理.
-  GUILD_BATTLE_REPLAY_REVIVE = 4; // 復活処理.
-  GUILD_BATTLE_REPLAY_ITEM = 5; // アイテム使用処理.
-  GUILD_BATTLE_REPLAY_JOIN = 6; // 騎士団戦参加処理. RequestSequence生成による本体PRNG消費を再現する.
-}
-
 enum HealState {
   HEAL_STATE_NONE = 0; // 治療状態ではない.
   HEAL_STATE_HEALING = 1; // 治療中.

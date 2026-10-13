@@ -393,6 +393,7 @@ message CreateAccountRequest {
   string user_name = 3;
   string discord_authorization_token = 4; // DISCORDモードの場合の追加認可Token.
   string additional_authorization_token = 5; // 非Discord追加認可Adapter用. NONEでは不要.
+  string additional_authorization_provider = 6; // Clientが選択する許可済みProvider名。省略不可.
 }
 
 message CreateAccountResponse {
@@ -405,6 +406,7 @@ message LoginRequest {
   string client_version = 3;
   string discord_authorization_token = 4; // DISCORDモードの場合の追加認可Token.
   string additional_authorization_token = 5; // 非Discord追加認可Adapter用. NONEでは不要.
+  string additional_authorization_provider = 6; // Clientが選択する許可済みProvider名。省略不可.
 }
 
 message LoginResponse {
@@ -853,11 +855,9 @@ message ListFriendsResponse { repeated FriendListEntry friends = 1; }
 message RemoveFriendRequest { string access_token = 1; uint64 player_id = 2; uint64 friend_player_id = 3; }
 message RemoveFriendResponse {}
 
-// Public unauthenticated read-only authentication-policy discovery.
+// Public unauthenticated read-only authentication-provider discovery.
 // Does not reveal provider signing keys, secrets or detailed server configuration.
 message GetAdditionalAuthorizationConfigRequest {}
 message GetAdditionalAuthorizationConfigResponse {
-  string provider = 1; // DISCORD / POCKETBASE / OTHER / NONE
-  bool additional_authorization_required = 2;
-  bool provider_available = 3; // Only implemented/validated providers may be true.
+  repeated string available_providers = 1; // Clientが選択可能なDISCORD / POCKETBASE / OTHER / NONEの集合。
 }

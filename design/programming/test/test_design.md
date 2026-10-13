@@ -412,12 +412,18 @@ Recovery fileからの再送でも同じテストを行います。
 
 - 酒場ストック初期3→使用で2→2時間後3、連続3回使用後は2時間ごとに1回ずつ補充されることを確認する。追加使用が既存の補充予定時刻を延長しないこと、JST日付切替で補充されないことを検査する。
 - 酒場Replay保存とDB Playerストックを同一COMMITで確定し、Operation ID重複とEvent Index重複でも二重減算しないことを検査する。
-- 追加認可方式`DISCORD`/`POCKETBASE`/`NONE`でTokenの必要性・本人認証・Bindingを検証する。検証Adapter未実装の`OTHER`/`POCKETBASE`構成は起動拒否とし、追加認可を黙ってスキップしない。
+- `GetAdditionalAuthorizationConfig.available_providers`にあるProviderをClientが選択して`CreateAccount`/`Login`に送信できることを確認する。省略・未知値・Server未許可の方式は400で拒否し、自動選択しない。`DISCORD`/`POCKETBASE`/`NONE`でTokenの必要性・本人認証・Bindingを検証する。未実装Adapterを有効化した構成は起動拒否し、追加認可を黙ってスキップしない。
+- 既存AccountのProvider／Subject Bindingが一致する場合だけLoginが成立し、`NONE`を含む異Providerへの選択変更・異SubjectによるLoginでは認証不成立とし、Account Bindingが変更されないこと。
 - 確定失敗・Retry失敗・初回から5秒経過のいずれかで、その騎士団戦では以後DBへ送信せずJournalへ切り替える。Journal保存完了時だけ成功、保存失敗時は操作不成立、Battle終了後の一括再送は同一Operation IDで冪等となることを検証する。
 - 辞書は元ファイル名を第1キー、`path`が空の場合だけ内容SHA-256を`paths`オブジェクトで照合し、一致しない素材が実行時に使用されないことを検査する。
 
 
 ## 回答反映後の境界試験
+
+- UserNameはUnicodeスカラー値で1～10文字、非正規化とし、英語・日本語・韓国語・中国語、一般記号、半角/全角スペースとLF改行を受理する。制御文字（LF以外）・書式文字・絵文字・ZWJ/異体字セレクタ等は拒否し、異体字や結合文字をスカラー値単位で数えること。
+- 通常のBearer認証を要しRequest Bodyに`access_token`を持つPublic RPCではHeader/Bodyの同一Tokenを受理し、Body欠落・Header欠落・値不一致をHTTP 401で拒否する。Body値でHeaderの認証主体を上書きしない。
+- `GetAdditionalAuthorizationConfig`および認証Origin専用の`CreateAccount`/`Login`/`RefreshAccessToken`/`Logout`などは通常Bearer二重照合の対象外とし、それぞれ固有の認証契約に従う。Token期限切れと署名不正は既存の認証エラー契約で処理し、401応答へTokenを露出させない。
+- バイナリ`bytes`型はUTF-8妥当性を要求せず、各Token/Hashの固定byte長と既存Payload制約を満たすことを検証する。
 
 - `./config.cfg`のYAML既定値、更新停止、`latest`/固定tagのRelease選択、Release不存在・曖昧Asset・1回Retry・旧辞書復帰を検証する。
 - 辞書JSONの`path`非空／空、`paths`のHash Object、非法Path、Hash不一致、元ファイル名の大文字/小文字、異なる同名ファイルを検証する。`./cache/temp/user_impoert/`→`./assets/`／`./cache/unknown_resouce/`の遷移を検査する。
@@ -437,7 +443,7 @@ Recovery fileからの再送でも同じテストを行います。
 
 ### 今回確定した境界条件
 
-- `GetAdditionalAuthorizationConfig`で`DISCORD`/`POCKETBASE`/`OTHER`/`NONE`の表示を切り替え、認可Tokenの要否はServerが決める。未実装Adapter起動拒否と、Config取得失敗時に無認可へフォールバックしないことを確認する。
+- `GetAdditionalAuthorizationConfig.available_providers`に含まれる`DISCORD`/`POCKETBASE`/`OTHER`/`NONE`だけをClientの選択肢として表示し、利用者が明示的に選ぶことを確認する。Serverは選択値の許可と認可Tokenの検証を行い、未実装Adapter有効化で起動を拒否する。Config取得失敗時は無認可へのフォールバックも自動選択もしない。
 - Recovery移行中の`UseTavernRecovery`は拒否され、Playerの残ストック、RequestSequence、BP、Replay Eventが変化しないことを確認する。
 - 出撃は永続化成功→Response→後処理の順、通常Eventは仮状態の評価→ReplayQueueでEvent番号とOperation IDの予約→専用Workerの署名付きWAL耐久保存完了→RuntimeとRequestSequenceの確定→成功Response→DB/Fileの非同期保存であることを確認する。通常Eventの署名付きReplay WAL耐久化→成功Response→DB非同期COMMITを検証する。WAL未確定Eventには成功応答を返さない。再起動後の署名・順序検証と重複適用拒否を確認する。
 - `asset_dictionary.json`がないRelease/複数あるRelease/不正JSON/誤Path/途中ダウンロード失敗を受けても前Generationが維持されること、ログイン失敗時も手動素材取り込みが可能なことを確認する。

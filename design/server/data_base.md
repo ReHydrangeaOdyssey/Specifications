@@ -130,7 +130,7 @@ erDiagram
 `AUTHORIZATION_CODE`は認証コード32byteのSHA-256値を`code_hash`へ格納し、コード自体はDBに保存しない。登録済みRedirect URI、PKCE S256 digest、発行元SessionID・PlayerID、期限、消費時刻を保持する。Private APIはRefreshTokenのHashから有効Sessionを検索して発行し、コード交換はコード行の排他Lock・Session有効性・URI完全一致・S256照合・未消費・60秒以内の全条件を単一Transactionで検証して一度だけ成立させる。
 
 `ACCOUNT.login_id`は一意制約を設定する. Passwordの平文は保存せず, Argon2idのパラメータ, Passwordごとの16byte以上の暗号学的乱数Salt, Hashを含む`password_hash`だけを保存する.
-`ACCOUNT.additional_authorization_provider`は`DISCORD`、`POCKETBASE`、`OTHER`、`NONE`を保存し、`additional_authorization_subject`は追加認可ありの場合に非空の検証済み値とする。`NONE`では空値とする。Providerが異なる主体を本人と推定して連携しない。`ACCOUNT.discord_user_id`はNULLを許可する. `AdditionalAuthorizationProvider=DISCORD`でAccountを作成した場合は`DiscordAuthorizationToken.sub`のDiscordUserIDを保存し, Login時の追加認可Bindingに使用する. `AdditionalAuthorizationProvider=NONE`で作成したAccountではNULLを許可する.
+`ACCOUNT.additional_authorization_provider`は`DISCORD`、`POCKETBASE`、`OTHER`、`NONE`を保存し、`additional_authorization_subject`は追加認可ありの場合に非空の検証済み値とする。`NONE`では空値とする。Providerが異なる主体を本人と推定して連携しない。Login時はClientが選択してServerが検証したProviderと保存済みProviderを完全一致させ、`NONE`の場合も保存済みProviderが`NONE`であることを必須とする。別Providerへの自動Binding変更は行わない。`ACCOUNT.discord_user_id`はNULLを許可する. `AdditionalAuthorizationProvider=DISCORD`でAccountを作成した場合は`DiscordAuthorizationToken.sub`のDiscordUserIDを保存し, Login時の追加認可Bindingに使用する. `AdditionalAuthorizationProvider=NONE`で作成したAccountではNULLを許可する.
 `ACCOUNT`と`PLAYER`は1対1とし, Account作成時に同一トランザクションで作成する.
 `ACCOUNT_SESSION.account_id`を主キーとし, 1つのAccountが同時に複数のRefresh Sessionを保持できないようにする.
 `ACCOUNT_SESSION.refresh_token_hash`には`SHA-256(RefreshToken)`だけを保存し, RefreshTokenの平文を保存しない.

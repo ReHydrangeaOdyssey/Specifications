@@ -3,7 +3,7 @@
 * Accountの本人認証は`LoginID`と`Password`を使用する.
 * Discord Bot連携はOptionとし, Accountの本人認証方式そのものには使用しない.
 * Discord Bot連携では運営通知とDiscordロールによる追加認可を行う. 2つの機能は個別に有効・無効を設定可能とする.
-* 運営者は追加認可方式を`AdditionalAuthorizationProvider`で選択する。現在の運用では`DISCORD`とする。
+* ClientはAccount新規作成とLoginで追加認可方式`AdditionalAuthorizationProvider`を明示選択する。Serverは`AllowedAdditionalAuthorizationProviders`に含まれる方式だけを受け付け、選択を自動決定しない。
 * `AdditionalAuthorizationProvider=NONE`の場合、追加認可Tokenを必要とせず、既存のLoginID/Password認証は維持する。
 * `AdditionalAuthorizationProvider=DISCORD`で作成したAccountは`DiscordAuthorizationToken.sub`のDiscordUserIDをAccountへBindingし、Login時は同一DiscordUserIDのTokenだけを許可する。
 * `DiscordNotificationEnabled=true`の場合, GameServer, GuildBattleCoordinatorおよびPrivate API Serverから運営向け通知をDiscord Botへ送信する. `false`の場合はBot通知を行わず, ErrorLog等の既存処理だけを行う.
@@ -28,32 +28,32 @@ Cross-Site配布時の認証は`design/system/network.md`の「静的Clientと�
 
 ## 追加認可方式の選択
 
-Accountの`LoginID`・`Password`による本人認証と、運営者が構成時に選ぶ**追加認可**は分離する。追加認可の運用設定`AdditionalAuthorizationProvider`は以下のいずれか1値とし、サーバー側設定だけで選択する。Clientが申告した方式に切り替えてはならない。
+Accountの`LoginID`・`Password`による本人認証と追加認可を分離する。Clientは認証前の`GetAdditionalAuthorizationConfig.available_providers`から`AdditionalAuthorizationProvider`を1つ明示選択し、`CreateAccountRequest.additional_authorization_provider`または`LoginRequest.additional_authorization_provider`に指定する。Serverは選択値が運用設定`AllowedAdditionalAuthorizationProviders`に含まれ、検証可能な方式であることを確認する。省略・未知値・許可外値はHTTP 400で拒否し、別Providerや`NONE`へ自動的に切り替えない。
 
 | 値 | 追加認可の扱い |
 |---|---|
-| `DISCORD` | Discord Role追加認可Tokenの署名、Claim、期限、Binding、再利用防止を実施する。現在の運用既定値。 |
+| `DISCORD` | Discord Role追加認可Tokenの署名、Claim、期限、Binding、再利用防止を実施する。 |
 | `POCKETBASE` | PocketBase側で認証済みであることをServerが検証する追加認可Adapterを使用する。Clientから受け取るユーザーID自体を検証済み主体とはみなさない。 |
 | `OTHER` | 他の認証サービス用の拡張予約値。検証Adapter未実装では有効化を拒否する。 |
 | `NONE` | 追加認可を要求しない。`LoginID`・`Password`認証、AccessToken、RefreshSession、Rate Limitは維持する。公開環境では非推奨。 |
 
-- 追加認可方式は`AdditionalAuthorizationProvider`で指定する。`DiscordNotificationEnabled`はこの設定から独立して有効化できる。
-- `DISCORD`では`discord_authorization_token`を受け付ける。`POCKETBASE`などの非Discord方式ではPublic Requestの`additional_authorization_token`からAdapterが検証する。`NONE`では追加Tokenを必須としない。**選択中の方式の検証済み結果がない場合はAccount作成・Loginを拒否する**（`NONE`を除く）。
-- Adapterが正本のサービスに対して署名・有効期限・発行者・Audience・必要な権限を検証して確定した`provider`と不変の`subject`だけをPrivate APIへ渡す。検証の具体的方式は対象サービスのAdapter契約による。`POCKETBASE`について具体的な資格情報の取得・検証を提供する実装がない場合、構成の起動時に失敗させ、無検証で通過させない。
-- `ACCOUNT`に`additional_authorization_provider`と`additional_authorization_subject`を持ち、追加認可有効時は登録時の組をLogin時に照合する。`NONE`は追加認可のBindingを要求しない。異なるProviderの`subject`を同一Accountの主体として扱わない。
+- `AllowedAdditionalAuthorizationProviders`はServer運用設定で有効化する方式の集合とし、`DISCORD` / `POCKETBASE` / `OTHER` / `NONE`から明示して設定する。利用可能なProviderが0件の場合はServer起動を拒否する。未実装Adapterを有効化した場合も起動時に拒否する。`DiscordNotificationEnabled`はこの設定から独立して有効化できる。
+- Clientが`DISCORD`を選んだ場合は`discord_authorization_token`を受け付ける。`POCKETBASE`などの非Discord方式ではPublic Requestの`additional_authorization_token`からAdapterが検証する。`NONE`では追加Tokenを必須としない。**選択中の方式の検証済み結果がない場合はAccount作成・Loginを拒否する**（`NONE`を除く）。
+- ServerはClient選択Providerの利用許可と必要な認証Tokenの検証を実施し、Adapterが正本のサービスに対して署名・有効期限・発行者・Audience・必要な権限を検証して確定した`provider`と不変の`subject`だけをPrivate APIへ渡す。検証の具体的方式は対象サービスのAdapter契約による。`POCKETBASE`について具体的な資格情報の取得・検証を提供する実装がない場合、構成の起動時に失敗させ、無検証で通過させない。
+- `ACCOUNT`に`additional_authorization_provider`と`additional_authorization_subject`を持ち、追加認可有効時は登録時の組をLogin時に照合する。`NONE`はSubjectを空文字として保存し、ログイン時にも保存済みProviderが`NONE`であることを必須とする。異なるProviderのSubjectを同一Accountの主体として扱わず、ProviderやSubjectが一致しないLoginは拒否する。自動Binding変更および異ProviderのAccount統合は行わない。Provider移行機能を提供する場合は、本人確認・移行許可・監査記録・Rollbackを備えた専用手順でのみBindingを変更する。
 - `NONE`も認証不要な匿名アクセスを意味しない。認証なしの匿名ログインを許可する仕様は追加しない。
 
 ## Discord Bot設定
 
 | 設定 | 内容 | 現在の運用値 |
 |---|---|---|
-| `AdditionalAuthorizationProvider` | Account新規作成およびLoginで追加認可に使う方式。`DISCORD`/`POCKETBASE`/`OTHER`/`NONE` | `DISCORD` |
+| `AllowedAdditionalAuthorizationProviders` | Clientが選択可能な追加認可方式の集合。`DISCORD`/`POCKETBASE`/`OTHER`/`NONE`のうち利用可能な方式だけを明示設定する | 運用設定で指定する |
 | `DiscordNotificationEnabled` | 運営向け通知をDiscord Botへ送信するか | `true` |
 | `DiscordGuildID` | 追加認可でRole確認対象とするDiscord Guild | 運用設定で指定する |
 | `DiscordRequiredRoleID` | 追加認可で保持を必須とするDiscord Role | 運用設定で指定する |
 
-* `AdditionalAuthorizationProvider`が`DISCORD`以外の場合、`DiscordGuildID`および`DiscordRequiredRoleID`を追加認可には使用しない。
-* `AdditionalAuthorizationProvider=DISCORD`の場合、Discord Botを使用せずに新規Account作成または新規Loginを成功させる経路を設けない。
+* Clientが選択したProviderが`DISCORD`以外の場合、`DiscordGuildID`および`DiscordRequiredRoleID`を追加認可には使用しない。
+* Clientが`DISCORD`を選択した場合、Discord Botを使用せずに新規Account作成または新規Loginを成功させる経路を設けない。
 * `DiscordNotificationEnabled=false`の場合, 通知先Botが存在しないことをエラーとしてゲーム処理へ反映しない.
 
 ## Discord Bot追加認可
@@ -151,7 +151,7 @@ Accountの`LoginID`・`Password`による本人認証と、運営者が構成時
 ```mermaid
 sequenceDiagram
     actor User
-    participant AuthProvider as 設定済み追加認可Provider
+    participant AuthProvider as Client選択の追加認可Provider
     participant Client
     participant PublicAPIServer as Public API Server
     participant PrivateAPIServer as Private API Server
@@ -162,9 +162,9 @@ sequenceDiagram
         AuthProvider-->>User: Discord用の検証可能なToken
     end
 
-    User->>Client: LoginID・Password・ユーザー名入力
-    Client->>PublicAPIServer: CreateAccount(LoginID, Password, UserName, 選択Provider用Tokenまたは省略)
-    PublicAPIServer->>PublicAPIServer: Server設定に応じたAdapterで検証 (NONE時は追加認可なし)
+    User->>Client: LoginID・Password・ユーザー名・追加認可Providerを選択
+    Client->>PublicAPIServer: CreateAccount(LoginID, Password, UserName, Provider, 選択Provider用Tokenまたは省略)
+    PublicAPIServer->>PublicAPIServer: Provider許可判定と選択Adapterで検証 (NONE時は追加認可なし)
     PublicAPIServer->>PrivateAPIServer: CreateAccount(LoginID, Password, UserName, Providerと検証済みSubject/Token識別子)
     PrivateAPIServer->>PrivateAPIServer: LoginID・Password・UserName検証
     PrivateAPIServer->>PrivateAPIServer: Argon2idでPasswordHash生成
@@ -192,7 +192,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     actor User
-    participant AuthProvider as 設定済み追加認可Provider
+    participant AuthProvider as Client選択の追加認可Provider
     participant Client
     participant PublicAPIServer as Public API Server
     participant PrivateAPIServer as Private API Server
@@ -203,16 +203,16 @@ sequenceDiagram
         AuthProvider-->>User: Discord用の検証可能なToken
     end
 
-    User->>Client: ログイン操作
-    Client->>PublicAPIServer: Login(LoginID, Password, ClientVersion, DiscordAuthorizationToken)
+    User->>Client: 追加認可Providerを選択してログイン操作
+    Client->>PublicAPIServer: Login(LoginID, Password, ClientVersion, Provider, 選択Provider用Tokenまたは省略)
     PublicAPIServer->>PublicAPIServer: ClientVersion == RequiredVersionを確認
 
     alt Version一致
-        PublicAPIServer->>PublicAPIServer: 選択した追加認可方式のTokenを検証
-        PublicAPIServer->>PrivateAPIServer: AuthenticateAccount(LoginID, Password, DiscordUserID, DiscordAuthorizationTokenID)
+        PublicAPIServer->>PublicAPIServer: Provider許可判定と選択AdapterによるToken検証
+        PublicAPIServer->>PrivateAPIServer: AuthenticateAccount(LoginID, Password, Providerと検証済みSubject/Token識別子)
         PrivateAPIServer->>Database: LoginIDに対応するACCOUNT・PLAYER取得
         Database-->>PrivateAPIServer: Account・Player
-        PrivateAPIServer->>PrivateAPIServer: 必要な場合DiscordUserID Binding検証
+        PrivateAPIServer->>PrivateAPIServer: ProviderとSubject Binding照合（DISCORD時はDiscordUserIDも照合）
         PrivateAPIServer->>PrivateAPIServer: Argon2idでPassword検証
 
         alt 認証成功
@@ -326,6 +326,6 @@ CreateGuildへの応答が失われた場合、Clientは`GetInitialGuildStatus`�
 
 ## 追加認可方式のClient通知
 
-Public APIの`GetAdditionalAuthorizationConfig`は認証不要・読取専用で、現在の選択値、追加認可の要否、およびAdapterの利用可否だけを提供する。ログイン・新規登録の第一者認証画面はこの応答に従って必要な認可入力を案内する。Provider選択はServer設定だけで確定し、ClientからのProvider自己申告による切替は認めない。
+Public APIの`GetAdditionalAuthorizationConfig`は認証不要・読取専用で、利用可能なProviderの集合を`available_providers`として返す。Clientはログイン・新規登録の第一者認証画面でProviderを明示選択し、Requestに選択値を設定する。Serverは選択値の許可とAdapter検証を必須とし、未指定時に自動選択しない。
 
-Login時は`ACCOUNT.additional_authorization_provider`とServer設定のProviderが一致し、検証済みSubjectが登録時のBindingと一致する場合だけ成立する。ProviderまたはSubjectの不一致は拒否する。
+Login時は`ACCOUNT.additional_authorization_provider`とClient選択後にServerが検証したProviderが一致し、`NONE`以外では検証済みSubjectが登録時のBindingと一致する場合だけ成立する。ProviderまたはSubjectの不一致は拒否し、既存Accountへ別Providerを自動連携しない。

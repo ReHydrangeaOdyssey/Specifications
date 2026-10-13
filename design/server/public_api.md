@@ -13,9 +13,9 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 - Public API Serverは認証状態およびゲーム状態を正本として保持しないstateless構成とする.
 - テスト環境では Private Network の外側に配置される.
 - 要求/レスポンスの意味・制約は[API Payload](api_payload.md), Protocol Buffersのwire schemaとfield numberは「[public_api.proto](../system/public_api.proto)」を参照する. `public_api.proto`はPayload schemaを定義し, gRPC Service・HTTP method・HTTP pathは追加定義しない.
-- 認証前の読み取り専用`GetAdditionalAuthorizationConfig`はAccessTokenなしで許可し、`AdditionalAuthorizationProvider`の`DISCORD`/`POCKETBASE`/`OTHER`/`NONE`と認可要否・利用可否だけを返す。認可Tokenの検証やProviderの切替をClientへ委ねない。サーバー構成に未実装Adapterが指定されていた場合はServerを起動失敗させ、`provider_available=true`を虚偽表示しない。APIは構成値から返し、秘密鍵やProviderの内部資格情報を含めない。
+- 認証前の読み取り専用`GetAdditionalAuthorizationConfig`はAccessTokenなしで許可し、Serverで有効化された`DISCORD`/`POCKETBASE`/`OTHER`/`NONE`のうち利用可能なProviderの一覧を返す。Clientはその一覧から方式を明示選択する。Serverは許可外・未実装方式を拒否し、秘密鍵やProviderの内部資格情報を公開しない。
 
-- `CreateAccount`および`Login`の追加認可は`AdditionalAuthorizationProvider`の選択値に従い、「[セッション仕様](session.md)」の検証済み主体だけをPrivate APIへ渡す。`NONE`では追加認可Tokenを必須としない。
+- `CreateAccount`および`Login`はClientが選択した`additional_authorization_provider`を必須とする。Public API ServerがProviderの許可と追加認可Tokenを検証し、「[セッション仕様](session.md)」の検証済み主体だけをPrivate APIへ渡す。`NONE`では追加認可Tokenを必須としない。
 - `AccessToken`を要求するPublicAPIは, 処理前にAccessTokenを検証する.
   - 署名, `alg`, `iss`, `aud`, `exp`, `player_id`を「[セッション仕様](session.md)」に従って検証する.
   - AccessToken検証のためにPrivate API ServerまたはDatabaseへ問い合わせない.
@@ -59,18 +59,18 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 
 #### 処理内容
 
-- LoginID, Password, UserName, DiscordAuthorizationTokenを受け取る.
-- `AdditionalAuthorizationProvider=DISCORD`の場合はDiscordAuthorizationTokenを検証する. 未指定の場合は`API_ERROR_DISCORD_AUTHORIZATION_REQUIRED`, 不正または期限切れの場合は`API_ERROR_INVALID_DISCORD_AUTHORIZATION_TOKEN`を返す.
-- `AdditionalAuthorizationProvider=NONE`の場合はDiscordAuthorizationTokenを要求しない.
+- LoginID、Password、UserName、選択したAdditionalAuthorizationProvider、および選択方式に必要な追加認可Tokenを受け取る。
+- Providerが省略・未知・許可外の場合はHTTP 400で拒否する。選択Providerが`DISCORD`の場合はDiscordAuthorizationTokenを検証する。Token未指定は`API_ERROR_DISCORD_AUTHORIZATION_REQUIRED`、不正または期限切れは`API_ERROR_INVALID_DISCORD_AUTHORIZATION_TOKEN`を返す。`POCKETBASE`/`OTHER`の場合は選択Adapterが`additional_authorization_token`を検証し、認可不成立はHTTP 401で拒否する。
+- 選択Providerが`NONE`の場合は追加認可Tokenを要求しない。
 - LoginIDおよびPasswordは「[セッション仕様](session.md)」に従って検証する.
 - UserNameをチェックする.
-  - 有効なUTF-8である.
-  - 10文字以下である.
-  - 空文字ではない.
-  - ユーザー名の重複は許可する.
-- `AdditionalAuthorizationProvider=DISCORD`の場合は検証済みTokenからDiscordUserIDとDiscordAuthorizationTokenIDを取得する.
-- Private API Serverの`CreateAccount`へLoginID, Password, UserNameと, 必要な場合DiscordUserID, DiscordAuthorizationTokenIDを要求する.
-- Private API ServerはAccountIDおよびPlayerIDを生成し, `ACCOUNT`と`PLAYER`を同一トランザクションで保存する. Discord追加認可を使用する場合はAccountへのDiscordUserID BindingおよびToken使用済み記録も同一トランザクションで保存する.
+  - 有効なUTF-8で、Unicodeスカラー値数が1～10文字である。自動Unicode正規化は行わない。
+  - UnicodeのLetter・Mark・Number・Punctuation・Symbolの一般文字と、半角スペース（U+0020）・全角スペース（U+3000）・改行（LF、U+000A）を許可する。ASCIIのU+0021～U+007Eも許可する。
+  - 絵文字、Unicodeの制御文字・書式文字・未割当文字は拒否する。ただし改行LFだけは制御文字の例外として許可する。ZWJ、絵文字用異体字セレクタ、Regional Indicator、Emoji Modifier、Keycap Combining Markなどによる絵文字列も拒否する。
+  - ユーザー名の重複は許可する。
+- 選択Providerが`DISCORD`の場合は検証済みTokenからDiscordUserIDとDiscordAuthorizationTokenIDを取得する。非Discord方式ではAdapterの検証済み不変Subjectを使用する。
+- Private API Serverの`CreateAccount`へLoginID、Password、UserName、Serverで検証済みProvider・Subject、および`DISCORD`の場合に限りDiscordUserID・DiscordAuthorizationTokenIDを送信する。
+- Private API ServerはAccountIDおよびPlayerIDを生成し、`ACCOUNT`と`PLAYER`およびProvider・Subject Bindingを同一トランザクションで保存する。Discord追加認可ではDiscordUserID BindingとToken使用済み記録も同じトランザクションに含める。
 - `PLAYER.max_bp`は200で初期化する.
 
 #### 要求データ
@@ -96,14 +96,14 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 - `LoginRequest.ClientVersion`とPublic API Serverが要求する`Version`を比較する.
   - 一致しない場合は認証処理を行わず, `LoginVersionErrorResponse`で`API_ERROR_CLIENT_VERSION_MISMATCH`と要求Versionを返す.
   - Clientは本エラーを受け取った場合, ゲームデータおよびClientの更新をユーザーへ促す.
-- `AdditionalAuthorizationProvider=DISCORD`の場合はDiscordAuthorizationTokenを検証する. 未指定の場合は`API_ERROR_DISCORD_AUTHORIZATION_REQUIRED`, 不正または期限切れの場合は`API_ERROR_INVALID_DISCORD_AUTHORIZATION_TOKEN`を返す.
-- `AdditionalAuthorizationProvider=NONE`の場合はDiscordAuthorizationTokenを要求しない.
-- `AdditionalAuthorizationProvider=DISCORD`の場合は検証済みTokenからDiscordUserIDとDiscordAuthorizationTokenIDを取得する.
-- Private API Serverの`AuthenticateAccount`へLoginID, Passwordと, 必要な場合DiscordUserID, DiscordAuthorizationTokenIDを送信する.
-- Private API ServerはDiscord追加認可が有効な場合にAccountへBindingされたDiscordUserIDとの一致およびToken未使用を確認する.
+- Providerが省略・未知・許可外の場合はHTTP 400で拒否する。選択Providerが`DISCORD`の場合はDiscordAuthorizationTokenを検証する。Token未指定は`API_ERROR_DISCORD_AUTHORIZATION_REQUIRED`、不正または期限切れは`API_ERROR_INVALID_DISCORD_AUTHORIZATION_TOKEN`を返す。`POCKETBASE`/`OTHER`の場合は選択Adapterが`additional_authorization_token`を検証し、認可不成立はHTTP 401で拒否する。
+- 選択Providerが`NONE`の場合は追加認可Tokenを要求しない。
+- 選択Providerが`DISCORD`の場合は検証済みTokenからDiscordUserIDとDiscordAuthorizationTokenIDを取得する。非Discord方式ではAdapterの検証済み不変Subjectを使用する。
+- Private API Serverの`AuthenticateAccount`へLoginID、Password、Serverで検証済みProvider・Subject、および`DISCORD`の場合に限りDiscordUserID・DiscordAuthorizationTokenIDを送信する。
+- Private API ServerはAccountに保存したProviderと検証済みProviderを照合し、`NONE`以外では検証済みSubjectとの一致を必須とする。`DISCORD`ではさらにBinding済みDiscordUserIDとの一致とToken未使用を確認する。異なるProviderの既存Accountへの自動連携は行わない。
 - Private API ServerはPassword検証成功時に既存Refresh Sessionを無効化し, 新しいSessionID, AccessToken, RefreshTokenを生成する.
 - Public API ServerはRefreshTokenをResponse Bodyへ含めず, 「[セッション仕様](session.md)」に従う`__Host-RefreshToken` HttpOnly Cookieとして設定する.
-- LoginID不存在, Password不一致およびDiscordUserID Binding不一致は区別せず`API_ERROR_INVALID_CREDENTIALS`として返す.
+- LoginID不存在、Password不一致、Provider／Subject Binding不一致およびDiscordUserID Binding不一致は区別せず`API_ERROR_INVALID_CREDENTIALS`として返す。
 
 #### 要求データ
 
@@ -377,7 +377,7 @@ GuildNameがBoundary Validationを満たさない場合は`ApiErrorResponse(API_
 - `Characters`は1～5件とし, 各`Position`はフォーメーション内部番号1～9だけを許可する. 同一`Position`への複数本体キャラクター配置は編成不正とする.
 - 検証成功後, GameServerからPrivate API Serverへ編成情報登録を要求する.
 - Private API ServerがDatabaseへ編成情報を登録する.
-- 登録確定後は対象PlayerIDとArenaParty登録状態のみを全GameServerへ同期し, 次のランダム対戦候補選択へ反映する.
+- 登録確定後はDatabase上のArenaParty登録状態を正本とする。ランダム対戦候補は各対戦要求時にPrivate API `GetAllPlayerIDs`で取得し、GameServer間の候補通知・同期や候補キャッシュを使用しない。
 
 #### 要求データ
 
@@ -843,9 +843,9 @@ GameServer側のチェック.
 ## GetAdditionalAuthorizationConfig
 
 - 認証前に呼べるRead-only Public API。`GetAdditionalAuthorizationConfigRequest`は空Messageとする。
-- Responseは`provider`、`additional_authorization_required`、`provider_available`を返す。Tokenや秘密情報は返さない。
-- 運営者が選択したProviderが未実装の場合、Serverの起動を拒否する。Client側で勝手に`NONE`へフォールバックしない。
-- 認証Originのログイン/登録画面はこの値を取得して必要な入力を案内する。既存の認可コード・PKCE手順は維持する。
+- Responseは`available_providers`で利用可能なProvider名を列挙する。Tokenや秘密情報は返さない。
+- Server設定で有効化されたProviderに未実装Adapterがある場合は起動を拒否する。ClientはConfig結果からProviderを明示選択し、取得失敗時や選択Providerの認証失敗時に`NONE`へ自動切替しない。
+- 認証Originのログイン/登録画面はこの一覧を取得して利用者に選択させ、必要な入力を案内する。既存の認可コード・PKCE手順は維持する。
 
 #### Item使用時の確定・低遅延条件
 

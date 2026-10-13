@@ -49,6 +49,7 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 
 #### 処理内容
 
+- Public API Serverで検証済みのProvider・Subjectを検証し、`NONE`ではSubjectが空文字であること、`DISCORD`ではDiscordUserID・Token IDが存在すること、それ以外ではDiscord専用フィールドが無効値であることを確認する。
 - LoginIDの重複をDatabaseで確認する.
 - LoginID重複時は作成せず, ClientへLoginID重複を区別して返さない.
 - `AdditionalAuthorizationProvider=DISCORD`の場合は要求DiscordAuthorizationTokenIDが未使用であることを確認する.
@@ -57,7 +58,7 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 - AccountIDおよびPlayerIDを生成する.
   - `0`と`u64::MAX`は予約済み無効値のため生成対象外.
   - Databaseの一意制約に衝突した場合は再生成する.
-- `ACCOUNT`と`PLAYER`を同一トランザクションで保存する. `AdditionalAuthorizationProvider=DISCORD`の場合はDiscordUserID BindingとDiscordAuthorizationTokenID使用済み記録も同一トランザクションで保存する.
+- `ACCOUNT`と`PLAYER`およびProvider／Subject Bindingを同一トランザクションで保存する。`DISCORD`の場合はDiscordUserID BindingとDiscordAuthorizationTokenID使用済み記録も同じトランザクションで保存する。
 - `PLAYER.max_bp`は200, `guild_battle_win_count`・`guild_battle_lose_count`・`guild_battle_participation_count`・`guild_battle_total_score`は0で初期化する.
 
 #### 要求・レスポンス
@@ -73,10 +74,11 @@ API全体の分類は「[API仕様](api.md)」を参照する.
 #### 処理内容
 
 - LoginIDに対応する`ACCOUNT`および`PLAYER`を取得する.
-- `AdditionalAuthorizationProvider=DISCORD`の場合は要求DiscordUserIDが`ACCOUNT.discord_user_id`と一致し, 要求DiscordAuthorizationTokenIDが未使用であることを確認する.
+- Server検証済みProviderが`ACCOUNT.additional_authorization_provider`と一致することを必須とする。`NONE`では保存済みSubjectと要求Subjectがともに空文字であることを検証する。`NONE`以外では要求の検証済みSubjectと保存済み`additional_authorization_subject`の一致を必須とする。Provider変更時も別Providerから既存Accountへ自動紐付けしない。
+- `DISCORD`の場合は要求DiscordUserIDが`ACCOUNT.discord_user_id`と一致し、要求DiscordAuthorizationTokenIDが未使用であることを確認する。
 - Argon2id処理は認証専用の同時実行制限対象とし, 設定済み最大同時実行数を超えて開始しない. 空きがない場合は待機キューを無制限に増加させず, `API_ERROR_RATE_LIMIT_EXCEEDED`として拒否する.
 - Argon2idでPasswordを検証する.
-- LoginID不存在, Password不一致およびDiscordUserID Binding不一致を呼び出し元へ区別して返さない.
+- LoginID不存在、Password不一致、Provider／Subject Binding不一致およびDiscordUserID Binding不一致を呼び出し元へ区別して返さない。
 - 認証成功時は既存`ACCOUNT_SESSION`を削除する.
 - 128bitのSessionIDを暗号学的乱数で生成する.
 - 32byteのRefreshTokenを暗号学的乱数で生成する.

@@ -14,7 +14,7 @@ HTTP 400は構文/型/許容値の不正、401は認証不成立、403は権限�
 | RPC / Field | Presence・許容値 | 不正・衝突時 |
 |---|---|---|
 | `GetAdditionalAuthorizationConfig` / 空Request | Message Body必須、Credential不要 | HTTP 400 |
-| `CreateAccount`・`Login` / `login_id`,`password` | `login_id`: ASCII英数字と `._-`、3～64文字・大文字小文字を区別。`password`: 非空。認可Tokenは選択中Providerの契約に従い、`NONE`なら追加Token不要 | 400（形式）、401（認証） |
+| `CreateAccount`・`Login` / `login_id`,`password`,`additional_authorization_provider` | `login_id`: ASCII英数字と `._-`、3～64文字・大文字小文字を区別。`password`: 非空。ProviderはClientが明示選択し、許可済み方式に限定する。認可Tokenは選択Providerの契約に従い、`NONE`なら追加Token不要 | 400（形式/Provider）、401（認証） |
 | `CreateGuild` / `guild_name`,`daytime_start_time`,`nighttime_start_time` | `guild_name`: UTF-8で1～10文字（重複可）。昼夜はProtoBuf `optional`のPresence必須。定義済み列挙値0が有効なら明示0を許可 | 400（省略/列挙外） |
 | `RespondFriendRequest` / `approve` | `optional bool`を必須。明示`false`は拒否として有効 | 400（省略） |
 | `UseItem` / `player_id`,`guild_battle_id`,`request_sequence`,`item_id` | 既存ID範囲とOwner/Join/Sequence一致を要求。所持数0のときの使用は不成立。Item残数の変更はWAL受理確定後 | 400（型・範囲）、403（他人）、409（残数・順序・対戦状態） |
@@ -29,7 +29,7 @@ HTTP 400は構文/型/許容値の不正、401は認証不成立、403は権限�
 
 通常のBearer認証を要するPublic RPCについては、各表の`access_token`行に加えて[API通信契約](api_transport.md)の「通常認証Public RPCのBearer Header/Body AccessToken整合」を適用する。移行期間中はHeader/Body両方を検証し、不一致・欠落はHTTP 401で拒否する。認証不要・認証Origin専用の既存フローにはこの二重照合を適用しない。
 
-追加認可Tokenの必須性は`design/server/session.md`の`AdditionalAuthorizationProvider`を正本とする。`DISCORD`では従来Field 4、`POCKETBASE`ではField 5を用い、`NONE`では両者の省略を認める。検証Adapter未実装の方式は許可しない。
+Clientは`CreateAccount`/`Login`のField 6でProviderを必須指定する。Serverは`AllowedAdditionalAuthorizationProviders`と照合し、未実装Adapterを選択させない。`DISCORD`ではField 4のTokenを必須とし、`POCKETBASE`/`OTHER`ではField 5を使用する。`NONE`では両Tokenを要求しない。未指定Providerからの自動選択は行わない。
 
 ### Public `GetAdditionalAuthorizationConfig` — `GetAdditionalAuthorizationConfigRequest`
 
@@ -44,9 +44,10 @@ HTTP 400は構文/型/許容値の不正、401は認証不成立、403は権限�
 |---|---|---|---|---|
 | `login_id` | `string`（1） | 必須、3～64文字（Proto3空文字は拒否） | ASCII英数字および`._-`のみ。大小文字を区別 | 400:文字/長さ不正、401:認証失敗 |
 | `password` | `string`（2） | 空文字禁止、長さ/形式は既存認証仕様 | UTF-8/Token/Header/Sizeなど既存Payload制約 | 400:形式不正、401:認証不成立 |
-| `user_name` | `string`（3） | 必須。有効なUTF-8で1～10文字 | 重複可。空文字または10文字超は拒否する | 400:文字数/形式不正 |
+| `user_name` | `string`（3） | 必須。有効なUTF-8、Unicodeスカラー値で1～10文字 | Unicode正規化せず、`design/server/public_api.md`の文字種制限を適用。重複可 | 400:文字数/文字種不正 |
 | `discord_authorization_token` | `string`（4） | `DISCORD`のとき必須。それ以外では省略可 | UTF-8/Token/Header/Sizeなど既存Payload制約 | 401:認証不正、400:形式不正 |
-| `additional_authorization_token` | `string`（5） | `POCKETBASE`等の非Discord追加認可で必須、`NONE`では省略可 | 検証Adapterが検証したTokenのみ有効 | 401:認可不成立、400:形式不正 |
+| `additional_authorization_token` | `string`（5） | `POCKETBASE`/`OTHER`等の非Discord追加認可で必須、`NONE`では省略可 | 検証Adapterが検証したTokenのみ有効 | 401:認可不成立、400:形式不正 |
+| `additional_authorization_provider` | `string`（6） | Clientの明示選択必須 | `DISCORD` / `POCKETBASE` / `OTHER` / `NONE`のうちServer許可済みProviderのみ | 400:省略/未知/許可外 |
 
 ### Public `Login` — `LoginRequest`
 
@@ -56,7 +57,8 @@ HTTP 400は構文/型/許容値の不正、401は認証不成立、403は権限�
 | `password` | `string`（2） | 空文字禁止、長さ/形式は既存認証仕様 | UTF-8/Token/Header/Sizeなど既存Payload制約 | 400:形式不正、401:認証不成立 |
 | `client_version` | `string`（3） | 必須、空文字不可 | Server指定のRequiredVersionと一致 | 400:空値、既存のClientVersionMismatch Error:不一致 |
 | `discord_authorization_token` | `string`（4） | `DISCORD`のとき必須。それ以外では省略可 | UTF-8/Token/Header/Sizeなど既存Payload制約 | 401:認証不正、400:形式不正 |
-| `additional_authorization_token` | `string`（5） | `POCKETBASE`等の非Discord追加認可で必須、`NONE`では省略可 | 検証Adapterが検証したTokenのみ有効 | 401:認可不成立、400:形式不正 |
+| `additional_authorization_token` | `string`（5） | `POCKETBASE`/`OTHER`等の非Discord追加認可で必須、`NONE`では省略可 | 検証Adapterが検証したTokenのみ有効 | 401:認可不成立、400:形式不正 |
+| `additional_authorization_provider` | `string`（6） | Clientの明示選択必須 | `DISCORD` / `POCKETBASE` / `OTHER` / `NONE`のうちServer許可済みProviderのみ | 400:省略/未知/許可外 |
 
 ### Public `RefreshAccessToken` — `RefreshAccessTokenRequest`
 
@@ -287,13 +289,13 @@ HTTP 400は構文/型/許容値の不正、401は認証不成立、403は権限�
 | Field | Wire型 | Presence/必須性 | 有効値/制限 | 不正時 |
 |---|---|---|---|---|
 | `redirect_uri` | `string`（1） | 非空を要求する場合は空文字/空bytesを拒否 | UTF-8/Token/Header/Sizeなど既存Payload制約 | 400:型/長さ不正、401:認証失敗 |
-| `code_challenge_sha256` | `bytes`（2） | 非空を要求する場合は空文字/空bytesを拒否 | UTF-8/Token/Header/Sizeなど既存Payload制約 | 400:型/長さ不正、401:認証失敗 |
+| `code_challenge_sha256` | `bytes`（2） | 非空を要求する場合は空文字/空bytesを拒否 | バイナリ値として検証する。UTF-8妥当性は要求せず、元のToken/Hash・固定byte長・Payload制約を適用する | 400:型/長さ不正、401:認証失敗 |
 
 ### Public `ExchangeAuthorizationCode` — `ExchangeAuthorizationCodeRequest`
 
 | Field | Wire型 | Presence/必須性 | 有効値/制限 | 不正時 |
 |---|---|---|---|---|
-| `authorization_code` | `bytes`（1） | 非空を要求する場合は空文字/空bytesを拒否 | UTF-8/Token/Header/Sizeなど既存Payload制約 | 400:型/長さ不正、401:認証失敗 |
+| `authorization_code` | `bytes`（1） | 非空を要求する場合は空文字/空bytesを拒否 | バイナリ値として検証する。UTF-8妥当性は要求せず、元のToken/Hash・固定byte長・Payload制約を適用する | 400:型/長さ不正、401:認証失敗 |
 | `redirect_uri` | `string`（2） | 非空を要求する場合は空文字/空bytesを拒否 | UTF-8/Token/Header/Sizeなど既存Payload制約 | 400:型/長さ不正、401:認証失敗 |
 | `code_verifier` | `string`（3） | 非空を要求する場合は空文字/空bytesを拒否 | UTF-8/Token/Header/Sizeなど既存Payload制約 | 400:型/長さ不正、401:認証失敗 |
 
@@ -419,10 +421,10 @@ HTTP 400は構文/型/許容値の不正、401は認証不成立、403は権限�
 |---|---|---|---|---|
 | `login_id` | `string`（1） | 必須、3～64文字（Proto3空文字は拒否） | ASCII英数字および`._-`のみ。大小文字を区別 | 400:文字/長さ不正、401:認証失敗 |
 | `password` | `string`（2） | 空文字禁止、長さ/形式は既存認証仕様 | UTF-8/Token/Header/Sizeなど既存Payload制約 | 400:形式不正、401:認証不成立 |
-| `user_name` | `string`（3） | 必須。有効なUTF-8で1～10文字 | 重複可。空文字または10文字超は拒否する | 400:文字数/形式不正 |
+| `user_name` | `string`（3） | 必須。有効なUTF-8、Unicodeスカラー値で1～10文字 | Unicode正規化せず、`design/server/public_api.md`の文字種制限を適用。重複可 | 400:文字数/文字種不正 |
 | `discord_user_id` | `uint64`（4） | `DISCORD`の場合のみ検証済みID必須。それ以外は0 | Serverで確認済みのDiscordUserID。Account Bindingと照合 | 400/401:不正・不一致 |
 | `discord_authorization_token_id` | `bytes`（5） | `DISCORD`の場合のみ検証済みToken ID必須。それ以外は空bytes | 使用済みToken IDをDBと照合し、再利用を拒否 | 400/401:不正・再利用 |
-| `additional_authorization_provider` | `string`（6） | Serverが選択・検証済みのProviderを必須として中継する | `DISCORD` / `POCKETBASE` / `OTHER` / `NONE`。Client申告を採用しない。未実装Adapterの有効化は禁止 | 400/401:不正・未検証 |
+| `additional_authorization_provider` | `string`（6） | Public API Serverが選択値の許可とAdapter検証を完了して必ず中継する | 許可済み`DISCORD` / `POCKETBASE` / `OTHER` / `NONE`。検証済みProviderとして扱う | 400/401:不正・未検証 |
 | `additional_authorization_subject` | `string`（7） | `NONE`以外で検証済み不変Subject必須、`NONE`では空文字 | 登録対象AccountへProviderと組でBindingする | 400/401:不正・未検証 |
 
 ### Private `AuthenticateAccount` — `AuthenticateAccountRequest`
@@ -433,26 +435,26 @@ HTTP 400は構文/型/許容値の不正、401は認証不成立、403は権限�
 | `password` | `string`（2） | 空文字禁止、長さ/形式は既存認証仕様 | UTF-8/Token/Header/Sizeなど既存Payload制約 | 400:形式不正、401:認証不成立 |
 | `discord_user_id` | `uint64`（3） | `DISCORD`の場合のみ検証済みID必須。それ以外は0 | Serverで確認済みのDiscordUserID。Account Bindingと照合 | 400/401:不正・不一致 |
 | `discord_authorization_token_id` | `bytes`（4） | `DISCORD`の場合のみ検証済みToken ID必須。それ以外は空bytes | 使用済みToken IDをDBと照合し、再利用を拒否 | 400/401:不正・再利用 |
-| `additional_authorization_provider` | `string`（5） | Serverが選択・検証済みのProviderを必須として中継する | `DISCORD` / `POCKETBASE` / `OTHER` / `NONE`。登録時Bindingと照合 | 400/401:不正・不一致 |
+| `additional_authorization_provider` | `string`（5） | Public API ServerでClient選択値の許可とAdapter検証を終えたProviderを必ず中継する | 保存済みAccountのProviderと完全一致を要求する | 400/401:不正・不一致 |
 | `additional_authorization_subject` | `string`（6） | `NONE`以外で検証済み不変Subject必須、`NONE`では空文字 | Accountに保存された同ProviderのSubjectと照合 | 400/401:不正・不一致 |
 
 ### Private `RefreshAccessToken` — `RefreshAccessTokenPrivateRequest`
 
 | Field | Wire型 | Presence/必須性 | 有効値/制限 | 不正時 |
 |---|---|---|---|---|
-| `refresh_token` | `bytes`（1） | 未設定の認証情報は拒否 | UTF-8/Token/Header/Sizeなど既存Payload制約 | 401:認証不正、400:形式不正 |
+| `refresh_token` | `bytes`（1） | 未設定の認証情報は拒否 | バイナリ値として検証する。UTF-8妥当性は要求せず、元のToken/Hash・固定byte長・Payload制約を適用する | 401:認証不正、400:形式不正 |
 
 ### Private `Logout` — `LogoutPrivateRequest`
 
 | Field | Wire型 | Presence/必須性 | 有効値/制限 | 不正時 |
 |---|---|---|---|---|
-| `refresh_token` | `bytes`（1） | 未設定の認証情報は拒否 | UTF-8/Token/Header/Sizeなど既存Payload制約 | 401:認証不正、400:形式不正 |
+| `refresh_token` | `bytes`（1） | 未設定の認証情報は拒否 | バイナリ値として検証する。UTF-8妥当性は要求せず、元のToken/Hash・固定byte長・Payload制約を適用する | 401:認証不正、400:形式不正 |
 
 ### Private `ValidateAccountSession` — `ValidateAccountSessionRequest`
 
 | Field | Wire型 | Presence/必須性 | 有効値/制限 | 不正時 |
 |---|---|---|---|---|
-| `session_id` | `bytes`（1） | 非空を要求する場合は空文字/空bytesを拒否 | UTF-8/Token/Header/Sizeなど既存Payload制約 | 400:型/長さ不正、401:認証失敗 |
+| `session_id` | `bytes`（1） | 非空を要求する場合は空文字/空bytesを拒否 | バイナリ値として検証する。UTF-8妥当性は要求せず、元のToken/Hash・固定byte長・Payload制約を適用する | 400:型/長さ不正、401:認証失敗 |
 
 ### Private `RevokeDiscordSessions` — `RevokeDiscordSessionsRequest`
 
@@ -756,17 +758,17 @@ HTTP 400は構文/型/許容値の不正、401は認証不成立、403は権限�
 
 | Field | Wire型 | Presence/必須性 | 有効値/制限 | 不正時 |
 |---|---|---|---|---|
-| `refresh_token` | `bytes`（1） | 未設定の認証情報は拒否 | UTF-8/Token/Header/Sizeなど既存Payload制約 | 401:認証不正、400:形式不正 |
+| `refresh_token` | `bytes`（1） | 未設定の認証情報は拒否 | バイナリ値として検証する。UTF-8妥当性は要求せず、元のToken/Hash・固定byte長・Payload制約を適用する | 401:認証不正、400:形式不正 |
 | `redirect_uri` | `string`（2） | 非空を要求する場合は空文字/空bytesを拒否 | UTF-8/Token/Header/Sizeなど既存Payload制約 | 400:型/長さ不正、401:認証失敗 |
-| `code_challenge_sha256` | `bytes`（3） | 非空を要求する場合は空文字/空bytesを拒否 | UTF-8/Token/Header/Sizeなど既存Payload制約 | 400:型/長さ不正、401:認証失敗 |
+| `code_challenge_sha256` | `bytes`（3） | 非空を要求する場合は空文字/空bytesを拒否 | バイナリ値として検証する。UTF-8妥当性は要求せず、元のToken/Hash・固定byte長・Payload制約を適用する | 400:型/長さ不正、401:認証失敗 |
 
 ### Private `RedeemAuthorizationCodePrivate` — `RedeemAuthorizationCodePrivateRequest`
 
 | Field | Wire型 | Presence/必須性 | 有効値/制限 | 不正時 |
 |---|---|---|---|---|
-| `authorization_code` | `bytes`（1） | 非空を要求する場合は空文字/空bytesを拒否 | UTF-8/Token/Header/Sizeなど既存Payload制約 | 400:型/長さ不正、401:認証失敗 |
+| `authorization_code` | `bytes`（1） | 非空を要求する場合は空文字/空bytesを拒否 | バイナリ値として検証する。UTF-8妥当性は要求せず、元のToken/Hash・固定byte長・Payload制約を適用する | 400:型/長さ不正、401:認証失敗 |
 | `redirect_uri` | `string`（2） | 非空を要求する場合は空文字/空bytesを拒否 | UTF-8/Token/Header/Sizeなど既存Payload制約 | 400:型/長さ不正、401:認証失敗 |
-| `code_verifier_sha256` | `bytes`（3） | 非空を要求する場合は空文字/空bytesを拒否 | UTF-8/Token/Header/Sizeなど既存Payload制約 | 400:型/長さ不正、401:認証失敗 |
+| `code_verifier_sha256` | `bytes`（3） | 非空を要求する場合は空文字/空bytesを拒否 | バイナリ値として検証する。UTF-8妥当性は要求せず、元のToken/Hash・固定byte長・Payload制約を適用する | 400:型/長さ不正、401:認証失敗 |
 
 ### Private `GetGuildFacilityUpgradeCostPrivate` — `GetGuildFacilityUpgradeCostPrivateRequest`
 
@@ -990,10 +992,10 @@ HTTP 400は構文/型/許容値の不正、401は認証不成立、403は権限�
 
 ## 運用中の認証RPCに適用する具体規則
 
-- `GetAdditionalAuthorizationConfig`は空のRequest Message Bodyのみを許可し、AccessTokenを要求しない。Provider列挙はServer側設定値に従い、ClientのRequestから選択しない。
-- `CreateAccount.login_id`および`Login.login_id`は非空で、`design/server/session.md`の3～64文字制約を満たすこと。`password`は空文字を許可せずSession仕様に従う。登録時`user_name`は有効なUTF-8で1～10文字とし、重複を許可する。
+- `GetAdditionalAuthorizationConfig`は空のRequest Message Bodyのみを許可し、AccessTokenを要求しない。Responseの`available_providers`をClientが参照し、`CreateAccount`/`Login`で選択Providerを明示する。ServerはRequestのProviderを許可済み一覧と照合する。
+- `CreateAccount.login_id`および`Login.login_id`は非空で、`design/server/session.md`の3～64文字制約を満たすこと。`password`は空文字を許可せずSession仕様に従う。登録時`user_name`は有効なUTF-8でUnicodeスカラー値1～10文字とし、文字種は`design/server/public_api.md`に従う。重複を許可する。
 - `Login.client_version`は空文字を拒否してServerの要求Versionと比較し、不一致を専用Version Errorとして返す。
-- 追加認可Tokenは現在選択されたProviderに応じて1系統だけを検証する。`NONE`ならTokenの存在自体を認可成立とは扱わない。未実装Adapterの構成はServerの起動時に拒否し、Clientの自己申告で変えない。
+- 追加認可TokenはClient指定ProviderがServerの許可済み一覧にあることを確認したうえで1系統だけ検証する。`NONE`ならTokenの存在自体を認可成立とは扱わない。未実装Adapterの有効化はServer起動時に拒否する。Login時のProvider／Subjectは保存済みBindingとの一致を必須とする。
 - `RespondFriendRequest.approve`など、**明示0/falseと省略が業務上異なるフィールドだけ**はProtoBufの`optional`のPresenceも確認する。その他のRPCの完全な値域について未提示のゲームルールを一括補完することはせず、実装に採用するAPIから個別の既存Payload制約を適用する。
 
 ### Item使用・保存の確定検証

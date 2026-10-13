@@ -76,7 +76,7 @@ stateDiagram-v2
 
 ### ログイン
 
-* LoginID・Passwordを入力してログインを実行する. ログイン画面表示時に認証前の`GetAdditionalAuthorizationConfig`を取得し、Serverが選択した追加認可方式（Discord / PocketBase / その他 / 追加認可なし）と利用可否を表示する。`NONE`でもLoginID/Passwordを要求する。方式をClient側で任意選択しない。設定取得不能時は方式を推測せずログイン実行を停止し、通信エラーを案内する。未実装方式はServer起動時に拒否する。
+* LoginID・Passwordを入力してログインを実行する。ログイン画面表示時に認証前の`GetAdditionalAuthorizationConfig.available_providers`を取得し、利用可能な追加認可方式（Discord / PocketBase / その他 / 追加認可なし）を選択肢として表示する。利用者は1方式を明示選択し、Login Requestへ指定する。`NONE`でもLoginID/Passwordを要求する。設定取得不能時は方式を推測・自動選択せずログイン実行を停止し、通信エラーを案内する。
 * 通信・認証に必要なページ遷移と認可コード交換は既存の認証通信契約に従う.
 * 「新規登録」からアカウント新規作成画面へ進める.
 * 認証成功後は`GetInitialGuildStatus`を取得し、共通ゲーム開始前検査に合格した場合だけ初期Guild作成済みならホーム、未作成なら初期騎士団作成画面へ進む。キャンセル・認証拒否の場合はタイトルへ戻る。未ログインのままでも同検査に合格すればホームへ進める。
@@ -162,7 +162,7 @@ stateDiagram-v2
 
 ## 認証設定表示の取得失敗
 
-ログインと新規登録の認証Origin画面は`GetAdditionalAuthorizationConfig`の結果だけで追加認可UIを決める。読取り失敗・未知Provider・`provider_available=false`では無認可に自動切替せず、認証操作を停止して再試行案内を表示する。取得した値は案内専用であり、Public API側の最終認可判定を代替しない。
+ログインと新規登録の認証Origin画面は`GetAdditionalAuthorizationConfig.available_providers`から利用可能なProviderを表示し、利用者に明示選択させる。読取り失敗・空の選択肢・未知Providerでは認証操作を停止して再試行案内を表示し、`NONE`への自動切替やProviderの自動決定を行わない。Public API Serverは選択値とTokenを独立に再検証する。
 
 ### ゲーム開始前のアセット必須条件
 

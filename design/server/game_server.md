@@ -107,4 +107,4 @@
 * `DiscordNotificationEnabled=false`の場合はDiscord Botへの通知を行わない. 通知以外のErrorLog保存および処理結果には影響させない.
 
 * アリーナの`StartArenaBattle`ではAccessToken・PlayerID等の検証完了後に共通内部API`GenerateTimeBasedSeed`でSeedを生成し, そのSeedでランダム対戦相手を抽選する.
-* ランダムアリーナ候補はPrivateAPIの`GetAllPlayerIDs`でDatabaseから取得・同期する.
+* ランダムアリーナ候補は各対戦要求時にPrivate APIの`GetAllPlayerIDs`でDatabaseから取得する。GameServer内に候補キャッシュを保持せず、GameServer間で候補を同期しない。

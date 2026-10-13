@@ -15,7 +15,7 @@ message CreateAccountPrivateRequest {
   string user_name = 3; // 新規Playerのゲーム内表示名
   uint64 discord_user_id = 4; // `AdditionalAuthorizationProvider=DISCORD`の場合は検証済みTokenの`sub`. 無効な構成では`0`
   bytes discord_authorization_token_id = 5; // DISCORDで検証済みTokenの`jti`. 他方式では空.
-  string additional_authorization_provider = 6; // Server構成で検証済みの方式名.
+  string additional_authorization_provider = 6; // Public API ServerがClient選択値の許可とAdapter検証を完了した方式名.
   string additional_authorization_subject = 7; // Adapterで検証済みの不変主体. NONEでは空.
 }
 
@@ -28,7 +28,7 @@ message AuthenticateAccountRequest {
   string password = 2; // 検証するPassword
   uint64 discord_user_id = 3; // `AdditionalAuthorizationProvider=DISCORD`の場合は検証済みTokenの`sub`. 無効な構成では`0`
   bytes discord_authorization_token_id = 4; // DISCORDで検証済みTokenの`jti`. 他方式では空.
-  string additional_authorization_provider = 5; // Server構成で検証済みの方式名.
+  string additional_authorization_provider = 5; // Public API ServerがClient選択値の許可とAdapter検証を完了した方式名.
   string additional_authorization_subject = 6; // Adapterで検証済みの不変主体. NONEでは空.
 }
 

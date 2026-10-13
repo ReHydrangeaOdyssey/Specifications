@@ -178,6 +178,7 @@ Account作成後の初期騎士団作成等, 必須の後続処理が成立し�
 | UserName | `UserName` | ゲーム内表示用ユーザー名 |
 | DiscordAuthorizationToken | `DiscordAuthorizationToken` | `AdditionalAuthorizationProvider=DISCORD`の場合だけ必須。それ以外は空文字を許す |
 | AdditionalAuthorizationToken | `String` | `POCKETBASE`等の非Discord追加認可Adapterが検証するToken。`NONE`では省略可 |
+| AdditionalAuthorizationProvider | `String` | Clientが利用可能なProviderから明示選択する方式名。省略不可 |
 
 ### CreateAccountResponse
 
@@ -194,6 +195,7 @@ Account作成後の初期騎士団作成等, 必須の後続処理が成立し�
 | ClientVersion | `Version` | Clientが使用しているゲームロジックおよびマスターデータのVersion |
 | DiscordAuthorizationToken | `DiscordAuthorizationToken` | `AdditionalAuthorizationProvider=DISCORD`の場合だけ必須。それ以外は空文字を許す |
 | AdditionalAuthorizationToken | `String` | `POCKETBASE`等の非Discord追加認可Adapterが検証するToken。`NONE`では省略可 |
+| AdditionalAuthorizationProvider | `String` | Clientが利用可能なProviderから明示選択する方式名。省略不可 |
 
 ### LoginResponse
 
@@ -723,7 +725,7 @@ GameServerが決定した戦闘開始時点の入力を送信し, ClientはGameS
 | UserName | `UserName` | 新規Playerのゲーム内表示名 |
 | DiscordUserID | `DiscordUserID` | `AdditionalAuthorizationProvider=DISCORD`の場合は検証済みTokenの`sub`. 無効な構成では`0` |
 | DiscordAuthorizationTokenID | `DiscordAuthorizationTokenID` | `AdditionalAuthorizationProvider=DISCORD`の場合は検証済みTokenの`jti`. それ以外は空値 |
-| AdditionalAuthorizationProvider | `String` | Server構成で確定し検証済みの方式。Clientの自己申告は無視 |
+| AdditionalAuthorizationProvider | `String` | Public API ServerがClient選択値の許可を確認し、必要なAdapter検証を終えた方式名 |
 | AdditionalAuthorizationSubject | `String` | Provider Adapter検証済みの主体。`NONE`では空値 |
 
 ### CreateAccountPrivateResponse
@@ -740,7 +742,7 @@ GameServerが決定した戦闘開始時点の入力を送信し, ClientはGameS
 | Password | `Password` | 検証するPassword |
 | DiscordUserID | `DiscordUserID` | `AdditionalAuthorizationProvider=DISCORD`の場合は検証済みTokenの`sub`. 無効な構成では`0` |
 | DiscordAuthorizationTokenID | `DiscordAuthorizationTokenID` | `AdditionalAuthorizationProvider=DISCORD`の場合は検証済みTokenの`jti`. それ以外は空値 |
-| AdditionalAuthorizationProvider | `String` | Server構成で確定し検証済みの方式。Clientの自己申告は無視 |
+| AdditionalAuthorizationProvider | `String` | Public API ServerがClient選択値の許可を確認し、必要なAdapter検証を終えた方式名 |
 | AdditionalAuthorizationSubject | `String` | Provider Adapter検証済みの主体。`NONE`では空値 |
 
 ### AuthenticateAccountResponse
@@ -1419,11 +1421,11 @@ Private APIは再抽選を行わない. `GuildBattleID[]`と`Battles[]`のID集�
 
 ## 追加認可用Payload
 
-`CreateAccountRequest`と`LoginRequest`の`discord_authorization_token`は`AdditionalAuthorizationProvider=DISCORD`のときだけ使用し、非Discord Adapterへ渡すTokenは`additional_authorization_token`とする。`NONE`では追加認可Tokenの省略を許可する。Private APIの`additional_authorization_provider`と`additional_authorization_subject`はPublic APIが認可Adapterで検証済みの結果を渡す内部値であり、Clientの自己申告値は使用しない。
+`CreateAccountRequest`と`LoginRequest`ではClientが`additional_authorization_provider`を必ず指定し、`GetAdditionalAuthorizationConfig.available_providers`のうちServerが許可した値のみ受け付ける。`DISCORD`のときだけ`discord_authorization_token`を使用し、非Discord Adapterへ渡すTokenは`additional_authorization_token`とする。`NONE`では追加認可Tokenを要求しない。Private APIの`additional_authorization_provider`と`additional_authorization_subject`はPublic API Serverが選択値の許可とAdapter検証を行った内部値とし、Client申告のSubjectを信頼しない。
 
 ### GetAdditionalAuthorizationConfigRequest / Response
 
-`GetAdditionalAuthorizationConfigRequest`は空Messageとし、ログイン前の認証Origin画面がCookie・AccessTokenなしで取得できる。Responseは`provider`（`DISCORD` / `POCKETBASE` / `OTHER` / `NONE`）、`additional_authorization_required`（`provider != NONE`）、`provider_available`（選択Adapterが有効化・検証可能な場合だけ`true`）を返す。`NONE`の場合もLoginID/Passwordは必須であり、匿名ログインを認めない。Clientが方式を要求ごとに変更することはできない。
+`GetAdditionalAuthorizationConfigRequest`は空Messageとし、ログイン前の認証Origin画面がCookie・AccessTokenなしで取得できる。Responseの`available_providers`にはServerが許可・有効化した`DISCORD` / `POCKETBASE` / `OTHER` / `NONE`のうち、利用可能なProviderだけを重複なしで含める。Clientはこの中から1つ選択して各認証Requestへ指定する。`NONE`でもLoginID/Passwordは必須であり、匿名ログインを認めない。
 
 ### Item Event数量の意味
 

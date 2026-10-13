@@ -92,7 +92,7 @@ Public API ServerはAccessTokenをDatabaseへ問い合わせずローカル検�
 
 ## CreateAccount / Login
 
-`AdditionalAuthorizationProvider=DISCORD`ではDiscord Botが発行した`DiscordAuthorizationToken`をPublic API Serverでローカル検証します。
+Clientが`GetAdditionalAuthorizationConfig.available_providers`から明示選択した`AdditionalAuthorizationProvider`を各認証Requestで受け取り、Serverの許可済みProvider集合と照合します。`DISCORD`ではDiscord Botが発行した`DiscordAuthorizationToken`をPublic API Serverでローカル検証します。非Discord方式では選択AdapterでTokenを検証し、`NONE`では追加認可Tokenを要求しません。
 
 LoginではClientVersionをPublic API Serverが要求するVersionと比較し、不一致時は定義済みVersion Errorを返します。
 
