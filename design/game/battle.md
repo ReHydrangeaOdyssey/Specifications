@@ -18,6 +18,13 @@ flowchart TD;
     CheckAnnihilation{どちらか全滅している?};
     DetermineOrder[攻撃順の確定];
     CheckQueueActable{攻撃待機キューに行動可能キャラクターがいる?};
+    CheckLiving{HP1以上のキャラクターが存在する?};
+    CheckAllComa{生存キャラクター全員が昏睡している?};
+    ForcedReset[activated_this_turn=false];
+    ForcedStatus[[行動なしで状態異常更新・昏睡ターン消費]];
+    ForcedTurnEndEffect[[ターン終了時処理]];
+    ForcedEndAbility[ABILITY_CONDITION_EVERY_N_TURNS / ABILITY_TURN_TIMING_TURN_END];
+    ForcedTurnEnd[行動なしのターン終了];
     RemoveIncapacitated[攻撃待機キューの行動不能キャラクターを取り除く];
     RefillQueue[2回目以降の規則で攻撃待機キューを更新];
     PopQueue[攻撃待機キューからPOP];
@@ -29,9 +36,13 @@ flowchart TD;
     UpdateStatusAbnormality[[状態異常更新]];
     UpdateTurnEndEffect[[ターン終了時処理]];
 
-    Start --> Ability --> DetermineOrder --> RemoveIncapacitated --> CheckQueueActable
+    Start --> Ability --> DetermineOrder --> RemoveIncapacitated --> CheckLiving
+    CheckLiving -- No --> Judgment
+    CheckLiving -- Yes --> CheckQueueActable
     CheckQueueActable -- Yes --> PopQueue --> TurnStart
-    CheckQueueActable -- No --> UpdateWaitCount
+    CheckQueueActable -- No --> CheckAllComa
+    CheckAllComa -- No --> UpdateWaitCount
+    CheckAllComa -- Yes --> ForcedReset --> ForcedStatus --> ForcedTurnEndEffect --> ForcedEndAbility --> ForcedTurnEnd --> NextTurn
     TurnStart --> TurnStartAbility --> BeforeActionAbility --> CharacterAttack --> AfterActionAbility --> UpdateStatusAbnormality --> UpdateTurnEndEffect --> TurnEndAbility --> AddWaitCount --> TurnEnd --> NextTurn
     NextTurn --> CheckAnnihilation
     CheckAnnihilation -- Yes --> Judgment;
@@ -42,8 +53,8 @@ flowchart TD;
     Judgment --> End
 ```
 
-戦闘開始直後は待機カウント更新を行わず, 全キャラクターの待機カウント0の状態から仕様書の初回規則に従って攻撃順を確定する. `UpdateWaitCount`は初回攻撃順確定後に使用する. 攻撃待機キューから行動キャラクターを取り出す前に行動不能キャラクターを除き, キューが空となった場合は待機カウントを再更新して2回目以降の規則でキューを更新する. ターン数は`TurnEnd`の後に加算する.
-`状態異常更新`で毒ダメージによりHPが0になった場合は, 戦闘不能時アビリティを発動せず, そのままターン終了時処理へ進む.
+戦闘開始直後は待機カウント更新を行わず, 全キャラクターの待機カウント0の状態から仕様書の初回規則に従って攻撃順を確定する. `UpdateWaitCount`は初回攻撃順確定後に使用する. 攻撃待機キューから行動キャラクターを取り出す前に行動不能キャラクターを除く. キューが空で生存者の中に行動可能者がいる場合は待機カウントを再更新し, 2回目以降の規則でキューを更新する. **生存者全員が昏睡の場合は行動なしの強制経過ターンへ分岐**し, Abilityのターン内発動済み状態を初期化した後, 状態異常（昏睡を含む）のターン更新, ターン終了時効果, ターン終了タイミングのAbilityを処理し, ターン数を加算する. ターン開始・行動前後のAbility, 行動・スキル・通常攻撃は実行しない. 生存者がいない場合は勝敗判定へ進む. ターン数は`TurnEnd`または強制経過ターン終了の後に加算する.
+`状態異常更新`で毒ダメージによりHPが0になった場合は, 戦闘不能時アビリティを発動せず, そのままターン終了時処理へ進む. 状態異常更新では敵味方の全キャラクターをフォーメーション内部番号の昇順で処理し, 同一番号はPlayerID昇順, なお同一の場合は固定陣営順で処理する. 各キャラクター内部の状態異常種別順は「[状態異常仕様](../../specification/game/status_abnormality.md#解除判定のキャラクター間順序)」を使用する.
 同一キャラクターで同一タイミングに複数アビリティの発動条件が成立した場合は, Abilityスロット番号の小さい順に判定・処理する. 複数キャラクターで同一タイミングに成立した場合は, 戦闘計算上の速度が速い順, 同一速度ならフォーメーション内部値が小さい順, 速度・内部値とも同一ならPlayerIDの小さい順で抽選対象リストを作成して疑似乱数の抽選順で処理する.
 戦闘開始時に`SkillBattleState.activation_count=0`とし, 各`AbilityBattleState.activation_count=0`, `activated_this_turn=false`で初期化する. ターン開始時にすべての`AbilityBattleState.activated_this_turn`をfalseへ戻す. スキル発動時は`SkillBattleState.activation_count`を1増加し, Ability発動時は対応するAbilityIDの`AbilityBattleState.activation_count`を1増加して`activated_this_turn=true`とする. Ability発動候補は`AbilityBattleState.activation_count < AbilityMasterData.max_activation_count`を満たすAbilityIDに限定する. 上限に達したAbilityIDは候補抽選および発動率判定の乱数を消費する前に除外する.
 戦闘フロー内の各「発動済み?」判定は, 対応するAbilityIDの`AbilityBattleState.activated_this_turn`を参照する. 発動済み状態はAbilityEffectID単位では共有しない. 状態異常回避判定では, `avoidance_type=ABILITY_AVOIDANCE_TYPE_STATUS_ABNORMALITY`かつ付与対象の`StatusAbnormalityID`に対応する`ABILITY_EFFECT_AVOIDANCE`のAbilityIDについて発動済みか判定する.

@@ -55,8 +55,17 @@ flowchart TD
     Start[戦闘開始] --> BattleStartAbility[Battle Start Ability]
     BattleStartAbility --> Determine[初回行動順確定]
     Determine --> FilterQueue[行動不能キャラクターを攻撃待機キューから除外]
-    FilterQueue --> CheckQueue{攻撃待機キューに行動可能キャラクターがいる?}
-    CheckQueue -->|No| UpdateWaitCount[待機カウント更新]
+    FilterQueue --> CheckLiving{HP1以上のキャラクターが存在する?}
+    CheckLiving -->|No| Judge
+    CheckLiving -->|Yes| CheckQueue{攻撃待機キューに行動可能キャラクターがいる?}
+    CheckQueue -->|No| CheckAllComa{生存キャラクター全員が昏睡中?}
+    CheckAllComa -->|No| UpdateWaitCount[待機カウント更新]
+    CheckAllComa -->|Yes| ForcedReset[activated_this_turn=false]
+    ForcedReset --> ForcedStatus[行動なしで状態異常更新・昏睡ターン消費]
+    ForcedStatus --> ForcedTurnEndEffect[ターン終了時効果]
+    ForcedTurnEndEffect --> ForcedEndAbility[TURN_END Ability]
+    ForcedEndAbility --> ForcedTurnEnd[行動なしのターン終了]
+    ForcedTurnEnd --> IncrementTurn
     UpdateWaitCount --> RefillQueue[2回目以降の規則でキュー更新] --> FilterQueue
     CheckQueue -->|Yes| PopQueue[攻撃待機キューからPOP] --> TurnStart[ターン開始]
     TurnStart --> ResetAbility[activated_this_turn=false]
@@ -74,7 +83,11 @@ flowchart TD
     Judge -->|Yes| End[戦闘終了]
 ```
 
-初回だけ待機カウント更新前の全Character待機カウント0から行動順を確定します。`Wait`は行動直後の待機カウント増加を表し, `UpdateWaitCount`は次の行動を選ぶための待機カウント更新を表します。昏睡等の行動不能キャラクターは攻撃待機キューから取り出す前に除外し, キューが空になれば`UpdateWaitCount`へ進みます。ターン数はターン終了時に加算します。
+初回だけ待機カウント更新前の全Character待機カウント0から行動順を確定します。`Wait`は行動直後の待機カウント増加を表し, `UpdateWaitCount`は次の行動を選ぶための待機カウント更新を表します。昏睡等の行動不能キャラクターは攻撃待機キューから取り出す前に除外し, キューが空でも行動可能な生存者がいる場合は`UpdateWaitCount`へ進みます。生存者全員が昏睡している場合は`activated_this_turn`をリセットし, 行動なしで状態異常とターン終了時処理だけを進め, 昏睡の最低継続ターンを消費して解除判定を実施します。架空の行動・スキル等に対する乱数は消費しません。ターン数は通常または強制経過のターン終了時に加算します。
+
+## 状態異常の更新順
+
+複数Characterの状態異常更新・確率解除はフォーメーション内部番号の昇順で実施します。同一内部番号の敵味方はPlayerID昇順, なお同じ場合は固定陣営順です。各Character内の状態異常種類順は「[状態異常仕様](../../../specification/game/status_abnormality.md#解除判定のキャラクター間順序)」を使用し, 順序決定のためには乱数を消費しません。強制経過ターンにも適用します。
 
 ## Ability評価順
 
