@@ -36,6 +36,10 @@
 * GPUテクスチャ, デコード済みPCM, WASMヒープ, ブラウザ内部の一時メモリを分けて測定する. 不要な`ImageBitmap`, WebGLテクスチャ, `AudioBuffer`の保持を終了する.
 * OPFSへ保存するアセットと認証情報は区別し, AccessTokenをOPFSへ永続化しない.
 
+## シーン別アセット参照（外部JSON）
+
+シーンごとのBGM/SE/Voice（HCA）および背景/UI/アニメーション参照画像（PNG）の**元ファイル名と論理キー**は、Rust/WASMの固定テーブルではなく、Clientと同じVersionで配布する静的`./scene_assets/<scene_id>.json`で管理する。シーン遷移時（または事前）にJSONを読み、拡張子別AssetDictionaryで許可された`./assets/`内の実体だけを読み込む。優先ロード`critical`、任意の先読み`prefetch`、失敗時の扱い、解放・キャッシュ失効は[シーン別Asset Manifest](scene_asset_manifest.md)を正本とする。これにより、実素材の同梱や既存のHCAループ判定・キャラクター構造モデルの扱いは変更しない。
+
 ## ログイン・サーバー未接続時のゲームプレイ
 
 * タイトルから認証用ログイン画面へ遷移できる. LoginID・Password入力とログイン操作はClient画面が担当し, 資格情報の検証とSession発行は認証OriginとServerが担当する. 認証コード・PKCEと第一者Cookieの通信方式は既存の認証仕様に従う.

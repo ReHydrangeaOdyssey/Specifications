@@ -105,6 +105,13 @@ OPFSのPNG → File / Blob → createImageBitmap() → WebGL 2 texImage2D()
 - 移動演出の開始/目標位置と時間は呼出元の戦闘表示イベントから受け取り、未提示の固定距離・跳躍高さ・durationを導入しません。位置情報が足りない場合は不正な移動を捏造せず当該移動演出を不成立表示として扱い、ゲーム状態はそのまま維持します。
 
 
+### シーン別Asset Manifest Loader / Resolver / Manager
+
+- シーンの元ファイル名一覧をWASMへハードコードせず、[シーン別Asset Manifest](../../client/scene_asset_manifest.md)の静的`./scene_assets/<scene_id>.json`を実行時にロードする。Manifest LoaderはUTF-8 JSON・Schema Version・シーンID・カテゴリ・論理キー・`critical`/`prefetch`の整合性を検証し、Server APIや戦闘計算へ関与しない。
+- AssetDictionary ResolverはManifest内の`file`から`png/assets_dict.json`/`hca/assets_dict.json`の元名を完全一致検索する。`path`なら辞書相対Pathを`./assets/`へ一度だけ結合し、`paths`ならManifest指定SHA-256（Hash候補が1つなら省略可能）の**一致グループ**内で実内容検証済みの実体を選ぶ。取込時の全Path複製は維持する。Manifestに保存Pathを直接書かない。
+- Asset ManagerはPNGデコード/WebGL TextureとHCA音声の既存経路を再利用し、Scene間の共有参照、古い非同期要求の取消、キャッシュ失効、不要GPU/音声メモリの解放を担当する。`critical`の使用準備は遷移の必要条件だが、`prefetch`はbest-effortとする。OPFS内のユーザー素材をメモリ都合で自動削除せず、素材削除・辞書更新・Version更新で実体の正当性を再確認する。
+- AnimationカテゴリはPNG参照一覧に限り、SpriteAnimationData/PlistRoot・骨格・アトラスの構造情報をファイル名から生成しない。HCAのループ判定は辞書によって解決した実保存Pathを正とし、`bgm`/`se`/`voice`のラベルに依存させない。
+
 ### HCAデコード・音声パイプライン
 
 - HCAデコード候補は`cridecoder`（`0.3.6`）とする。`default-features = false`を指定し, 不要なPythonバインディングを有効化しません。

@@ -117,6 +117,14 @@ IEEE-754 32bit浮動小数点として、仕様に記載された演算順を変
 - Cloudflare Pagesの`client_origin`と認証Callback `<client_origin>/auth/callback/`・APIの許可Originが一致することを確認する。
 - PWAで`display: fullscreen`および`orientation: landscape`を希望値として設定し、許可環境で全画面・横画面固定が適用されることを確認する。固定API非対応・拒否・通常ブラウザタブでの全画面拒否時でも既存の縦画面・可変レイアウトで動作し、画面外へのUI欠落がないことを確認する。
 
+### シーン別アセットManifestの検証
+
+- Scene IDと`./scene_assets/<scene_id>.json`が一対一で対応すること、対象全シーン分のUTF-8 JSONがClient Version配布物・OPFS `./game/scene_assets/`・SW Version別Cacheに含まれ、同Versionだけを使用することを検証する。JSONはWASMに埋め込まない。変更前後で同一ビルド設定のWASM非圧縮bytesを測定し、削減量を記録する（減少を無条件に保証しない）。
+- `version`、`scene`一致、許容カテゴリ、論理キー、参照拡張子、重複JSONキー、未知キー、Pathを含む元名、SHA-256形式、`critical`/`prefetch`の参照整合性を検証する。未定義論理キー・複数Hash候補なのにHash指定なし・Manifestが示す未登録素材は利用不可とする。
+- `path`方式では単一OPFS Pathに解決し、`paths`方式では取込時に全Pathへ複製しつつ、Runtimeは実Hash照合済みの同一内容を重複デコードしないことを検証する。`paths`の一部実ファイルを削除した場合は残存候補を検証して使用でき、全候補欠落時は利用不可で、Pathを自動補完しないことを確認する。
+- `critical`の素材準備が終わるまで旧シーンを維持し、`prefetch`は遷移をブロックしないこと、ブラウザーのAudioContext再生許可を事前に要求しないことを検証する。失敗時は既存の代替画像条件だけを適用し、旧シーンで再試行できることを確認する。
+- 先読み中に別シーン遷移・取消・素材削除・置換・辞書Generation切替・Client Version更新を発生させ、古い非同期結果が新シーンの描画や音声を上書きしないことを確認する。共有参照が残る間はGPU/音声資源を解放せず、全参照消失後に解放するがOPFS内のユーザー素材は残す。オフラインの同Version JSONを使用可能で、未キャッシュならエラーとなることを検証する。
+
 ### ブラウザ実装・アセット・音声の検証
 
 - iOS 16.3 / Safari 16.3, Android 8.0 / Chrome 120を下限の組合せとして扱い, 当該組合せでPWAのインストール・ホーム画面起動・ブラウザAPI利用・Clientの実行を確認します。

@@ -9,6 +9,10 @@
 - Cloudflare Pagesから取得したClientのHTML/JavaScript/WASM一式はOPFS `./game/`へ保存する。`./game/`はプログラム用であり、辞書許可対象の`./assets/`や一時保存用`./cache/`の規則を流用しない。Service Worker用Version別Cache Storageもオフライン起動に必要であり、OPFS保存だけでは代替しない。
 - Clientのバージョン更新時は`./game/`だけを全量入れ替え、`./assets/`、`./settings/`、`./config.cnf`と現在Versionを記録する`./game_info.json`を削除しない。更新中のキャッシュクリアは拒否し、更新失敗・容量不足時は更新前のプログラムへ復帰する。詳細は`../programming/client/web_delivery.md`を参照。
 
+## シーンJSONと端末素材の保存境界
+
+`./scene_assets/<scene_id>.json`はClientが配布する参照定義であり、同VersionのOPFS `./game/scene_assets/`とService Worker Version別Cacheに置く。`./cache/asset_dictionary/`の**拡張子別辞書集合**、ユーザー提供の`./assets/`実体、キャラクター構成セットに関する「永続Manifestを作らない」規則とは独立する。Schema・`sha256`による同名ファイル解決・表示準備は[シーン別Asset Manifest](scene_asset_manifest.md)を正本とする。`paths`配列について、**取込時は全Pathへ複製**、**Runtimeは検証済みの一つの実体を使ってよい**という責務の差を維持する。辞書のキャッシュクリア時には既存のゲーム開始条件に従いRuntimeの辞書参照を無効化するが、`./game/`のJSONや`./assets/`の実体は自動削除しない。
+
 ## Release辞書の取得・原子的更新
 
 1. ログイン成功後、実効`update_asset_dictionary=true`なら`asset_dictionary_version=latest`または指定tagのReleaseを選ぶ。取得対象は**拡張子別`<ext>/assets_dict.json`の集合**であり、単一の`asset_dictionary.json`ではない。各相対Pathは辞書配布物のRootからのもので、`png/assets_dict.json`、`jpg/assets_dict.json`、`hca/assets_dict.json`などを意味する。GitHub ReleasesのどのAsset名/パッケージからこの内部階層を取得するか、および検査値ファイルとの対応付けは未確定（`design/programming/undecided.md`のU-09）。配布実体が判明するまで、推測したAsset名・アーカイブ形式・Web URLから取得を開始しない。

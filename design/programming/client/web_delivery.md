@@ -19,6 +19,12 @@ Rust/WASM製Web Clientの静的配布を定義する。
 3. HTML/JS/WASMの各成果物の非圧縮ファイルサイズをCIで検査し、**各ファイル25,000,000 byte以下**とCloudflare Pagesの単一ファイル制限を確認する。配布用のCSS、PWA Manifest、Service Worker、ライセンス情報と初期起動用のファイル参照も検査する。
 4. Cloudflare Pagesへ静的成果物をHTTPS公開する。ビルドにはGitHub Actionsを利用してもよいが、公開先はCloudflare Pagesとする。公開後の`client_origin`、Callback URI、CORS、PWA Scopeを照合する。
 
+## シーン別JSONの静的配布
+
+- `./scene_assets/<scene_id>.json`をClient Versionに属する静的成果物としてCloudflare Pagesの公開ルートで配布し、**WASMのデータセクションへJSON本文を埋め込まない**。対象全シーンのJSONをビルド/配布検証対象に含め、各JSONにもCloudflare Pagesの単一ファイルサイズ制限を適用する。
+- 初回のVersion一式取得と更新では、Scene JSONもOPFS `./game/scene_assets/`およびService Workerの**同Version**のCache Storageに保存・検証する。初期取得の完全性確認とClient Version切替は既存のプログラム全量置換契約に従う。これはJSONの事前キャッシュであり、PNG/HCA実素材を全シーン分GPU/音声メモリへロードする要件ではない。
+- 実ファイルのJSON名は`design/client/scene_asset_manifest.md`で定めたシーンIDと一致させ、Scene Manifestの検証失敗時はそのシーンへの遷移を成立させない。辞書Releaseとの混同や、Client Versionを跨いだ旧JSONの流用を禁止する。
+
 ## オフライン起動と`./game/`の保持
 
 - 初回のオンライン起動で取得した**HTML/JS/WASM一式を端末のOPFS `./game/`配下に保存**する。公開ルートで必要となる関連起動ファイルも保持する。`./game/`はゲームプログラム専用であり、`./assets/`、`./cache/`、`./settings/`、`./game_info.json`および`./config.cnf`と分離する。

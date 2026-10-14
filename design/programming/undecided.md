@@ -20,6 +20,8 @@
 - [U-44] 進行中GuildBattleの別GameServerへの完全な戦闘続行は現行要件外。Owner消失後の別GameServerへの完全再現とWAL/Journal Volumeの自動再Attachは要件外。取得可能な確定済みデータだけ保全し、検証不能なら保留する（未保存データの消失は許容）。
 
 
+- [U-45] Scene Manifestの`version=1`、Schema・配布Path・Resolver・遷移/解放規則は`design/client/scene_asset_manifest.md`で定義する。出荷用の**各実シーンID→論理キー→元ファイル名・任意SHA-256**と`critical`/`prefetch`の実際の分類は元ゲームの画面/素材資料で確認するまで未確定とし、例示JSONを出荷定義へ流用しない。
+
 ## 参照資料
 
 - `design/system/public_api.proto`
