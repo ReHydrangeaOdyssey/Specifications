@@ -59,16 +59,16 @@ ClientがAccessToken失効を確認した場合、ログアウトして通信未
 
 ## RPCの型対応
 
-以下に全Allowlist Methodを型と対応させる。複数成功Responseまたは長寿命Streamは既存の業務契約を正とする。
+以下に全Allowlist Methodを型と対応させる。列には通常成功Responseと、当該Methodに固有の業務Error Responseを併記する。これとは別に、共通の認証・入力等の失敗には`ApiErrorResponse`を使用する。`LoginVersionErrorResponse`、`ClientVersionMismatchResponse`、`RequiredOperationErrorResponse`等は`design/server/public_api.md`のメソッド別契約で定義済みのときだけ受理し、HTTPステータスと業務エラー契約の両方で区別する。長寿命Streamは既存の業務契約を正とする。
 
 | 区分 | Method | Request Message | Response Message |
 |---|---|---|---|
 | Public | `GetAdditionalAuthorizationConfig` | `GetAdditionalAuthorizationConfigRequest` | `GetAdditionalAuthorizationConfigResponse` |
 | Public | `CreateAccount` | `CreateAccountRequest` | `CreateAccountResponse` |
-| Public | `Login` | `LoginRequest` | `LoginResponse` |
+| Public | `Login` | `LoginRequest` | `LoginResponse / LoginVersionErrorResponse` |
 | Public | `RefreshAccessToken` | `RefreshAccessTokenRequest` | `RefreshAccessTokenResponse` |
 | Public | `Logout` | `LogoutRequest` | `LogoutResponse` |
-| Public | `CreateGuild` | `CreateGuildRequest` | `CreateGuildResponse` |
+| Public | `CreateGuild` | `CreateGuildRequest` | `CreateGuildResponse / RequiredOperationErrorResponse` |
 | Public | `UpdateGuildLeadership` | `UpdateGuildLeadershipRequest` | `UpdateGuildLeadershipResponse` |
 | Public | `ApplyGuildJoin` | `ApplyGuildJoinRequest` | `ApplyGuildJoinResponse` |
 | Public | `ApproveGuildJoinApplication` | `ApproveGuildJoinApplicationRequest` | `ApproveGuildJoinApplicationResponse` |
@@ -76,9 +76,9 @@ ClientがAccessToken失効を確認した場合、ログアウトして通信未
 | Public | `AcceptGuildInvitation` | `AcceptGuildInvitationRequest` | `AcceptGuildInvitationResponse` |
 | Public | `LeaveGuild` | `LeaveGuildRequest` | `LeaveGuildResponse` |
 | Public | `UpdateArenaParty` | `UpdateArenaPartyRequest` | `UpdateArenaPartyResponse` |
-| Public | `StartArenaBattle` | `ArenaBattleRequest` | `ArenaBattleResponse / ArenaBattleErrorResponse` |
+| Public | `StartArenaBattle` | `ArenaBattleRequest` | `ArenaBattleResponse / ArenaBattleErrorResponse / ClientVersionMismatchResponse` |
 | Public | `UpdateGuildBattleParty` | `UpdateGuildBattlePartyRequest` | `UpdateGuildBattlePartyResponse` |
-| Public | `JoinGuildBattle` | `JoinGuildBattleRequest` | `GuildBattleJoinResponse` |
+| Public | `JoinGuildBattle` | `JoinGuildBattleRequest` | `GuildBattleJoinResponse / ClientVersionMismatchResponse` |
 | Public | `GetGuildBattleStatus` | `GetGuildBattleStatusRequest` | `GetGuildBattleStatusResponse` |
 | Public | `SubscribeGuildBattleUpdates` | `SubscribeGuildBattleUpdatesRequest` | `GuildBattleScoreUpdate (stream)` |
 | Public | `GuildBattleSortie` | `GuildBattleSortieRequest` | `GuildBattleCastleBreakResponse / GuildBattleAnnihilationResponse` |

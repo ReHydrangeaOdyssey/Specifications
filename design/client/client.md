@@ -27,10 +27,10 @@
 * PNG/HCAファイル本体はGameServerから配信しない. 各ユーザーが端末上で用意する素材の権利許諾をClientが自動審査する機能は設けない. Clientが配布するソフトウェアおよび同梱素材のライセンス確認は別扱いとする. アセット辞書は`https://github.com/ReHydrangeaOdyssey/AssetDictionary/releases`のRelease Assetから取得する。ログイン成功時は原則取得するが、Clientの`./config.cfg`に従う。`update_asset_dictionary: false`なら自動取得せず前回保存済みの辞書を使用する。`asset_dictionary_version: latest`なら最新Release、その他なら指定したVersion文字列に対応するReleaseを選択する。取得に失敗した場合は1回だけ再試行し、なお失敗するなら旧辞書を使用する。辞書はGameServerから取得しない。
 * タイトル画面の「アセットの追加」から専用シーンへ遷移する. PNG/HCAの個別選択とディレクトリの一括選択を提供する. 「コピー」と「移動」を選択できるようにし, 移動には「ゲーム内へファイルの移動はゲーム終了時に消える可能性がある」と表示する. 移動で元ファイルを削除するのはブラウザの削除権限が取得できる場合のみとし, OPFSへの保存成功を確認してからユーザーの明示操作で削除する. 対応しない端末では元ファイルを削除できない旨を表示し, コピーのみ利用可能にする.
 * 追加できる画像の形式はPNGだけとし, 音声は選定済みのHCAを対象とする. 取り込み時に拡張子が`.png`・`.hca`のいずれかであることを確認し、拡張子と実データ形式を照合する。PNGは画像デコード成功、HCAはヘッダー・デコード初期化成功を取り込みの成立条件とする。形式が一致しないファイルや解析できないファイルはOPFSへの保存・既存ファイル上書きを行わず、当該ファイルの取り込み失敗として表示する。 Client独自のファイル容量・画像解像度制限・保存期間は設けない. ブラウザの容量quotaやデータ消去・ストレージ退避等による制約はClientで解除できないため, 永続保持を保証するものではない.
-* 取り込みファイルはまずOPFS `./cache/temp/user_impoert/`へ一時配置する。辞書に一致したファイル本体のみを`./assets/`配下の対応Pathへ確定保存し、一致しないファイルは`./cache/unknown_resouce/`へ移して保管する。`./cache/`内のこの2領域はキャッシュクリアで削除される。キャラクターの骨格・アニメーション・アトラス等の構造モデルは同梱モデルまたはClientへのセッション内読込みで供給し、通常のPNG/HCA取込み・`./assets/`内のProtoBuf保存とは区別する。Clientが例外的に配布する代替画像等はユーザー取込先とは別領域に配置し、通常のアセット追加・上書き・削除操作からはアクセスできないようにする。 辞書と一致する素材は、元ファイル名から一意Pathまたは内容SHA-256別Pathを選ぶ。 再表示時もOPFS上の保存Pathを参照し, 自動割当用に別の配置先推測を行わない. 辞書未一致の手動区分・対象ID・元ファイル名・一時Pathを端末側へ保持するが、辞書照合成功前はゲーム内で使用しない。ログイン後の辞書照合でも元の割当を無断で変更しない。 Character区分では一時保存前にPlayerへCharacterIDを選択させ、割当メタデータに保持する。照合用の元ファイル名を保持し、辞書一致後の実保存先は辞書Pathとする。`character_<CharacterID>.png`への強制改名は行わない。同一Pathに異なる内容を上書きする場合は設定`allow_user_asset_override=true`とユーザー確認を必須とする。
-* タイトル画面の通常の取り込み対象はPNG/HCAとし、拡張子を除くファイル名に許可する文字は英字`A-Z`・`a-z`、数字`0-9`、`_`、`-`、`(`、`)`のみとする。拡張子区切りの`.`はこの文字制限の対象外とする。条件外の名前は取り込みを受け付けない。選択されたディレクトリ配下を再帰的に取り込む. 拡張子付き元ファイル名を辞書の第1キーへ完全一致照合する。`path`が非空ならその一意Pathを使用し、`path`が空なら内容SHA-256の小文字16進64文字を算出して`paths`オブジェクトの同一Hashキーに対応するPathを選択する。いずれにも一致しない素材はゲーム内表示・再生に使用しない。手動指定した区分・対象IDは端末側に記録できるが辞書の照合条件を迂回しない。 辞書一致素材のPathは辞書を正本とする。手動取り込みの保留先は`./cache/unknown_resouce/`とする。 ファイル名は英語表記とする運用方針を前提とし, ファイル名照合前にUnicode正規化・大文字小文字変換を行わない。辞書生成側も同一ファイル名文字列を使用する。 既存Pathへの**異なる内容の上書き**は`allow_user_asset_override=true`かつユーザー確認後に限り、複数件には「一括で上書き」「一括でキャンセル」を提供する。同一内容の再取込みは変更なしとして扱い、未配置Pathの新規取込みは同設定がOFFでも許可する。 ユーザーの明示的な差替え時も辞書未登録のファイル名・辞書未登録Pathの使用は認めない。`paths`方式は設定ONでも実内容SHA-256と選択候補Hashの一致を必須とし、Hash不一致を手動指定で迂回できない. ハッシュ衝突の追加回避規則は設けない.
+* 取り込みファイルはまずOPFS `./cache/temp/user_impoert/`へ一時配置する。辞書に一致したファイル本体のみを`./assets/`配下の対応Pathへ確定保存し、一致しないファイルは`./cache/unknown_resouce/`へ移して保管する。`./cache/`内のこの2領域はキャッシュクリアで削除される。キャラクターの骨格・アニメーション・アトラス等の構造モデルは同梱モデルまたはClientへのセッション内読込みで供給し、通常のPNG/HCA取込み・`./assets/`内のProtoBuf保存とは区別する。Clientが例外的に配布する代替画像等はユーザー取込先とは別領域に配置し、通常のアセット追加・上書き・削除操作からはアクセスできないようにする。 辞書と一致する素材は拡張子別`<ext>/assets_dict.json`の元ファイル名から、単一`path`または内容SHA-256に一致した`paths`配列の全Pathを解決する。 再表示時もOPFS上の保存Pathを参照し, 自動割当用に別の配置先推測を行わない. 辞書未一致の手動区分・対象ID・元ファイル名・一時Pathを端末側へ保持するが、辞書照合成功前はゲーム内で使用しない。ログイン後の辞書照合でも元の割当を無断で変更しない。 Character区分では一時保存前にPlayerへCharacterIDを選択させ、割当メタデータに保持する。照合用の元ファイル名を保持し、辞書一致後の実保存先は辞書Pathとする。`character_<CharacterID>.png`への強制改名は行わない。同一Pathに異なる内容を上書きする場合は設定`allow_user_asset_override=true`とユーザー確認を必須とする。
+* タイトル画面の通常の取り込み対象はPNG/HCAとし、拡張子を除くファイル名に許可する文字は英字`A-Z`・`a-z`、数字`0-9`、`_`、`-`、`(`、`)`のみとする。拡張子区切りの`.`はこの文字制限の対象外とする。条件外の名前は取り込みを受け付けない。選択されたディレクトリ配下を再帰的に取り込む. 拡張子付き元ファイル名を辞書の第1キーへ完全一致照合する。`path`が非空ならその相対Pathを使用し、`path`が空なら内容SHA-256の小文字16進64文字を算出して`paths`オブジェクトの同一HashキーにあるPath配列の**全要素**を複製先とする。部分的なPath選択は行わない。いずれにも一致しない素材はゲーム内表示・再生に使用しない。手動指定した区分・対象IDは端末側に記録できるが辞書の照合条件を迂回しない。 辞書一致素材のPathは辞書を正本とする。手動取り込みの保留先は`./cache/unknown_resouce/`とする。 ファイル名は英語表記とする運用方針を前提とし, ファイル名照合前にUnicode正規化・大文字小文字変換を行わない。辞書生成側も同一ファイル名文字列を使用する。 既存Pathへの**異なる内容の上書き**は`allow_user_asset_override=true`かつユーザー確認後に限り、複数件には「一括で上書き」「一括でキャンセル」を提供する。同一内容の再取込みは変更なしとして扱い、未配置Pathの新規取込みは同設定がOFFでも許可する。 ユーザーの明示的な差替え時も辞書未登録のファイル名・辞書未登録Pathの使用は認めない。`paths`方式は設定ONでも実内容SHA-256と選択候補Hashの一致を必須とし、Hash不一致を手動指定で迂回できない. ハッシュ衝突の追加回避規則は設けない.
 * 追加済みファイルをClientが容量都合で自動削除しない. タイトル画面に「アセット削除」を設け, `./assets/`内の全素材または任意の個別/複数素材を選択して明示的に削除できる. OPFS容量不足時は容量不足を表示し, 解消されるまでゲーム操作を不可とするが, タイトルからのアセット削除は可能とする. ブラウザのquota/自動退避・ユーザー操作によるストレージ削除は別途のブラウザ制約とする.
-* OPFSの配置基準は`./game_info.json`, `./assets/`, `./cache/`とし、バージョンごとの専用アセットディレクトリは設けない。`game_info.json`には現在のゲームVersionのみを記録する。同一ゲームVersionで辞書のみ更新された場合も旧辞書と新辞書の**Path・元ファイル名・内容Hash条件の差分**を計算し、旧辞書にのみ存在するPathまたは**共通Pathでも新条件に不適合な実ファイル**を`./cache/obsolete_assets/`へ退避する。新辞書で引き続き許可されることを検証できた実ファイルのみ維持し、新辞書にしかないPathへ旧素材を推測で自動割当しない。 辞書更新の切替成功条件は新辞書と保存素材の検証完了とする。ゲームVersionは`version.major`, `version.minor`, `version.patch`の非負整数（u32）で表現し、不正な値は初期値に再生成する。  取り込み中断後の自動再開を保証する仕様は設けない.
+* OPFSの配置基準は`./game_info.json`, `./assets/`, `./cache/`とし、バージョンごとの専用アセットディレクトリは設けない。`game_info.json`には現在のゲームVersionのみを記録する。同一ゲームVersionで辞書のみ更新された場合も旧辞書集合と新辞書集合の**拡張子・Path配列の全要素・元ファイル名・内容Hash条件の差分**を計算し、旧辞書にのみ存在するPathまたは**共通Pathでも新条件に不適合な実ファイル**を`./cache/obsolete_assets/`へ退避する。新辞書で引き続き許可されることを検証できた実ファイルのみ維持し、新辞書にしかないPathへ旧素材を推測で自動割当しない。 辞書更新の切替成功条件は新辞書と保存素材の検証完了とする。ゲームVersionは`version.major`, `version.minor`, `version.patch`の非負整数（u32）で表現し、不正な値は初期値に再生成する。  取り込み中断後の自動再開を保証する仕様は設けない.
 * PNGはOPFSから`File` / `Blob`として読み, `createImageBitmap()`でデコードする. HCAは必要なメタデータと圧縮ブロックを読み, 圧縮ファイル全体とPCM全体の同時常駐を避ける.
 * OPFSの階層は`./game/<HTML・JS・WASM等のプログラムファイル>`, `./game_info.json`, `./assets/<something>`, `./cache/<something>`, `./settings/<something>`および`./config.cnf`とする。初回オンライン取得したプログラムは`./game/`へ保存し、Service WorkerのVersion別Cache Storageを通じてオフライン時にも起動URLを提供する。Client更新では検証・バックアップ後に`./game/`配下を全量削除して新一式を配置し、成功後にActive Versionを切り替える。`./assets/`・`./settings/`は更新対象外とする。 タイトル画面の「キャッシュクリア」は辞書差分退避・構成素材入替・Clientプログラム更新の処理中を除いて`./cache/`配下のみを消去し, `./game/`・`./assets/`・`./settings/`・`./config.cnf`・`./game_info.json`は削除しない.
 * GPUテクスチャ, デコード済みPCM, WASMヒープ, ブラウザ内部の一時メモリを分けて測定する. 不要な`ImageBitmap`, WebGLテクスチャ, `AudioBuffer`の保持を終了する.
@@ -49,14 +49,14 @@
 ## タイトル画面の操作
 
 * タイトル画面に「キャッシュクリア」「アセットの追加」「アセット削除」「クレジット」ボタンを配置する. これらのローカル操作はログイン不可・Server未接続時も使用できる. OPFS容量不足の場合はゲーム操作を制限するが, 容量解消用のアセット削除は利用可能とする.
-* 「アセットの追加」から専用シーンへ遷移し, PNG/HCAを読み込む。辞書が利用可能なら元ファイル名の一致を確認し、同名候補が複数の場合だけ内容SHA-256を照合して配置し、辞書が未取得ならユーザーによる区分・割当先指定で取り込む。ログイン後に辞書を取得したときは既存の手動割当素材を照合し、一致先へ変更する場合はユーザーに確認する。戻るボタンでタイトルへ戻る.
+* 「アセットの追加」から専用シーンへ遷移し, PNG/HCAを読み込む。辞書が利用可能なら拡張子付き元ファイル名を完全一致させ、対応する`path`が非空なら単一の相対Pathへ、`path`が空なら内容SHA-256と`paths`のHashキーが一致した**全相対Path**へ複製する。いずれも保存先を`./assets/`起点に安全に解決する。辞書が未取得ならユーザーによる区分・割当先指定で取り込む。ログイン後に辞書を取得したときは既存の手動割当素材を照合し、一致先へ変更する場合はユーザーに確認する。戻るボタンでタイトルへ戻る.
 * キャラクター画像・UVデータはClient側のアセットとして扱い, Server用ProcessedMasterDataの対象としない. 詳細は「[マスターデータ](../game/master_data.md)」を参照する.
 * 「キャッシュクリア」はOPFSの`./cache/`だけを削除する。ただし辞書差分退避中・構成素材入替中・Clientプログラム更新中は処理の旧素材とマーカーを消さないため操作を拒否する。 「アセット削除」は`./assets/`の任意素材を個別または一括で削除する.
 * 「クレジット」から専用画面へ遷移し, 「戻る」でタイトルへ復帰する. ライセンス情報の閲覧はログイン・Server接続を要しない.
 
 ## アセット保存Path
 
-取得辞書の`path`および`paths`内の非空配置先は、OPFS Root基準で`./assets/`から始まるPath文字列そのものとする。Rootに別の`assets/`接頭辞を追加せず、`./assets/`未満の参照・親ディレクトリ参照・URL形式・制御文字を拒否する。一括取込みの途中終了では処理済みファイルを保持し、未処理ファイルを変更しない。削除後は当該素材へのローカル参照を無効化する。
+取得辞書の`path`および`paths`配列内の非空配置先は、**アセット領域`./assets/`を基準とする相対Path**（例：`dir_a/sample.png`）とする。保存先は`./assets/`と相対Pathを結合したOPFS Root相対Path（例：`./assets/dir_a/sample.png`）へ一度だけ正規化し、`..`・`.`・空セグメント・絶対Path・URL・バックスラッシュ・制御文字・`./assets/`などの不要な接頭辞を拒否する。通常複数ファイル取込みは**元ファイル単位**で確定し、`paths`配列の全複製先を同一単位で成功/復元させる。キャラクター構成セットの一括入替は`local_asset_storage.md`のセット単位ロールバック規則を優先する。削除後は当該素材へのローカル参照を無効化する。
 
 ## クレジット・ライセンス表記
 
@@ -121,7 +121,8 @@ Login成功後に`GetArenaParty`および`GetGuildBattleParty`を実行し、Ser
 
 * ClientとPublic API Server間の通信方式は「[ネットワーク](../system/network.md)」に従い, HTTP/2 over TLS 1.3とし, API PayloadにはProtocol Buffersを使用する.
 * `SubscribeGuildBattleUpdates`はHTTP/2 Response streamを使用し, `GuildBattleScoreUpdate`をProtocol Buffers varint長prefix付きで順次受信する.
-* Public API通信には`WebSocket`を使用しない.
+* Public API通信には`WebSocket`を使用しない。
+* 認証付き通常Public RPCは`Authorization: Bearer <AccessToken>`を付加し、既存のRequest Bodyに`access_token`がある場合はHeaderと同一値を設定する。値が欠落・不一致ならHTTP 401になることを前提とし、Bodyだけで認証されたとみなさない。認証Origin専用手順は既存の別契約に従う。
 * ブラウザ標準の`fetch()`（Rustからは選定済み`web-sys`/`wasm-bindgen-futures`等を使用）をPublic API通信に使用する. 通常のAPIは`fetch()`で送受信し, 通知はResponse Bodyの`ReadableStream`を逐次読み取りProtocol Buffers varint長prefixでフレーム復元する. HTTP/2とTLS 1.3のネゴシエーションはブラウザと接続先が担当し, JavaScriptが直接バージョンを強制しない. ブラウザからのHTTP/2 + TLS 1.3接続成立は配置先で検証する. Rust専用HTTPライブラリの追加は不要とする. HTTP Method/Pathは`design/system/api_transport.md`を正とする.
 * WebAssemblyはブラウザ内で実行され, Rust/WASMからの通信もブラウザの`fetch()`を介するため, WASMとJavaScriptを静的配布先から取得した後のAPI通信にもOrigin・CORS・Cookieの規則が適用される. `SameSite=Strict` CookieはCross-Site要求へ送信されない. ClientからGameServerへ直接通信せず, Public API Serverへ接続する構成を維持する.
 * 配布OriginがPublic API認証Originと異なるSiteになる場合, Cookieを利用するLogin/Refresh/Logoutは認証Originのトップレベルページ内で実施し, 一度限りの認可コード+PKCE S256でClientへAccessTokenを受け渡す. `SameSite=Strict`を維持し, Third-party Cookieは使用しない. 認証OriginはPublic API配布設定値、Client戻り先は`<client_origin>/auth/callback/`に固定し、認可コード交換のwire契約は`design/system/public_api.proto`を正とする. 詳細は`design/system/network.md`を正とする.
@@ -158,27 +159,37 @@ Version別の素材配置差分（旧Path→新Path）は該当VersionのRelease
 
 ## アセット辞書の形式と照合規則
 
-辞書はUTF-8 JSON Objectとし、拡張子付き元ファイル名を第1キーとする。各エントリは`path`（一意の保存先、同名衝突時は空文字）と`paths`（ファイル内容SHA-256の小文字16進64文字 → 保存先PathのObject）を持つ。**JSON配列の中へHash名付きプロパティを置く形式は採用しない**。
+辞書は**拡張子ごと**の`./<ext>/assets_dict.json`に分離されたUTF-8 JSON Objectとする。`./png/assets_dict.json`、`./jpg/assets_dict.json`、`./hca/assets_dict.json`など、辞書Root直下の拡張子名ディレクトリを使用する。ここで`./`は**辞書配布物のRoot相対**でありOPFS保存先を意味しない。元ファイルの拡張子から該当辞書ファイルを選び、その中でディレクトリ名を除いた拡張子付きファイル名を第1キーとして完全一致照合する。辞書が拡張子に対応して存在しても、Clientの通常取込対象は現行どおりPNG/HCAであり、JPG/TXT等の取込対応追加を意味しない。
+
+各エントリは`path`（同名ファイルの分岐がない場合の**単一**相対Path、同名衝突時は空文字）と`paths`（ファイル内容のSHA-256小文字16進64文字 → **相対Path文字列の配列**）を必須とする。`paths`はHash名をキーに持つJSON Objectであり、各ValueのみがJSON Arrayである。例えば、同名かつ同一内容のファイルを複数位置で利用する場合は、**一致したHashの配列に列挙された全Pathへ同じ内容を複製する**。
 
 ```json
 {
-  "example.png": {
-    "path": "./assets/characters/example.png",
+  "document.txt": {
+    "path": "document.txt",
     "paths": {}
   },
-  "collision.png": {
+  "sample.txt": {
     "path": "",
     "paths": {
-      "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef": "./assets/characters/one.png",
-      "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789": "./assets/characters/two.png"
+      "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef": [
+        "dir_a/sample.txt",
+        "dir_c/sample.txt"
+      ],
+      "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789": [
+        "dir_b/sample.txt"
+      ]
     }
   }
 }
 ```
 
-- 元ファイル名はディレクトリ名を除いた拡張子付き文字列そのものとし、Unicode正規化、大文字小文字変換、ファイル名SHA-256変換は行わない。未登録名は照合失敗とする。
-- `path`が非空ならそのPathへ配置する。`path`が空文字なら内容全体のSHA-256を計算して`paths`のキーに一致する保存先を使用する。`path`と`paths`の双方に有効な割当を記載する曖昧なエントリは拒否する。内容Hashを必要としない一意名では`paths={}`とする。
-- `path`/`paths`で解決した非空Pathは**辞書生成側が付けた`./assets/`で始まるOPFS Root相対の完全な保存Path**とする。Clientは`./assets/`を再び前置しない。`assets/`のみの接頭辞、空の末尾、絶対Path、URL、`.`・`..`の中間セグメント、空セグメント、制御文字、バックスラッシュを拒否する。辞書JSONが不正なら以前の有効な辞書へ切り替える。
+上記は**構造例**であり、`document.txt`/`sample.txt`を通常取り込み対象に追加するものではない。例の`sample.txt`と同じ構造を持つ`sample.png`なら、`png/assets_dict.json`内の対応エントリを照合する。
+
+- 元ファイル名はディレクトリ名を除いた拡張子付き文字列そのものとし、Unicode正規化、大文字小文字変換、ファイル名SHA-256変換は行わない。拡張子名ディレクトリとエントリ内の拡張子が一致することを検証する。未登録名・未対応の拡張子・未取得の拡張子別辞書では自動割当しない。
+- `path`が非空なら`paths={}`を要求して単一Pathに配置する。`path`が空なら`paths`に1件以上のHashキーと非空・重複なしのPath配列を要求し、**元の内容全体**のSHA-256と一致するHashキーの配列の全Pathに配置する。一部のPathだけを任意選択できない。各配列が空、Pathの重複、異なる元名/Hash間での同一保存Pathの再使用、`path`と`paths`の二重指定、未知のフィールド型は不正辞書とする。
+- 辞書内のPathは`document.txt`・`dir_a/sample.txt`のような**`./assets/`からの相対Path**とする。Clientはその値へ`./assets/`を一度だけ前置して保存する。先頭`/`、`./`、`assets/`、`./assets/`、`.`/`..`、空セグメント、URL、制御文字、バックスラッシュ、末尾`/`は拒否する。大文字小文字と区切りを勝手に変換しない。辞書が不正なら既存の有効辞書集合を保持する。
+- `paths`配列の一部に既存ファイルとの競合や書込み失敗がある場合、**当該元ファイルの全Pathを成功扱いにしない**。全Pathを一時書込み・検証し、必要な上書き確認をすべて得てから複製先一式を切り替える。中断時にはその元ファイルについて更新前の状態へ復元する。別の元ファイルの確定済み取込みは維持する。
 - 辞書に**元ファイル名が存在しない**素材は設定値にかかわらず`./cache/unknown_resouce/`で保留し、Runtimeで使用しない。辞書登録名に変更して明示的に取り込んだ場合は、その時点のファイル名を辞書に照合する。OPFSキャッシュを消去すると未一致素材と取込一時データは消去される。元ファイル名、仮区分、CharacterID、現在Pathを保存済みの割当メタデータから再照合する。
 
 端末内のRelease辞書更新・割当JSON・HCAのBGM判定・鍵キャッシュの具体的Path/原子的切替は「[ローカルアセット保存契約](local_asset_storage.md)」に従う。
@@ -201,13 +212,13 @@ allow_user_asset_override: false
 ```
 
 - `update_asset_dictionary=true`ならログイン成功のたびに指定Releaseから辞書を取得する。`false`ならログイン時の自動更新を行わず、端末保存の辞書をそのまま使う。
-- `asset_dictionary_version=latest`なら`ReHydrangeaOdyssey/AssetDictionary`の最新Releaseを選ぶ。それ以外は指定文字列をReleaseのtag名として扱う。Release一覧の参照とAssetダウンロードはGitHubのRelease APIから得る実URLを使用する。Release Asset名が`asset_dictionary.json`のものだけを選択し、存在しないか同名Assetが複数なら更新失敗とする。受信したJSONとSafe Pathの全件検証・旧辞書保持・原子的切替は`design/client/local_asset_storage.md`に従う。失敗時は1回再試行し、旧辞書がなければ空辞書を作成する。
+- `asset_dictionary_version=latest`なら`ReHydrangeaOdyssey/AssetDictionary`の最新Release、それ以外は指定tagを選択する。辞書の論理的な配布構成はReleaseに対応した`<ext>/assets_dict.json`の集合であり、従来の単一`asset_dictionary.json`は新形式の正本ではない。**実際にどのRelease Asset/アーカイブを取得・展開してこの階層へ到達するかは配布契約未確定**（`design/programming/undecided.md`のU-09）。存在が確認できないAsset名を仮定した自動選択は行わず、既存辞書集合を保持する。取得できた辞書集合の全件検証と更新の切替は`local_asset_storage.md`に従う。失敗は1回再試行し、旧辞書がなければ空辞書状態へ移行する。
 - `config.cfg`はCloudflare Pages上の静的配布物であり、ブラウザ内でこの配布ファイルを書き換えない。タイトルの設定画面ではOPFS `./settings/config_cfg_override.yaml`の端末ローカル上書き値を変更する。実効値は「端末上書きが有効なら上書き、なければ配布`config.cfg`、どちらも不正なら初期値」の順とする。運営による変更は上書きの無い項目に次回読込みから反映する。
 
 ### 外部素材の信頼確認とユーザーの明示的な例外
 
-- 辞書の**配布署名検証は使用しない**。`AssetDictionary`の同一Release Assetsに置く`asset_dictionary.json`の生バイト全体のSHA-256を計算し、そのReleaseにある**小文字16進64桁のSHA-256文字列そのものをファイル名にした検査値Asset**の名前と一致する場合だけ辞書のHash照合成功とする（該当する検査値Assetは1件だけ、値の無い／複数の異なる検査値Assetは更新失敗）。検査値AssetのBodyではなく**Asset名**を期待Digestとして扱う。JSON形式/Path全件検証と旧Generation保持は必須とする。両Assetが同じReleaseで同時に改ざんされた場合は検知できないため、この照合を独立した配布元の真正性証明とは呼ばない。
-- 利用者が端末内`./config.cnf`で`verify_asset_dictionary_sha256: false`を**明示設定**した場合だけReleaseの検査値Assetとの照合を省略できる。未検証状態を画面で明示し、Schema・安全Path・サイズのValidationは必須、旧検証済みGenerationを維持する。旧設定名`verify_asset_dictionary_source`は廃止する。
+- 辞書の**配布署名検証は使用しない**。従来の単一`asset_dictionary.json`とそのRaw Bytes Digest名を用いた検査値Assetとの1対1対応は、拡張子別の複数`assets_dict.json`にはそのまま適用しない。`verify_asset_dictionary_sha256=true`の場合、取得した**全辞書ファイル**それぞれのRaw Bytesと、配布側が明示する当該ファイルに対応した検査値との照合が必須である。対応付けの配布形式・取得手順はU-09の未確定事項であり、整合する検査値を確定できない場合は**更新を失敗扱い**として旧辞書を保持する。署名による配布元真正性の保証はない。
+- 利用者が端末内`./config.cnf`で`verify_asset_dictionary_sha256: false`を**明示設定**した場合だけRelease配布物から得た各辞書の検査値との照合を省略できる。未検証状態を画面で明示し、Schema・安全Path・サイズのValidationは必須、旧検証済みGenerationを維持する。旧設定名`verify_asset_dictionary_source`は廃止する。
 - `allow_user_asset_override`は**すでに実ファイルがある辞書許可Pathを、異なるバイト列で明示的に置き換える操作だけ**を制御する。`false`（既定）では異なる内容での上書きを拒否し、同一内容の再取込みは変更なしとする。未配置Pathへの通常の新規取込みはOFFでも許可する（元名・辞書Path・必要時の`paths`内容Hash・形式検証を通る場合に限る）。`true`では確認操作後に既存実ファイルを差し替えられるが、辞書登録済み元名と許可Path、画像/音声の実体形式の検証は必須である。`path`が一意なら**辞書に期待内容Hashは存在しない**ので元バイト列の同一性を配布元と照合したと主張しない。`path`が空で`paths`を使う場合は、**overrideの設定値にかかわらず**実バイト列のSHA-256が辞書の候補Hashと一致したPathだけに新規配置・上書きを許可する。候補Hashと不一致のファイルを、辞書に登録された別候補Pathへ手動指定して使用することも認めない。候補Hashの一致する既存Pathを異内容で置換する場合は、新しい実バイト列もそのPathに対応するHashと一致しなければならない。未登録ファイル名・辞書にないPath・Server正本・他Playerの変更は設定値にかかわらず不可とする。
 - ローカル設定ファイルはブラウザのOPFS上にあり、タイトルの「設定」画面から編集する。設定不正は各項目の既定値に戻し、Hash照合OFF時は不整合を検出できないことを警告する。辞書配布署名・公開鍵の管理機能は設けない。
 

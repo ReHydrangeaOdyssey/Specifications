@@ -7,7 +7,7 @@
 - [U-03] Public API ServerのHTTPS Origin（静的ClientはCloudflare Pagesで配布し、Originは実配備時に`client_origin`で設定する）.
 - [U-05] HTTP/2 + TLS 1.3の対象ブラウザでの実通信検証結果.
 - [U-07/08] 最小対応ブラウザを含む各端末でのフォルダ一括選択・元ファイル削除権限と実装可否（未対応環境はコピーのみ）.
-- [U-09] AssetDictionaryの実公開Release Assetの有無および実際の配布内容との照合。辞書本体Asset名と同一Release内のSHA-256検査値Asset名との照合方式はClient保存契約で確定済み。
+- [U-09] AssetDictionaryは`png/assets_dict.json`・`jpg/assets_dict.json`・`hca/assets_dict.json`等の拡張子別ディレクトリで構成され、各値は`./assets/`からの相対Path、`paths`のHash値はPath配列となることが確定。**未確定**なのは、GitHub ReleaseのどのAsset名/アーカイブ方式でこの階層を配布・取得するか、拡張子別ファイルのRaw Bytesに対応するSHA-256検査値をどの配布情報で一意に取得するかである。従来の単一`asset_dictionary.json`＋Digest名Asset方式を流用すると矛盾するため、新契約の検証が完了するまで`verify_asset_dictionary_sha256=true`の自動更新は成立させず旧Generationを維持する。
 - [U-11/12] 手動割当メタデータはClient保存契約で定義済み。Character/Actionの機械生成不能な全件対応表は必須要件としない。ユーザー登録済み構成セットの実データに応じてClient内で参照を解決する。
 - [U-19] `cridecoder`のiPhone Safari/WASM実機動作・依存ライセンス検証後の最終採否.
 - [U-20] HCA出力は常にステレオ2ch、1ch入力は左右へ複製し、ループ真偽は`./assets/sound/bgm/`（ディレクトリ境界と大文字小文字を区別し、配下のサブディレクトリを含む）への配置で判定。個別のループ設定Fileは使用しない。鍵キャッシュ形式はClient保存契約で定義済み。鍵探索ライブラリの採否と実機検証は別途確認する。
@@ -37,4 +37,4 @@
 
 - GameAssetsの代替画像は実ReleaseにAssetが公開された時点で、**論理代替画像ID→Release tag→実Asset名→検証用情報**を配布設定で一意に対応付け、実体と照合してからゲーム開始条件の検証対象へ登録する。未公開の名前・tag・URLを仕様へ仮置きしない。公開前または取得失敗時には未検証画像を有効とせず既存のゲーム開始エラーを表示する。
 - Public APIのHTTPS Originは**配備先確定時のみ**静的設定の`public_api_origin`へ登録し、Client接続先・Public API側の許可Client Origin/CORS・認証Callback URI・CookieのHost/SameSite/Domain設定を同じ環境で照合する。仮のドメインを設定しない。未設定中はClientのローカル機能だけを提供する。
-- アセット辞書のPathは生成側がOPFS Root相対`./assets/`始まりとして出力する。Clientの二重連結はしない。辞書更新時の不要素材はcache退避する。
+- アセット辞書の値は生成側が`./assets/`からの相対Path（例：`dir_a/sample.png`）として出力し、Clientが`./assets/`を一度だけ前置する。`paths`の一致HashはPath配列全件への複製を意味する。拡張子別辞書の保存世代と素材の不要Path退避は全拡張子をまとめて扱う。

@@ -11,9 +11,9 @@
 
 ## Release辞書の取得・原子的更新
 
-1. ログイン成功後、配布`./config.cfg`とタイトル設定画面で保存した端末上書き値を統合した実効`update_asset_dictionary`が`true`の場合、`asset_dictionary_version=latest`なら最新Release、それ以外は指定tagのReleaseをGitHub Releases APIで取得する。辞書本体は`asset_dictionary.json`という名前のRelease Assetを**ちょうど1件**選び、同じReleaseから検査値を表す**小文字16進64桁のAsset名**を1件取得する（実効`verify_asset_dictionary_sha256=false`では当該Asset不在も許容する）。Assetの実URLはRelease APIの返却値から取得し、任意の未知Assetを辞書として選ばない。
-2. HTTPSレスポンス正常性、Content-Lengthと実受信量、最大受信量上限、UTF-8、JSON Object、すべての`path`/`paths`とハッシュキー形式、相対Path安全性、File名の重複と空値を全件検証する。**辞書本体のRaw Bytes全体**にSHA-256を計算し、同じRelease内でファイル名がこのDigestと完全一致する検査値Assetがちょうど1件だけある場合に照合成功とする。`verify_asset_dictionary_sha256=true`（初期値）で検査値Asset欠落・曖昧・不一致なら切替えない。利用者が設定画面で明示的にfalseとしたときだけ検査値照合を省略できるが、Schema/Path検査は常に実施する。tag・辞書Asset ID・検査値Asset ID・ETag・計算Digest・検証結果を履歴へ保存する。ETagはHashの代用にならず、同一Release内のDigest名ではRelease改ざん自体を検出できない。
-3. `./cache/temp/asset_dictionary/`に`generation_<id>.json`として一時書込みし、読戻し検証後に、**OPFS Root相対の`./cache/asset_dictionary/active.json`**をActive参照（generation ID・tag・SHA-256・Size）として一時ファイルから原子的に切替える。保存済みGenerationの保存先はこのActive参照から解決する。旧Generationは新Generationの参照確定まで削除しない。再起動時はActiveのHashとJSONを検証し、不完全なら直前の検証済みGenerationへ戻す。旧辞書と新辞書の全Pathに加え、**各Pathに対応する元ファイル名・`path`/`paths`の方式・要求される内容SHA-256条件**を比較する。旧辞書にのみある保存Pathの素材は`./cache/obsolete_assets/<更新ID>/`へ退避する。共通Pathであっても許可条件が変更された場合は既存実ファイルを読んで再検証し、新辞書が実バイト列と元名を許可すると確認できる場合にだけ残す。旧来歴は旧検証済みGenerationのPath→元名が一意な場合にだけ逆引きし、`paths`の場合は保存実体のHash一致も確認する。旧Generationが消去・破損したか候補が一意でない素材、および`paths` Hash条件に合わない素材は同じ退避領域へ移し、Runtimeへ渡さない。`path`一意のエントリには期待内容Hashがないので、**存在しない配布元Hashを検証したと扱わない**。新規Pathへ旧内容を推測で割り当てない。退避・全件検証・有効辞書参照の切替を更新マーカーで一体化し、途中失敗/再起動時は旧辞書と元の`./assets/`状態へロールバックする。新辞書が有効になった後、退避した素材はRuntimeで使用せず、明示的なキャッシュクリアの対象とする。
+1. ログイン成功後、実効`update_asset_dictionary=true`なら`asset_dictionary_version=latest`または指定tagのReleaseを選ぶ。取得対象は**拡張子別`<ext>/assets_dict.json`の集合**であり、単一の`asset_dictionary.json`ではない。各相対Pathは辞書配布物のRootからのもので、`png/assets_dict.json`、`jpg/assets_dict.json`、`hca/assets_dict.json`などを意味する。GitHub ReleasesのどのAsset名/パッケージからこの内部階層を取得するか、および検査値ファイルとの対応付けは未確定（`design/programming/undecided.md`のU-09）。配布実体が判明するまで、推測したAsset名・アーカイブ形式・Web URLから取得を開始しない。
+2. 取得した全拡張子別辞書についてHTTPS応答・受信量上限・UTF-8・JSON Object・拡張子DirectoryとFile名の一致・`path`/`paths`型・Hashキーの小文字16進64桁・配列全要素のPath安全性・保存Pathの集合全体での衝突有無を検証する。`path`非空なら`paths={}`、`path`空なら各Hashに非空配列を要求する。`verify_asset_dictionary_sha256=true`では**各辞書ファイル**のRaw BytesのSHA-256を、それぞれに対応するRelease側の検査値と照合できた場合に限り成功とする。検査値の対応付け不明・欠落・不一致・取得途中終了は旧Generation保持とし、照合を自動OFFにしない。利用者が`verify_asset_dictionary_sha256=false`を明示した場合も全件のSchemaと安全Pathは必須とする。Release tag・辞書配布物の識別子・拡張子別ファイル名とDigest・検証結果を履歴に保存する。配布Assetそのものの署名検証は行わない。
+3. 新辞書の各`<ext>/assets_dict.json`を`./cache/temp/asset_dictionary/<generation_id>/<ext>/assets_dict.json`へ一時保存して再読込検証し、集合全体の検証・素材照合・退避が終了してから`./cache/asset_dictionary/active.json`のActive参照を切り替える。Activeはgeneration ID・tag・各拡張子とファイルごとのSHA-256・Sizeを参照する。新Generation全体を原子的な論理単位とし、一部拡張子だけ先に有効化しない。旧Generationと新Generationは全辞書の`path`および`paths`配列の**全要素**をOPFS保存Pathへ正規化して比較し、各Pathの元ファイル名・拡張子・内容Hash条件も照合する。新条件から外れる実ファイルは`./cache/obsolete_assets/<更新ID>/`へ退避する。共通Pathは旧辞書の一意なPath→元名の逆引き（`paths`では実内容Hashの一致も必要）と新辞書の許可を確認したものだけ維持する。旧Generation消失・不正・来歴の曖昧な素材を推測で移行しない。更新中マーカーと旧素材の退避により中断・検証失敗時は旧辞書集合と元の`./assets/`状態へ復元する。
 4. `update_asset_dictionary=false`ならネットワーク取得しない。初回に有効辞書がない場合は空辞書として手動割当だけを使う。HTTP失敗は1回だけ再試行してから保存済み正本へ戻す。
 5. `./cache/temp/`配下はプロセス再起動で自動消去しないが、ユーザーが**キャッシュクリアを明示実行した場合は辞書Generationも消去される**。次回ログインで再取得する。辞書更新・構成素材入替・プログラム更新中はキャッシュクリアを拒否する。
 
@@ -21,7 +21,7 @@
 
 - ファイルは`./cache/temp/user_impoert/<import_id>/`へ一時取込みし、`import_id`は暗号学的乱数で一意に発行する。辞書一致は`./assets/`へ確定し、不一致は`./cache/unknown_resouce/<import_id>/`へ保存する。未一致は描画・再生に使用しない。
 - 割当レコードは`./cache/unknown_resouce/assignments.json`のUTF-8 JSONとする。`schema_version=1`、`items`は`import_id`をキーにしたObjectとする。各項目は`original_filename`（改名・Unicode正規化なし）、`content_sha256`（小文字16進64桁）、`current_path`（実体が現在存在するOPFS Root相対Path）、`category`（`BGM`/`SE`/`Voice`/`Character`/`SD Character`/`Character Icon`）、`target_id`（Character系は指定ID、その他は空文字）、`dictionary_status`（`unmatched`/`matched_pending_confirmation`/`invalid`）、`assigned_path`（未確定なら空文字）、`created_at`（UTC epoch milliseconds）を必須とする。
-- 辞書に一致して保存済みの素材の元ファイル名は、辞書更新時に**旧検証済みGenerationの保存Path→元ファイル名が一意である場合だけ**逆引きで確認する。`paths`方式では現在実体のSHA-256も再計算し、旧辞書内の該当Hash条件と照合する。旧Generationが消失・破損した場合、またはPathの対応元名が一意でない場合は、実ファイルの内容やPathだけから元名を推測しない。確証できない素材は新辞書の許可対象として引き継がず、`./cache/obsolete_assets/`へ退避してRuntime参照を停止する。構成セットの永続Manifestは作らない。
+- 辞書に一致して保存済みの素材の元ファイル名は、旧検証済みGenerationの**全拡張子別辞書**を展開してPath→元ファイル名が一意な場合だけ逆引きする。`paths`方式では一致Hashの配列に含まれる各保存Pathについて、実ファイルのSHA-256も再計算して照合する。旧辞書喪失・同一Pathの複数元名候補・内容Hash不一致の場合は元名を推測しない。確証できない素材は`./cache/obsolete_assets/`へ退避してRuntime参照を停止する。構成セットの永続Manifestは作らない。
 - 端末内の割当レコードは元ファイル名と実ファイル名を別に保持する。`target_id`やユーザーの手動区分は辞書一致を証明しない。ログイン後に辞書更新した場合は元ファイル名および必要に応じた内容SHA-256で再照合し、保存先変更はユーザー確認後に行う。既存Pathへの異なる内容の上書きはさらに`allow_user_asset_override=true`を要する。
 - ユーザー確認により辞書一致素材を`./assets/`へ確定配置した後は、対応する保留素材の割当レコードを削除する。実行時の利用可否は有効AssetDictionaryと配置済み素材の検証結果を正本とし、削除済み割当レコードを参照しない。
 - 割当レコードは現在実体Pathを唯一の参照正本として保存する。再配置時は移動先へコピー→内容Hashの再検証→割当レコードの原子的な参照切替→旧実体削除の順で処理する。保存済み`current_path`が存在しない場合は旧一時Pathを勝手に正本化せず`invalid`の修復対象とする。割当レコードは一時ファイルへ全件書込み→読戻しValidation→参照切替の順に更新する。レコードと素材の一方が欠落した場合は一致とみなさず当該レコードを`invalid`として表示・修復対象にする。キャッシュクリアでは保留素材と割当レコードの両方を消す。
@@ -32,13 +32,13 @@
 - キャラクター描画の構造情報（`SpriteAnimationData`/`PlistRoot`の論理モデル）とユーザーが取り込む**画像PNG/HCAの実ファイル**は区別する。通常の`./assets/`にProtoBufファイルを取り込んだり、そこから列挙したりしない。構造情報の供給元は、**Clientが起動時に利用可能な同梱/読み込み済みモデル**または**利用者がClientへ渡してそのセッションで検証済みのモデル**に限り、読み込み時に同じ構造検証を行う。セッション内だけのモデルは再起動後に再提供されるまで利用可能とみなさず、アセット辞書やPNG名から復元しない。Clientでのみ検証・登録・入替・削除・利用可能な参照の再確認を行い、Public API/Private API/GameServer/DBへ素材を送信・保存しない。
 - 画像等の取込対象ファイルの元名・内容Hash・保存先Pathは取込時に検証する。Clientが保持する構造情報の参照とPNGの実体を照合し、セット外の任意Pathやディレクトリ脱出を禁止する。対象実ファイルを一時領域で検証し、既存ファイルの退避と原子的な置換手順を用いる。永続Manifestは作らない。
 - ProtoBufは描画用データ型の定義であり、`./assets/`内のユーザーファイルの形式・保存対象を意味しない。名称から骨格/Movementを自動生成しない。実データから機械的に作れない`CharacterID × 向き × Action`の全件対応表を別途必須Schemaとして要求しない。ゲーム内の表示対象と使用セットはClient側の明示選択・既存素材参照で決定し、参照不能なCharacterは代替表示を行う。
-- **アセット辞書をRuntime素材使用許可の最上位規則**とする。`path`一意方式の置換は設定ON・ユーザー確認で許可できるが、`paths`方式は設定ONでも各保存Pathに対応する内容SHA-256の一致を必須とする。Hash不一致素材の候補Path手動選択・上書き・Runtime利用を拒否する。`allow_user_asset_override=false`は既存辞書許可Pathの異なる内容への置換を禁止する設定であり、未配置Pathへの辞書一致素材の新規取込みは禁止しない。Runtimeでユーザー供給素材として読むPNG/HCAについて、各ファイルの元ファイル名が有効辞書に存在し、辞書で許可されたPathに解決できなければ使用不可とする。骨格・モーション・アトラスの内部データ構造そのものを辞書登録済みの`./assets/`ファイルだと解釈しない。構成セットの端末内登録だけでは使用権限を生じない。辞書登録名でのユーザー素材差替えは`config.cnf`の明示設定とClient仕様の許可Path制限に従う。セット削除時は共有PNGを他セットが参照しているか確認する。
+- **アセット辞書をRuntime素材使用許可の最上位規則**とする。`path`一意方式の置換は設定ON・ユーザー確認で許可できるが、`paths`方式は設定ONでも一致HashのPath配列**全要素**に同一内容を複製し、各保存Pathに対応する内容SHA-256の一致を必須とする。Hash不一致素材の候補Path手動選択・上書き・Runtime利用を拒否する。`allow_user_asset_override=false`は既存辞書許可Pathの異なる内容への置換を禁止する設定であり、未配置Pathへの辞書一致素材の新規取込みは禁止しない。Runtimeでユーザー供給素材として読むPNG/HCAについて、各ファイルの元ファイル名が有効辞書に存在し、辞書で許可されたPathに解決できなければ使用不可とする。骨格・モーション・アトラスの内部データ構造そのものを辞書登録済みの`./assets/`ファイルだと解釈しない。構成セットの端末内登録だけでは使用権限を生じない。辞書登録名でのユーザー素材差替えは`config.cnf`の明示設定とClient仕様の許可Path制限に従う。セット削除時は共有PNGを他セットが参照しているか確認する。
 
 
 ### 構成セットの保存・入替
 
 - 独立した`manifest.json`・`index.json`や`generation_id`台帳は作らない。Clientが取得した描画構造情報と参照PNGの関係を**メモリ上で**検査し、辞書一致したPNG/HCAの実体だけを辞書が許可する`./assets/`始まりの完全Pathへ保存する。ProtoBufは`./assets/`に保存しない。辞書の一致しないファイルをRuntimeには渡さない。
-- 一括取込みや差替えでは、取込対象のPNG/HCAの形式・画像参照・Hash・辞書許可を検証し、変更対象の旧ファイルをOPFSの一時領域へ退避した後に新ファイルを配置する。全件成功時だけ退避を削除し、中断・失敗時には既存の旧ファイルを復元する。処理中マーカーは一時領域に保持し、起動時に未完了処理を検出したらロールバックする。構成セットの永続Manifest・世代管理は必要としない。
+- キャラクター構成セットの一括登録・一括入替では、取込対象のPNG/HCAの形式・画像参照・Hash・辞書許可を検証し、変更対象の旧ファイルをOPFSの一時領域へ退避した後に新ファイルを配置する。**このセット単位の操作**では全件成功時だけ退避を削除し、中断・失敗時には既存の旧ファイルを復元する。通常の独立したPNG/HCA複数ファイル取込みは**元ファイルごと**に確定し（`paths`配列に複数保存先があるときは全複製先を同一単位で切替・失敗時は全先を復元する）、完了済みの別ファイルを保持する（`design/programming/client/client.md`のファイル単位取込規則を参照）。処理中マーカーは一時領域に保持し、起動時に未完了処理を検出したらロールバックする。構成セットの永続Manifest・世代管理は必要としない。
 - 次回起動時は同梱/再読込済みの描画構造モデルを検証し、利用可能な構造情報の参照と有効辞書の完全PathからPNG実体を再検証する。前回セッションのメモリ専用モデルは再起動だけでは復元されたとみなさない。`./assets/`をProtoBuf探索先とせず、存在しない構造情報を推測で生成しない。壊れたFrameや参照が1件でもあれば、その読込対象の構成一式を拒否する。存在しない全件自動対応表・Movement名を推測で補わない。Client以外のAPI/DBへ素材を送信しない。
 
 ### 明示した表示選択の保持
@@ -55,13 +55,13 @@
 
 ### 辞書の保存Pathの基準
 
-辞書生成側が`path`または`paths`の値を`./assets/`で始まる**OPFS Root相対の完全Path**として出力する。Client側で接頭辞を追加しない（`./assets/assets/`を作らない）。`./assets/`より外への参照、`..`、空セグメント・区切り文字の置換・URL・バックスラッシュを拒否する。`./assets/sound/bgm/...`はそのままBGM判定対象であり、辞書Pathの全体を大文字小文字も含めて厳密に扱う。
+辞書Rootの`<ext>/assets_dict.json`内で、`path`文字列または`paths`配列の各文字列は、**アセット領域Root `./assets/`からの相対Path**である。例えば値`dir_a/sample.png`はOPFS `./assets/dir_a/sample.png`へ保存する。辞書Rootの`png/`を保存Pathに付与せず、逆に辞書の値へ`./assets/`を埋め込むことも認めない。先頭の`/`・`./`・`assets/`・`./assets/`、URL、空/`.`/`..`セグメント、制御文字、バックスラッシュ、末尾`/`を拒否する。全配列要素を検証し、同じ正規化後Pathが配列内・Hash間・元ファイル名間・拡張子間で重複していれば辞書全体を不正とする。既存の`./assets/sound/bgm/`以下かどうかは変換**後**のOPFS Pathで判定する。
 
-保存先の重複は辞書生成側で検査するという配布前提とし、Clientで別名素材の自動統合・エイリアス解決を新設しない。辞書の安全Path検証自体は省略しない。
+`path`が空でSHA-256が一致する`paths`配列が複数Pathを含むときは、**その全Pathへ同じバイト列を複製する**。元ファイル単位の処理では全保存先へ一時ファイルを用意し、既存内容との差分と上書き権限を全件検証・確認してから確定する。未配置Pathへの新規作成と既存同一内容の保持は設定OFFでも可能だが、いずれかのPathで異内容上書きが必要なら全対象のユーザー承認と`allow_user_asset_override=true`を要求する。1Pathでも容量不足・書込失敗・検証不適合・キャンセルがあれば、その元ファイルの保存先全体を変更前へ戻し、成功扱いにしない。既に成功した別の元ファイルは保持する。配列にないPathへ自動補完しない。
 
 ### 辞書更新で不要となった素材の退避
 
-新旧辞書を`path`と`paths`の全Pathへ展開し、Pathごとの**元ファイル名・一意`path`か内容Hash別`paths`か・対応する内容SHA-256**を差分判定する。新辞書で参照されないPathだけでなく、Pathは共通でも新しい許可条件を既存実ファイルが満たさない場合も不要素材とする。既存バイト列のSHA-256と辞書条件を再検証し、旧来歴の確認には旧検証済み辞書Generationによる一意なPath逆引きを用い、`paths`方式では旧Hashと保存実体の再計算値も照合する。辞書が失われた場合または複数の元名候補がある場合は内容のみから元名の一致を推測せず、退避する。`path`一意のケースでは内容Hashは許可条件に存在しないため、辞書の元名/Path条件・形式が満たされるかで判断する。不要素材は`./cache/obsolete_assets/<更新ID>/`へ元のRoot相対Pathを保ったまま退避する。新旧共通Pathでも検証不適合なら退避し、**適合が確認できた場合だけ現位置に残す**。新辞書有効化後、退避素材はRuntimeで使用しない。退避中に失敗した場合は、新辞書を有効化せず旧辞書と旧素材の整合状態へ復帰させる。更新中マーカーは完了/ロールバックまで維持し、更新中はキャッシュクリア・新規素材の変更を受付けない。手動キャッシュクリアは確定済みの退避ファイルを消す操作であるとUIで示す。
+旧辞書集合と新辞書集合を全拡張子・全`path`・全`paths`配列要素の**OPFS保存Path**へ展開し、Pathごとの元名・拡張子・`path`/`paths`方式・条件SHA-256を比較する。新辞書にないPath、または新条件に現存実ファイルが適合しないPathは、`./cache/obsolete_assets/<更新ID>/`へ元Pathを保ったまま退避する。共通Pathでも旧Generationの逆引きで元名が一意と確認できない場合は維持しない。`paths`の条件がある場合は実内容Hashも照合する。`path`方式には期待Hashがないので存在しない配布元Hashを検証済みとして扱わない。更新中マーカーは完了/ロールバックまで維持し、更新中はキャッシュクリア・新規素材の変更を受け付けない。手動キャッシュクリアは確定済み退避ファイルを消すことをUIで示す。
 
 ### 構成素材の入替中の画面保護
 

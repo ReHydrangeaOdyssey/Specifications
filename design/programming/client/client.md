@@ -131,9 +131,9 @@ Client自体のMIT License全文および著作権表示も、第三者依存の
 - OPFSの基本構造は`./game_info.json`（現在のVersion）, `./assets/<something>`, `./cache/<something>`とします。`game_info.json`の`version`は`design/client/client.md`で定義したu32 3要素形式で検証し、不正値は初期値に再生成します。個別の取込中断は自動再開しません。
 - OPFSでは非同期APIと`FileSystemSyncAccessHandle`を利用可能な処理で選択します。非同期のほうが効率的な処理には非同期APIを使い, 同期APIはWorker内でのアクセスに限定します。用途別の性能・互換性測定は継続します。
 - 圧縮HCAファイル全体と全体PCMを同時に常駐させません。デコード済みPCM, GPU資源, WASMメモリは用途別に管理し, 不要な`AudioBuffer`の参照を解除します。
-- 取り込みはまず`./cache/temp/user_impoert/`で行います。辞書の第1キーは拡張子付き元ファイル名の完全一致とし、エントリの`path`が非空なら一意Pathへ、空なら内容SHA-256で`paths` Objectの対応Pathを選びます。辞書一致時だけ`./assets/`へ移し、不一致は`./cache/unknown_resouce/`へ保留します。ユーザーは区分「BGM」「SE」「Voice」「Character」「SD Character」「Character Icon」を指定でき、Characterでは対象IDを記録しますが、辞書不一致のままRuntimeでは使用しません。元ファイル名は照合用に保存し、一意IDによる強制改名はしません。既存Pathを異なる内容に差し替える場合は`allow_user_asset_override=true`とユーザー確認の両方が必要であり、一括上書き/キャンセルも実装します。設定OFFでも辞書一致の未配置Pathへの新規取込みは可能です。
-- PNG/HCAは辞書Pathに基づきOPFSの`./assets/`へ保存・復元します。タイトル画面からのアセット削除では任意の素材を個別・一括で削除できます。自動的な容量調整削除はせず, 容量不足時はゲームを利用不可にして削除操作を有効にします。キャッシュクリアは辞書差分退避・構成素材入替・Clientプログラム更新の処理中は拒否し、それ以外は`./cache/`のみを対象とします。辞書形式は`design/client/client.md`で確定しており、取得するRelease Asset名は`asset_dictionary.json`に固定します。辞書保留素材は`./cache/unknown_resouce/`、取込一時領域は`./cache/temp/user_impoert/`です。
-- 辞書Generation更新時はPath集合だけでなくPathに対応する元名と内容Hash条件を比較し、Pathが共通でも新辞書に不適合な実ファイルは`./cache/obsolete_assets/`へ退避します。内容Hash条件のあるエントリはバイト列を再計算して照合し、`path`一意では配布元Hashを架空に検証しません。退避とActive辞書切替は中断マーカーとロールバックを備え、処理中はユーザー操作・キャッシュクリアを無効化します。配布辞書の`./assets/`はPath値の一部であり、保存時に追加の接頭辞を付けません。
+- 取り込みはまず`./cache/temp/user_impoert/`で行います。辞書の第1キーは拡張子付き元ファイル名の完全一致とし、該当拡張子の`<ext>/assets_dict.json`にあるエントリの`path`が非空なら単一相対Pathへ、空なら内容SHA-256と一致する`paths` Objectの**Path配列全要素**へ複製します。辞書一致時だけ`./assets/`へ移し、不一致は`./cache/unknown_resouce/`へ保留します。ユーザーは区分「BGM」「SE」「Voice」「Character」「SD Character」「Character Icon」を指定でき、Characterでは対象IDを記録しますが、辞書不一致のままRuntimeでは使用しません。元ファイル名は照合用に保存し、一意IDによる強制改名はしません。既存Pathを異なる内容に差し替える場合は`allow_user_asset_override=true`とユーザー確認の両方が必要であり、一括上書き/キャンセルも実装します。設定OFFでも辞書一致の未配置Pathへの新規取込みは可能です。
+- PNG/HCAは辞書Pathに基づきOPFSの`./assets/`へ保存・復元します。タイトル画面からのアセット削除では任意の素材を個別・一括で削除できます。自動的な容量調整削除はせず, 容量不足時はゲームを利用不可にして削除操作を有効にします。キャッシュクリアは辞書差分退避・構成素材入替・Clientプログラム更新の処理中は拒否し、それ以外は`./cache/`のみを対象とします。辞書形式は`design/client/client.md`の拡張子別`<ext>/assets_dict.json`を正本とし、Releaseの実取得Asset名/パッケージ方式はU-09として未確定です。辞書保留素材は`./cache/unknown_resouce/`、取込一時領域は`./cache/temp/user_impoert/`です。
+- 辞書Generation更新時はPath集合だけでなくPathに対応する元名と内容Hash条件を比較し、Pathが共通でも新辞書に不適合な実ファイルは`./cache/obsolete_assets/`へ退避します。内容Hash条件のあるエントリはバイト列を再計算して照合し、`path`一意では配布元Hashを架空に検証しません。退避とActive辞書切替は中断マーカーとロールバックを備え、処理中はユーザー操作・キャッシュクリアを無効化します。辞書のPath値は`./assets/`起点の相対Pathであり、保存時に`./assets/`を**一度だけ前置**します。`paths`配列の全要素を差分検証対象とします。
 
 ### 依存・ビルド・検証条件
 
@@ -152,9 +152,9 @@ Client自体のMIT License全文および著作権表示も、第三者依存の
 
 ### OPFSアセット安全性と一括処理
 
-辞書の配置PathはOPFS Rootからの`./assets/`始まりの完全Pathのみ受け付ける。Clientはさらに`./assets/`を連結しない。`assets/`だけの接頭辞、`./assets/`直下の空名、絶対Path、URL、`..`、途中の`.`、制御文字、空セグメント、バックスラッシュを拒否する。辞書のPath選択とは別に検証する。
+辞書の配置Pathは`./assets/`からの相対Path（例：`dir_a/sample.png`）のみを受け付け、OPFS保存先は`./assets/`を一度だけ前置して得る。辞書値に`./assets/`を含むもの、`assets/`接頭辞、絶対Path、URL、`..`、途中の`.`、制御文字、空セグメント、バックスラッシュを拒否する。`paths`配列の各要素を検証し、重複/衝突Pathを拒否する。元ファイル1件が複数保存先を持つ場合は全Pathの複製が成功するまで当該取込みを確定せず、失敗時は全保存先を復元する。
 
-一括取込みと上書きはファイル単位の成功を基本とする。途中中断・キャンセル後も確定保存済みのファイルは残し、未処理ファイルは変更しない。ファイルごとの一時保存と切替処理により既存ファイルを途中書込みで破損させない。成功・失敗・未処理の件数を表示する。削除した素材の割当情報とキャッシュ参照を無効化する。
+通常のPNG/HCA複数ファイル取込みはファイル単位の成功を基本とする。途中中断・キャンセル後も確定保存済みのファイルは残し、未処理ファイルは変更しない。ファイルごとの一時保存と切替処理により既存ファイルを途中書込みで破損させない。成功・失敗・未処理の件数を表示する。一方、キャラクター構成セットの一括入替は`design/client/local_asset_storage.md`のセット全体のロールバック規則に従い、途中失敗時に旧構成を復元する。削除した素材の割当情報とキャッシュ参照を無効化する。
 
 ## タイトル画面のキャラクター画像割り当て
 
@@ -179,6 +179,10 @@ Clientが扱う認証情報は以下です。
 - Clientは`state`とPKCE `code_verifier`を認証開始時に生成し、同じタブの`sessionStorage`へ一時保存する。Code交換成功後または失敗・キャンセル時に破棄する。AccessTokenはメモリのみへ保持する。
 - `POST /v1/public/{MethodName}`はProtobufのBodyを用いて送受信し、CookieをCross-Originで送信しない。Stream断は`GetGuildBattleStatus`→再購読の順に回復し、1秒から30秒のBackoffを適用する。
 - 認証画面はPublic API Originのトップレベルページを使用し、Callback URIは`<client_origin>/auth/callback/`とする。詳細は`design/system/api_transport.md`に従う。
+
+### 通常認証Public RPCのAccessToken送信
+
+通常のBearer認証を要するPublic RPCでは、要求の組立て時に同一のAccessTokenを一度だけ取得し、`Authorization: Bearer <AccessToken>`と、既存Requestに定義された`access_token`フィールドの両方へ同じ値を設定する。片方の欠落や相違は`design/system/api_transport.md`でHTTP 401となる。`GetAdditionalAuthorizationConfig`や認証Origin専用RPCにこの二重設定を強制しない。ログアウト・Token失効時は既定のとおり進行中の認証必須RequestとStreamを中止し、古い応答で認証後の状態を再確定しない。
 
 ## Arena
 
@@ -224,6 +228,10 @@ Clientが保持するGuildBattle状態は、画面表示および要求組み立
 - Item残数
 - Guild Score、Chain、CBC状態
 
+### Join後の状態初期化
+
+`GuildBattleJoinResponse`には編成・HP・`request_sequence`は含まれるが、BP/TP・各待機状態・Tactics/Item・両Guild Score・Chain/CBCは含まれない。Join成功後は取得した編成を保持し、続けて`GetGuildBattleStatus`から表示用の現在値と`request_sequence`を再同期する。Status取得に成功するまで状態変更要求を送らない。取得に失敗した場合は再同期待ちとして扱い、Joinを再送して解決しようとしない。Status同期成功後に`SubscribeGuildBattleUpdates`の購読を開始する。
+
 ### 殲滅戦闘再現と騎士団情報通知
 
 Arenaと同じ`game-core`・戦闘専用PRNGを使用して, 殲滅戦闘をGameServerと同じ入力で再計算します。`GuildBattleAnnihilationResponse`には戦闘開始時点の`OwnCharacters`/`EnemyCharacters`（最大HP含む）, `EnemyPlayerID`, `EnemyFormationID`, `BattleTacticsEffects`, `Seed`を含めます。自分のPlayerIDはJoin済みの本人PlayerIDを使用します。Own FormationはJoin時に同期済みの構成を使用します。相手の継続効果は, `EnemyTacticsID[]`ではなく`BattleTacticsEffects`のSource/Targetおよび取得済みMasterDataで判定します。
@@ -237,18 +245,22 @@ Clientの直近表示HPや継続効果を戦闘入力として補わず, Respons
 ```mermaid
 stateDiagram-v2
     [*] --> Unknown
-    Unknown --> Synchronized: Join成功 / GetGuildBattleStatus成功
+    Unknown --> Resynchronizing: Join成功 / 初回状態取得
+    Resynchronizing --> Synchronized: GetGuildBattleStatus成功
+    Resynchronizing --> Resynchronizing: 取得失敗 / 再試行待ち
     Synchronized --> Requesting: Sequence付き変更要求送信
     Requesting --> Synchronized: 成功Responseの次Sequenceを採用
-    Requesting --> Synchronized: 失敗時はClient側で加算しない
-    Synchronized --> Synchronized: GetGuildBattleStatusでServer値へ再同期
+    Requesting --> Synchronized: 不成立が確定した業務Error
+    Requesting --> UnknownOutcome: Timeout / 切断 / 結果不明
+    UnknownOutcome --> Resynchronizing: Status再照会
+    Synchronized --> Resynchronizing: 再接続 / Sequence競合
 ```
 
-- 初回Join成功時にGameServerから現在RequestSequenceを受け取ります。
-- 成功した状態変更要求ではServerが進めたSequenceへ更新します。
-- 失敗要求ではClientが推測でSequenceを進めません。
-- 再接続時は`GetGuildBattleStatus`の現在RequestSequenceを正として再同期します。
-- `GetGuildBattleStatus`自体はRequestSequenceを消費しません。
+- Join成功時の`request_sequence`は受け取って保持するが、操作解放は`GetGuildBattleStatus`による初期同期が成功してからとします。
+- 同じGuildBattle/PlayerのSequence付き状態変更要求は、前の要求の成否が確定するまで並列送信しません。通信中の二重押下も同じ要求として再送しません。
+- 成功した状態変更要求ではResponseの`next_request_sequence`を採用します。不成立が明確な業務ErrorではClientが推測でSequenceを進めません。Sequence競合時はStatusを再取得します。
+- Timeout・切断・応答内容不明では、Server側で要求が成立した可能性があるため`UnknownOutcome`として操作を保留します。要求を無条件に再送せず、`GetGuildBattleStatus`で状態と`request_sequence`を再同期してから操作を再開します。
+- 再接続時も`GetGuildBattleStatus`の現在`request_sequence`を正として再同期します。`GetGuildBattleStatus`自体はRequestSequenceを消費しません。
 
 ### 出撃後の通信待機
 
@@ -327,16 +339,16 @@ Seedが`0`かどうかだけでランダム要素の有無を判定しません�
 
 ### 辞書照合の正本
 
-辞書はClient仕様の「アセット辞書の形式と照合規則」に従う。第1キーは元ファイル名、`path`が空の場合のみ内容SHA-256を計算して`paths` Objectを照合する。`paths`方式は`allow_user_asset_override=true`でもHash不一致の候補Path選択や異内容上書きを認めない。辞書不一致のファイルをRuntimeのテクスチャ・音声・アニメーション参照へ投入しない。端末側割当記録の有無は照合の代替条件としない。
+辞書はClient仕様の「アセット辞書の形式と照合規則」に従い、拡張子別`<ext>/assets_dict.json`を選択して元ファイル名を完全一致照合する。`path`が空の場合のみ内容SHA-256を計算して`paths` Objectの該当Hashにある**配列の全Path**を使用する。`paths`方式は`allow_user_asset_override=true`でもHash不一致のPathへ新規配置/上書きを認めない。辞書不一致のファイルをRuntimeのテクスチャ・音声・アニメーション参照へ投入しない。端末側割当記録は照合を代替しない。
 
 
 ## 現行仕様に基づくAsset Import Pipeline
 
 1. ユーザー指定ファイルを拡張子/実データ型で検証する。元ファイル名は改名・Unicode正規化せず照合メタデータへ保持する。
-2. `./cache/temp/user_impoert/`に一時保存し、辞書が有効なら`filename`の一致→`path`非空なら直接Path使用／空なら内容SHA-256で`paths` Object照合を実行する。
-3. 一致かつ辞書Pathが`./assets/`から始まる安全な完全Pathである場合は、未配置なら通常取込み、同じバイト列なら変更なし、既存内容と異なるなら設定ONと明示確認がある場合のみ確定保存する。不一致は`./cache/unknown_resouce/`へ移し、区分・対象ID・元名・保留Pathの割当情報を保存するがRuntimeへ渡さない。
+2. `./cache/temp/user_impoert/`に一時保存し、辞書が有効なら拡張子に対応する`<ext>/assets_dict.json`を選択→元ファイル名照合→`path`非空なら単一相対Path／空なら内容SHA-256に一致する`paths`配列の全相対Pathを取得する。
+3. 一致かつ全辞書Pathが安全な相対Pathなら`./assets/`を前置した全保存先を一時書込み・検証する。未配置なら通常取込み、同じ内容なら保持し、異内容の既存Pathすべてに設定ONと明示確認がある場合のみ**元ファイル単位で全Pathを確定**する。途中失敗時はその元ファイルが変更する全Pathを復元する。不一致は`./cache/unknown_resouce/`に保留しRuntimeへ渡さない。
 4. キャッシュクリアは`./cache/`全体を消すため、取込途中および辞書未一致の保留素材は失われる。辞書一致済み`./assets/`は残す。辞書更新・構成素材入替・プログラム更新中はキャッシュクリアを禁止する。
-5. ログイン成功時に`./config.cfg`（YAML）を読み、`update_asset_dictionary=true`ならRelease APIから最新または`asset_dictionary_version`で指定したtagを取得する。具体的Assetを一意に選択できない場合は更新失敗として扱う。初回失敗時は1回Retryし、それでも失敗なら保存済み旧辞書へ戻す。
+5. ログイン成功時に`./config.cfg`（YAML）を読み、`update_asset_dictionary=true`ならRelease APIから最新または指定tagを参照する。辞書の正本は拡張子別`<ext>/assets_dict.json`の**集合**であり、Releaseからの取得パッケージ方式・検査値Asset対応はU-09で未確定とする。配布実体を一意に選択・検証できない場合は更新失敗として扱い、1回再試行後に保存済みの旧集合を利用する。
 
 ## HCA音声の復号準備
 
@@ -349,6 +361,6 @@ Seedが`0`かどうかだけでランダム要素の有無を判定しません�
 
 ### 資産辞書・割当・HCAの正本保存方式
 
-`design/client/local_asset_storage.md`を正本とする。Release Assetは`asset_dictionary.json`を唯一の選択名とし、全件Validation後に`./cache/temp/asset_dictionary/`でGeneration切替する。未一致割当は`./cache/unknown_resouce/assignments.json`にID別に保存し、素材側の存在とHashも確認する。HCAループは保存先のBGM専用フォルダで判定し、鍵は元ファイル名と内容SHA-256の複合識別子で検証済みの値だけを原子的にキャッシュする。
+`design/client/local_asset_storage.md`を正本とする。Releaseで取得した`<ext>/assets_dict.json`の集合を全件Validation後に`./cache/temp/asset_dictionary/`で**集合単位**にGeneration切替する。単一`asset_dictionary.json`の取得は現行形式の正本ではなく、パッケージ化と検査値の対応方式はU-09で要確定とする。未一致割当は`./cache/unknown_resouce/assignments.json`にID別に保存し素材側の存在とHashも確認する。HCAループは保存先BGMフォルダで判定し、鍵は元ファイル名と内容SHA-256の複合識別子で検証済みの値だけ原子的にキャッシュする。
 
-タイトル画面の「設定」では配布`config.cfg`の値はOPFS `./settings/config_cfg_override.yaml`による局所的な上書きとして扱い、`./config.cnf`の辞書SHA-256照合・辞書登録名のみの素材差替えをトグルで変更する。配布ファイルをUser権限で書換えない。辞書のReleaseにある検査値Asset（SHA-256小文字16進ファイル名）と`asset_dictionary.json`のRaw Bytes Hashが一致することを既定の更新条件とし、配布署名・公開鍵は用いない。
+タイトル画面の「設定」では配布`config.cfg`の値はOPFS `./settings/config_cfg_override.yaml`による局所的な上書きとして扱い、`./config.cnf`の辞書SHA-256照合・辞書登録名のみの素材差替えをトグルで変更する。配布ファイルをUser権限で書換えない。SHA-256照合ONでは**全拡張子別辞書の各Raw Bytes**が配布側の対応する検査値と一致する必要があり、対応付けを特定できないなら辞書更新しない。配布署名・公開鍵は使用しない。

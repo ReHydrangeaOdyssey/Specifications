@@ -106,7 +106,7 @@ stateDiagram-v2
 * ログインの有無を問わずユーザーがPNG画像およびHCA音声をファイル単位またはディレクトリ単位で一括選択し, Clientへ取り込めるシーンとする. コピーと移動を選択できるようにする. 移動時は「ゲーム内へファイルの移動はゲーム終了時に消える可能性がある」と表示する. 元ファイル削除は対応ブラウザで削除権限を得られる場合のみ実行し, 実行できない端末では移動不可としてコピーを案内する.
 * 通常のPNG/HCA取込みとは別に「構造モデル読込み」を設け、同梱/既存モデルと利用者が当該セッションへ渡す骨格・アニメーション・アトラス構造モデルをClient内で変換・検証して利用可能にする。対応する入力形式が未確定のものは自動受入・推測変換せず、未対応形式のエラーを表示する。Serverへの送信や`./assets/`へのProtoBuf保存は行わない。
 * キャラクター構成データ（骨格・アニメーション・アトラス定義・参照PNG）はClient内だけでセット取込み・検証・差替え・削除できるようにする。Serverへ素材を送信しない。セットの登録に失敗した場合は登録前のセットを保持し、原本の構造不正を表示する。既存の保存先にある**異なる内容**へのユーザー指定の差替えは`allow_user_asset_override=true`の場合だけ個別/一括確認で許可し、辞書に**ファイル名が記載された素材だけ**を対象とする。初回の新規配置は同設定に左右されない。いずれもローカル表示・再生だけに適用する。
-* PNG/HCAはまずOPFS `./cache/temp/user_impoert/`に取り込み、元ファイル名と必要に応じた内容SHA-256で辞書照合する。一致すれば辞書に記録された`./assets/`始まりの完全Pathへ移動し、不一致は`./cache/unknown_resouce/`で保留して実行時には使用しない。辞書が未取得の場合は手動の区分・対象指定で保存し、ログイン後に`https://github.com/ReHydrangeaOdyssey/AssetDictionary`から辞書を取得して既存素材も照合する。 辞書の候補に一致しない場合はゲーム内では使用しない。端末に未照合素材として保管する場合はユーザー用素材として「BGM」「SE」「Voice」「Character」「SD Character」「Character Icon」から区分を選択させ, 対応する配置先を選択する. 既存Pathへ異なる内容を書き込む場合は設定ONを要求し、個別確認または一括上書き・一括キャンセルを選択させる。ただし`paths`方式では設定ONでも実内容Hashと辞書で指定された対象PathのHashが一致しない素材は上書き・使用不可とする。設定OFFでの新規取込みと同一内容の再選択は差替え扱いしない。 アセット削除はタイトル画面から個別・一括で明示的に操作できる.
+* PNG/HCAはまずOPFS `./cache/temp/user_impoert/`に取り込み、元ファイル名と必要に応じた内容SHA-256で辞書照合する。一致すれば該当拡張子の`<ext>/assets_dict.json`から単一`path`または一致Hashの`paths`配列を解決し、`./assets/`に相対Pathを付けた**全保存先**へ複製する（複数Pathの場合は元ファイル単位で全成功・全復元）。不一致は`./cache/unknown_resouce/`で保留して実行時には使用しない。辞書が未取得の場合は手動の区分・対象指定で保存し、ログイン後に`https://github.com/ReHydrangeaOdyssey/AssetDictionary`から辞書を取得して既存素材も照合する。 辞書の候補に一致しない場合はゲーム内では使用しない。端末に未照合素材として保管する場合はユーザー用素材として「BGM」「SE」「Voice」「Character」「SD Character」「Character Icon」から区分を選択させ, 対応する配置先を選択する. 既存Pathへ異なる内容を書き込む場合は設定ONを要求し、個別確認または一括上書き・一括キャンセルを選択させる。ただし`paths`方式では設定ONでも実内容Hashと辞書で指定された対象PathのHashが一致しない素材は上書き・使用不可とする。設定OFFでの新規取込みと同一内容の再選択は差替え扱いしない。 アセット削除はタイトル画面から個別・一括で明示的に操作できる.
 * 複数素材の一括入替と辞書更新の不要素材退避中はローディング表示とし、タイトル・アセット追加画面の操作、削除、キャッシュクリア、追加の入替開始を無効化する。途中失敗・再起動時のロールバックが完了するまで操作を再開しない。
 * PNGの表示には`createImageBitmap()`を使用する. 詳細は「[クライアント仕様](client.md)」を参照する.
 
@@ -129,10 +129,10 @@ stateDiagram-v2
 
 ### 騎士団・編成画面の操作
 
-* 騎士団画面では所属Guildの名前・団長/副団長・メンバー一覧・施設レベルと次Lv必要Goldを既存の`GetGuildDetail`・`GetGuildFacilityUpgradeCost`で表示する。メンバーからプロフィールへ遷移し、施設強化は本人のGuild所属確認と残高確認後に`UpgradeGuildFacility`で1Lvずつ行う。権限不足、所持Gold不足、最大Lvのエラーは既存の専用応答で表示し、成功後に施設情報を再取得する。「戻る」はホームへ戻る。
-* 編成画面では「アリーナ編成」「騎士団戦編成」を選択する。画面表示時に`GetArenaParty`/`GetGuildBattleParty`で登録済み編成を取得し、編成スロットと選択Character/Follower/Abilityを表示する。変更確定にはそれぞれ`UpdateArenaParty`/`UpdateGuildBattleParty`を呼び、成功した場合だけServer応答に一致する編成をローカル保存する。「戻る」は変更を保存せず直前の編成選択画面へ戻る。
+* 騎士団画面では所属Guildの名前・団長/副団長・メンバー一覧・施設レベルと次Lv必要Goldを既存の`GetGuildDetail`・`GetGuildFacilityUpgradeCost`で表示する。メンバーからプロフィールへ遷移し、施設強化は本人のGuild所属を確認し、`GetGuildFacilityUpgradeCost`の`required_gold`・`is_max_level`を表示したうえで`UpgradeGuildFacility`により1Lvずつ行う。現行の取得APIから本人の所持Gold残高は取得できないため、強化前に残高充足を確定表示しない。権限不足、所持Gold不足、最大Lvの判定はServerのエラー応答を正とする。成功時は`UpgradeGuildFacilityResponse.remaining_player_gold`を反映し、施設情報を再取得する。「戻る」はホームへ戻る。
+* 編成画面では「アリーナ編成」「騎士団戦編成」を選択する。画面表示時に`GetArenaParty`/`GetGuildBattleParty`で登録済み編成を取得し、編成スロットと選択Character/Follower/Abilityを表示する。変更確定にはそれぞれ`UpdateArenaParty`/`UpdateGuildBattleParty`を呼ぶ。両更新APIの成功Responseは空のため、更新成功後に対応する`GetArenaParty`/`GetGuildBattleParty`を再取得し、`registered=true`で取得したServer保存編成だけをローカル確定編成として保存する。再取得に失敗した場合は更新の成否を変更せず、確定編成の再同期待ちとし、編集フォームの値をServer保存編成とみなさない。「戻る」は変更を保存せず直前の編成選択画面へ戻る。
 * 編成更新がServerに拒否された場合は理由を表示し、ローカル編集状態をServer確定済み編成として扱わない。Server未接続では保存APIを使用できないがローカル閲覧は可能とする。
-* 騎士団戦待機画面では`GetMyGuildBattle`により本人所属Guildの対戦IDと開始時刻を確認し、参加可能な対戦がある場合だけ`JoinGuildBattle`を行う。`GetGuildBattleResult`で終了を確認した対戦は結果を表示し、「戻る」でホームへ戻る。
+* 騎士団戦待機画面では`GetMyGuildBattle`により本人所属Guildの対戦IDと開始時刻を確認し、参加可能な対戦がある場合だけ`JoinGuildBattle`を行う。Join成功後は`GetGuildBattleStatus`を取得し、HP・BP/TP・各待機状態・Tactics/Item・Score/Chain/CBC・`request_sequence`をServer値へ同期する。Status同期が成功するまでは状態変更操作を有効化せず、同期成功後に`SubscribeGuildBattleUpdates`を開始する。Status取得に失敗した場合は再同期を案内し、Join要求を自動再送しない。`GetGuildBattleResult`で終了を確認した対戦は結果を表示し、「戻る」でホームへ戻る。
 
 ![form_guild_battle_image](../../images/form_guild_battle.png)
 

@@ -83,8 +83,10 @@ IEEE-754 32bit浮動小数点として、仕様に記載された演算順を変
 
 - Public・Private・Control RPCのPath、Allowlist、HTTP Method、Protobuf wire schema、固定長・ID予約値・enum範囲、Error境界を確認する。
 - Public APIのCORSは静的Client Originに限定し、CookieをCross-Origin送信しない。認証Originの第一者Cookie、Origin照合・CSRF token照合を確認する。
+- 通常認証Public RPCではBearer HeaderとRequest Bodyの`access_token`が同値となること、片方の欠落・不一致でHTTP 401になることを検証する。認証Origin専用RPCに誤って同じ条件を適用しない。
 - ClientのCallback URI完全一致、PKCE S256・state検証、60秒失効、単回交換、同時交換の排他、コードやAccessTokenをURLへ残さないことを確認する。
 - Stream切断時は現在値取得後に再購読する。認証期限切れ時・30:00終了時・Retry上限30秒を検証する。
+- `JoinGuildBattle`成功後は`GetGuildBattleStatus`で状態とSequenceを再取得するまで状態変更操作が無効であることを確認する。Sequence付き変更要求のTimeout時は自動再送せず、Status同期完了まで要求が保留されること、および同一Battle/Playerの同時変更送信が抑止されることを検証する。
 
 ## Client動作テスト
 
@@ -101,7 +103,8 @@ IEEE-754 32bit浮動小数点として、仕様に記載された演算順を変
 - タイトルからログイン画面へ遷移し、認証成功時も有効辞書・検証済み代替画像の共通検査合格後にだけホームまたは初期騎士団作成画面へ進み、キャンセル・拒否時はタイトルへ復帰できることを確認します。未ログインでも同じ検査合格時はホームへ移動でき、Server通信不要の機能を操作できることを確認します。
 - 有効なアセット辞書と検証済み代替画像が揃っている場合だけタイトルからホームへ遷移し、ホームからタイトルへ復帰できることを確認します。欠落時は未ログインでも遷移拒否し、ローカルの素材取込みは維持します。
 - 「アセットの追加」から専用シーンへ遷移し, PNG/HCAの個別およびディレクトリ一括取り込み, `./assets/`への保存, 戻る操作を検証します。
-- アセット辞書は元ファイル名の完全一致を第1段階とし、同名候補で`path`が空の場合だけ内容SHA-256と`paths`オブジェクトを照合する。一意な`path`が非空なら内容Hashを不要とし、キャッシュ内一時取込・未一致保留・一致素材のOPFS `./assets/`確定保存を検証する。辞書未取得など通信依存部分は別に検証します。
+- `UpdateArenaParty`/`UpdateGuildBattleParty`成功時は空Responseを編成データと解釈せず、対応するGet APIの登録済み編成をローカルへ反映することを検証する。成功後のGet失敗では編集フォームの値を確定値とみなさない。施設強化では必要Goldを`GetGuildFacilityUpgradeCost`で表示し、所持Gold不足の正本判定と強化後残高にServer応答を使うことを確認する。
+- アセット辞書は拡張子別`<ext>/assets_dict.json`選択→元ファイル名完全一致を第1段階とし、`path`が空の場合だけ内容SHA-256と`paths`オブジェクト内のPath配列を照合する。一意な`path`が非空なら内容Hashを不要とし、キャッシュ内一時取込・未一致保留・一致素材のOPFS `./assets/`確定保存を検証する。辞書未取得など通信依存部分は別に検証します。
 - 辞書に一致しない素材の区分選択, 既存Pathの上書き確認, 複数件の一括上書き・キャンセル, 素材の個別・一括削除, `./cache/`だけを消去するキャッシュクリアを確認します。元ファイルの「移動」は削除APIと権限のある環境でのみ行い, 未対応環境ではコピーを提供することを確認します。
 - `createImageBitmap()`によるPNGのデコードとWebGL 2へのテクスチャ転送, 描画, `PointerEvent`によるタップ/マウス操作を確認します。画面比率・回転・Safe Area・入力座標は`design/client/web_application.md`に従って検証します。
 - タイトルのクレジットからライセンス全文をスクロール閲覧し, 戻るボタンでタイトルへ復帰できることを確認します。Clientに同梱する`cargo-about`生成物とRust以外の必要表記も含め, Server通信なしに表示できることを検証します。
@@ -131,8 +134,8 @@ IEEE-754 32bit浮動小数点として、仕様に記載された演算順を変
 
 #### ローカルファイルと通信失敗境界の追加テスト
 
-- 取得辞書に絶対Path・親ディレクトリ参照・URL・制御文字がある場合、`assets/`外へ書き込めないことを検証する。
-- 一括取込みの保存失敗・キャンセル時に既存ファイルを破損させず、完了分だけ残ること、素材削除後に参照が無効化されることを確認する。
+- 取得辞書の相対Pathに絶対Path・親ディレクトリ参照・URL・制御文字・`./assets/`接頭辞・空セグメントがある場合、`./assets/`外へ書き込めないことを検証する。
+- 通常のPNG/HCA複数ファイル取込みでは、保存失敗・キャンセル時に既存ファイルを破損させずファイル単位の完了分だけ残ることを確認する。キャラクター構成セットの一括入替では、失敗・中断後に旧構成全体が復旧することを確認する。素材削除後に参照が無効化されることも確認する。
 - オフラインでもCache済みクレジット本文が閲覧できることを確認する。
 
 ## Public API通信
@@ -426,7 +429,7 @@ Recovery fileからの再送でも同じテストを行います。
 - バイナリ`bytes`型はUTF-8妥当性を要求せず、各Token/Hashの固定byte長と既存Payload制約を満たすことを検証する。
 
 - `./config.cfg`のYAML既定値、更新停止、`latest`/固定tagのRelease選択、Release不存在・曖昧Asset・1回Retry・旧辞書復帰を検証する。
-- 辞書JSONの`path`非空／空、`paths`のHash Object、非法Path、Hash不一致、元ファイル名の大文字/小文字、異なる同名ファイルを検証する。`./cache/temp/user_impoert/`→`./assets/`／`./cache/unknown_resouce/`の遷移を検査する。
+- `png/assets_dict.json`・`jpg/assets_dict.json`・`hca/assets_dict.json`の拡張子別辞書構造、拡張子と元ファイル名の一致、`path`非空／空、`paths`のHash Object→**配列**（空配列/重複/誤Hashの拒否）、大小文字を区別する元ファイル名を検証する。内容Hash一致時は配列にある**全Path**へ複製され、一つでも失敗/既存内容競合があれば当該元ファイルの全Pathをロールバックする。`./cache/temp/user_impoert/`→`./assets/`／`./cache/unknown_resouce/`の遷移を検査する。JPG/TXTの辞書が存在しても現行PNG/HCA以外を自動受入しない。
 - HCA 1ch→2ch複製、BGM専用フォルダに基づく全体ループ、鍵キャッシュ命中・旧鍵失効時再探索・復号失敗の無音を検証する。
 - DB保存で一時障害→同一Operation IDの1回Retry成功、Retry失敗、明示的確定失敗、合計5秒TimeoutのRecovery遷移を検証する。
 - Recovery Eventはファイル書込→fsync→atomic rename→directory fsync完了までは成功応答しない。部分一時ファイル・ハッシュ不一致は有効Eventとして扱わないことを確認する。
@@ -434,9 +437,9 @@ Recovery fileからの再送でも同じテストを行います。
 - 酒場では同一Playerからの同時要求が排他され、参照だけではDB行を書き換えず、2時間補充と成立消費が同一Transactionになることを検証する。
 - `FrameData.display_index`の省略／明示0、時計回り90度格納、Characterの参照不足時の代替表示を検証する。
 
-- タイトル「設定」から設定UIへ進み、配布`config.cfg`の上書き値とOPFS `config.cnf`の2つのトグルを保存・初期化できること。未登録名のアセットはoverride=trueでも使用できないこと。Hash衝突辞書に記載された候補Pathだけを明示選択できること。
-- `allow_user_asset_override=false`で辞書一致の未配置Pathへ新規取込みは可能、同じ内容の再取込みは変更なし、**既存Pathへの異内容上書きは拒否**されること。`true`かつ確認操作がある場合のみ一意`path`方式の既存Pathへの異内容置換を許す。`paths`方式は設定ON・利用者確認があっても対象候補Hashと内容SHA-256が異なる新規取込み・上書き・候補Path手動選択を拒否すること。未登録ファイル名/Path・形式不正は設定ONでも拒否すること。一意`path`方式で配布元内容Hashを検証したと扱わないこと。
-- Releaseの`asset_dictionary.json`に対して、同Releaseにある小文字SHA-256値をファイル名にした検査値AssetとのRaw Bytes照合を確認する。欠落・曖昧・不一致では旧Generationを保護する。`verify_asset_dictionary_sha256=false`で照合を省略してもSchema/Path検証を行う。
+- タイトル「設定」から設定UIへ進み、配布`config.cfg`の上書き値とOPFS `config.cnf`の2つのトグルを保存・初期化できること。未登録名のアセットはoverride=trueでも使用できないこと。`paths`のHash一致配列にある複数Pathは手動選択せず全件を複製し、配列外Pathは選択できないこと。
+- `allow_user_asset_override=false`で辞書一致の未配置Pathへ新規取込みは可能、同じ内容の再取込みは変更なし、**既存Pathへの異内容上書きは拒否**されること。`true`かつ確認操作がある場合のみ一意`path`方式の既存Pathへの異内容置換を許す。`paths`方式は設定ON・利用者確認があっても対象候補Hashと内容SHA-256が異なる新規取込み・上書き・配列の一部だけの指定を拒否すること。未登録ファイル名/Path・形式不正は設定ONでも拒否すること。一意`path`方式で配布元内容Hashを検証したと扱わないこと。
+- 新形式では各`<ext>/assets_dict.json`のRaw Bytesを対象とし、すべての拡張子別辞書に検査値が対応付く場合だけSHA-256照合ONの更新が成立することを検証する。Release配布パッケージ形式・検査値対応が未決定の間は自動取得Assetを推測せず更新を失敗とし、旧Generation集合を保全する。`verify_asset_dictionary_sha256=false`でもSchema/全Path検証は行う。
 - ユーザー提供PNG/HCAのHashとClient描画構造からの画像参照の一括検証、既存ファイルの退避・切替失敗時ロールバック、再起動時の参照再解決を検証する。永続Manifestは使用せず、辞書未掲載の素材はRuntime使用不可とする。
 - BGMの判定境界は`./assets/sound/bgm/`の大文字小文字・ディレクトリ区切りを区別し、サブフォルダは含める。
 - Replay記録のv2 Canonical `event_bytes`/`record_bytes`を正本とし、固定したRaw EnvelopeとPrivate RequestのByte列、`prev_event_hash`/`event_hash`、`record_hash`およびEd25519署名を照合する。JSONのキー順序や再シリアライズ結果に署名を依存させず、Byte列1byteの改変・長さ違い・署名/鍵ID不一致を拒否すること。v1記録を生成・受理しないこと。
@@ -446,7 +449,7 @@ Recovery fileからの再送でも同じテストを行います。
 - `GetAdditionalAuthorizationConfig.available_providers`に含まれる`DISCORD`/`POCKETBASE`/`OTHER`/`NONE`だけをClientの選択肢として表示し、利用者が明示的に選ぶことを確認する。Serverは選択値の許可と認可Tokenの検証を行い、未実装Adapter有効化で起動を拒否する。Config取得失敗時は無認可へのフォールバックも自動選択もしない。
 - Recovery移行中の`UseTavernRecovery`は拒否され、Playerの残ストック、RequestSequence、BP、Replay Eventが変化しないことを確認する。
 - 出撃は永続化成功→Response→後処理の順、通常Eventは仮状態の評価→ReplayQueueでEvent番号とOperation IDの予約→専用Workerの署名付きWAL耐久保存完了→RuntimeとRequestSequenceの確定→成功Response→DB/Fileの非同期保存であることを確認する。通常Eventの署名付きReplay WAL耐久化→成功Response→DB非同期COMMITを検証する。WAL未確定Eventには成功応答を返さない。再起動後の署名・順序検証と重複適用拒否を確認する。
-- `asset_dictionary.json`がないRelease/複数あるRelease/不正JSON/誤Path/途中ダウンロード失敗を受けても前Generationが維持されること、ログイン失敗時も手動素材取り込みが可能なことを確認する。
+- 拡張子別`assets_dict.json`の欠落・拡張子不一致・不正JSON・配列内の誤Path/重複Path・ダウンロード途中失敗・Release配布方式未決定でも前Generation集合を維持し、ログイン失敗時も手動素材取り込みが可能なことを確認する。
 - 同名・内容違いのHCA鍵は混用されず、誤鍵キャッシュは探索へ戻す。BGMフォルダだけがループし、設定JSONの有無では挙動を変更しない。キャッシュクリアで辞書、保留割当、鍵探索キャッシュが消えることを確認する。
 - Replay Recovery記録のPayload改変、署名/連鎖Hash不一致、DB側との同一番号異Payloadは自動適用せず隔離する。
 - Recovery JournalはDB再送だけが成功した段階では残し、DB正本からReplay Fileを補修して反映・v2署名/連鎖検証を完了してから該当レコードを削除する。署名不正・DB/File不一致・File書込失敗時には自動削除しないこと。
@@ -489,7 +492,7 @@ Recovery fileからの再送でも同じテストを行います。
 
 - `StartGuildBattle`のSnapshot在庫照合と`UpdatePlayerItem`が競合するとき、同一PlayerIDのDBロックで直列化される。更新先行ならSnapshot不一致で開始拒否、開戦先行ならその通常更新が409となり、双方成功で異なる在庫を確定しない。未Joinの通常Playerも対象とする。GameServer間同期APIは用いない。
 - `./assets/`にProtoBufを置いたり、ProtoBufを起動時に`./assets/`から列挙したりしない。描画モデルはClientが利用できる構造情報または当該セッションの検証済み入力だけから選ぶ。セッション限りの構造情報を再起動で復元したと偽らず、参照が切れた明示選択は代替画像へ切り替える。CharacterID/向きの明示選択を`./settings/character_display_selections.json`から検証付きで復元し、削除・辞書変更で無効化する。全Action対応表は生成しない。
-- 辞書Pathが`./assets/characters/a.png`ならまさにそのRoot相対Pathを使用する。`./assets/assets/characters/a.png`を作らず、接頭辞欠落、`..`、不正セグメントを拒否する。
-- 辞書更新時、旧検証済み辞書GenerationによるPath→元名の逆引きが一意な場合だけ来歴を確証し、`paths`方式では現存バイト列のSHA-256も一致確認する。旧Generationの消失・破損、同Pathの複数元名候補、Hash不一致では内容やPathから元名を推測せず`./cache/obsolete_assets/`へ退避してRuntime使用を禁止すること。永続Manifestを追加しないこと。
+- 辞書Pathが`characters/a.png`ならOPFS `./assets/characters/a.png`へ一度だけ展開する。`./assets/assets/characters/a.png`や`./assets/png/characters/a.png`へ余分に連結しない。相対Pathの`./assets/`接頭辞、`..`、不正セグメントを拒否する。
+- 辞書更新時、旧検証済み**拡張子別辞書集合**によるPath→元名の逆引きが一意な場合だけ来歴を確証し、`paths`方式では現存バイト列のSHA-256も一致確認する。旧Generationの消失・破損、同Pathの複数元名候補、Hash不一致では内容やPathから元名を推測せず`./cache/obsolete_assets/`へ退避してRuntime使用を禁止すること。永続Manifestを追加しないこと。
 - 構造モデル読込み入口はPNG/HCAの通常取込みと独立し、同梱モデル・セッション読込みモデルへ同一の構造Validationを適用すること。未対応形式はエラーとし、登録失敗で既存モデルを失わないこと。`structure_ref`の異なるモデルへの重複割当、差替え後の旧ID誤参照、再起動後のセッション限定モデル誤復元を拒否し、参照失効時に代替画像へ切り替えること。
-- 辞書更新時は新旧PathだけでなくPathに紐付く元ファイル名・内容Hash条件を比較する。旧辞書にしかないPathに加え、Pathが共通でも新条件に合わない既存実ファイルを`./cache/obsolete_assets/`へ退避し、現行の許可Pathから外す。`path`一意では提供されない期待Hashの照合成功を捏造せず、`paths`条件では内容Hashの再計算を行う。適合済み共通Pathは保持する。中断時は旧辞書/旧素材へロールバックする。ローディング中は操作を無効化し、キャッシュクリアもできない。キャッシュクリア後は退避素材が消える。
+- 辞書更新時は新旧の全拡張子・全`paths`配列要素まで展開したPathに紐付く元ファイル名・内容Hash条件を比較する。旧辞書にしかないPathに加え、Pathが共通でも新条件に合わない既存実ファイルを`./cache/obsolete_assets/`へ退避し、現行の許可Pathから外す。`path`一意では提供されない期待Hashの照合成功を捏造せず、`paths`条件では内容Hashの再計算を行う。適合済み共通Pathは保持する。中断時は旧辞書/旧素材へロールバックする。ローディング中は操作を無効化し、キャッシュクリアもできない。キャッシュクリア後は退避素材が消える。
